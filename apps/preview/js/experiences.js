@@ -192,48 +192,65 @@ export async function runWeatherExperience({
   chatStream.appendChild(card);
   scroll(chatStream);
 
+  const box = card.querySelector("#thinkingBox");
   const steps = [
-    "Detecting Location...",
-    "Finding GPS...",
-    "Checking Weather...",
-    "Reading Satellite Data...",
-    "Analyzing Conditions...",
-    "Generating Forecast...",
+    { text: "📍 Detecting your location...", pipeline: "Running AI Tools" },
+    { text: "✓ Pretoria, South Africa", pipeline: "Validating Results" },
+    { text: "Checking live weather...", pipeline: "Running AI Tools" },
+    { text: "Reading satellite data...", pipeline: "Searching Knowledge" },
+    { text: "Analyzing temperature...", pipeline: "Validating Results" },
+    { text: "Checking rain probability...", pipeline: "Validating Results" },
+    { text: "Done.", pipeline: "Generating Response" },
   ];
 
   onState?.("Searching");
-  onPipeline?.("Searching Knowledge");
-  onActivity?.({ search: "active", think: "active" });
-  await runThinkingPreface({
-    box: card.querySelector("#thinkingBox"),
-    lines: steps,
-    onLine,
-    onState: () => onState?.("Searching"),
-  });
+  onActivity?.({ search: "active", tools: "active", think: "active" });
+  for (const step of steps) {
+    onPipeline?.(step.pipeline);
+    onLine?.(step.text);
+    const row = document.createElement("div");
+    row.className = "thinking-row active";
+    row.innerHTML = `<span class="mark">…</span><span>${step.text}</span>`;
+    box.appendChild(row);
+    scroll(chatStream);
+    await wait(380);
+    row.classList.remove("active");
+    row.classList.add("done");
+    row.querySelector(".mark").textContent = "✔";
+    sound?.click?.();
+  }
 
+  onState?.("Weather");
   const weather = card.querySelector("#weatherCard");
   weather.hidden = false;
   weather.innerHTML = `
+    <p class="weather-city">Pretoria</p>
     <div class="weather-main">
       <div>
-        <div class="weather-temp">18°C</div>
-        <div class="weather-meta">Partly cloudy · Light breeze</div>
+        <div class="weather-temp">☀ 18°C</div>
+        <div class="weather-condition">Partly cloudy</div>
       </div>
-      <div class="weather-meta">Rain chance 15%<br/>Humidity 54%</div>
+      <div class="weather-meta">Feels like 17°C</div>
+    </div>
+    <div class="weather-grid">
+      <div><span>Humidity</span><b>63%</b></div>
+      <div><span>Wind</span><b>12 km/h</b></div>
+      <div><span>Rain</span><b>4%</b></div>
+      <div><span>UV</span><b>Moderate</b></div>
     </div>
   `;
 
   const spoken =
-    "Good afternoon. It is currently 18°C with partly cloudy skies. There is only a small chance of rain today. It is a great day to be outside.";
+    "Good morning. It’s currently 18°C in Pretoria with partly cloudy skies. It’s comfortable outside today, and there’s only a small chance of rain. If you’re heading out, you probably won’t need an umbrella.";
   const answerBody = card.querySelector("#answerBody");
   answerBody.hidden = false;
   onState?.("Writing");
-  onPipeline?.("Generating");
+  onPipeline?.("Generating Response");
   const stats = await streamText(answerBody, spoken, onTokens);
 
   onState?.("Speaking");
   onPipeline?.("Speaking");
-  onActivity?.({ gen: "done", search: "done" });
+  onActivity?.({ gen: "done", search: "done", tools: "done" });
   sound?.listen?.();
   await speak(spoken, {
     onBoundary: () => onState?.("Speaking"),
@@ -265,12 +282,13 @@ export async function runSearchExperience({
   chatStream.appendChild(card);
   scroll(chatStream);
 
+  const isTesla = prompt.toLowerCase().includes("tesla");
   const steps = [
-    "Searching memory...",
-    "Searching knowledge...",
-    "Using connected tools...",
-    "Verifying information...",
-    "Preparing response...",
+    "Searching Memory...",
+    "Searching Web...",
+    "Finding Trusted Sources...",
+    "Comparing Information...",
+    "Building Summary...",
   ];
   onState?.("Searching");
   onPipeline?.("Searching Memory");
@@ -281,18 +299,31 @@ export async function runSearchExperience({
     box: card.querySelector("#thinkingBox"),
     lines: steps,
     onLine,
-    onState: (s) => {
-      if (String(s).includes("memory")) onPipeline?.("Searching Memory");
-      else onPipeline?.("Searching Knowledge");
+    onState: () => {
+      onPipeline?.("Searching Knowledge");
       onState?.("Searching");
     },
   });
 
+  onPipeline?.("Validating Results");
+  await wait(280);
+
   const answerBody = card.querySelector("#answerBody");
   answerBody.hidden = false;
   onState?.("Writing");
-  onPipeline?.("Generating");
-  const answer = `I searched memory, project knowledge, and connected tools.
+  onPipeline?.("Generating Response");
+  const answer = isTesla
+    ? `**Tesla — concise briefing**
+
+Tesla designs and manufactures electric vehicles, energy storage, and solar products. Its software-led approach (OTA updates, Autopilot / FSD ambitions) is as central as its hardware.
+
+**Useful context**
+- Core products: Model 3 / Y / S / X, Cybertruck, Powerwall, Megapack
+- Moat signals: charging network, manufacturing scale, brand demand
+- Watch items: margins, competition, autonomy timelines, energy growth
+
+I can go deeper on vehicles, energy, or competitive positioning next.`
+    : `I searched memory, project knowledge, and connected tools.
 
 **Findings**
 - Prefer magic-link auth for CRM MVP

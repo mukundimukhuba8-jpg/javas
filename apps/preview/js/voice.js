@@ -1,5 +1,5 @@
 /**
- * Instant mic reactivity + clap detection for the living core.
+ * Instant mic / clap reactivity using time-domain RMS (much more responsive).
  */
 export function createVoiceSensor({ onLevel, onClap }) {
   /** @type {AudioContext | null} */
@@ -12,45 +12,58 @@ export function createVoiceSensor({ onLevel, onClap }) {
   let prev = 0;
   let lastClap = 0;
   /** @type {Uint8Array | null} */
-  let freq = null;
+  let timeData = null;
+  let raf = 0;
 
   function sample() {
-    if (!active || !analyser || !freq) return;
-    analyser.getByteFrequencyData(freq);
+    if (!active || !analyser || !timeData) return;
+    analyser.getByteTimeDomainData(timeData);
+
     let sum = 0;
-    const start = Math.floor(freq.length * 0.08);
-    const end = Math.floor(freq.length * 0.45);
-    for (let i = start; i < end; i += 1) sum += freq[i] ?? 0;
-    const energy = Math.min(1, (sum / ((end - start) * 255)) * 3.1);
-    const transient = Math.max(0, energy - prev) * 7;
-    prev = energy * 0.6 + prev * 0.4;
+    for (let i = 0; i < timeData.length; i += 1) {
+      const v = ((timeData[i] ?? 128) - 128) / 128;
+      sum += v * v;
+    }
+    const rms = Math.sqrt(sum / timeData.length);
+    // Amplify quiet laptop mics; clamp to 0..1
+    const energy = Math.min(1, rms * 6.5);
+    const transient = Math.max(0, energy - prev) * 5.5;
+    prev = energy * 0.45 + prev * 0.55;
     onLevel?.(energy);
 
     const now = performance.now();
-    if (transient > 0.4 && energy > 0.28 && now - lastClap > 280) {
+    // Clap = sharp transient; voice = sustained energy
+    if (transient > 0.18 && energy > 0.12 && now - lastClap > 220) {
       lastClap = now;
-      onClap?.(energy);
+      onClap?.(Math.max(energy, 0.85));
     }
-    requestAnimationFrame(sample);
+
+    raf = requestAnimationFrame(sample);
   }
 
   return {
     async start() {
       audioCtx = new AudioContext();
+      if (audioCtx.state === "suspended") await audioCtx.resume();
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true },
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: true,
+        },
       });
       const source = audioCtx.createMediaStreamSource(stream);
       analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 2048;
-      analyser.smoothingTimeConstant = 0.55;
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.15;
       source.connect(analyser);
-      freq = new Uint8Array(analyser.frequencyBinCount);
+      timeData = new Uint8Array(analyser.fftSize);
       active = true;
-      requestAnimationFrame(sample);
+      raf = requestAnimationFrame(sample);
     },
     stop() {
       active = false;
+      cancelAnimationFrame(raf);
       stream?.getTracks().forEach((t) => t.stop());
       void audioCtx?.close();
       audioCtx = null;

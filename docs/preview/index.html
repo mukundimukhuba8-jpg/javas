@@ -19,7 +19,20 @@
   <body>
     <canvas id="bgCanvas" aria-hidden="true"></canvas>
 
-    <section class="screen" id="onboarding">
+    <!-- Boot sequence -->
+    <section class="boot" id="boot">
+      <div class="boot-card glass">
+        <p class="boot-mark">◉ CLOUDY AI OPERATING SYSTEM</p>
+        <div class="boot-lines" id="bootLines"></div>
+        <p class="boot-welcome" id="bootWelcome" hidden>Welcome back, Mukundi.</p>
+        <button type="button" class="btn btn-primary boot-mic" id="enableAudioBtn" hidden>
+          Enable microphone for live core
+        </button>
+        <p class="meta" id="bootNote"></p>
+      </div>
+    </section>
+
+    <section class="screen" id="onboarding" hidden>
       <div class="onboard-card glass">
         <p class="eyebrow">Cloudy</p>
         <h1>What do you want to build today?</h1>
@@ -69,8 +82,9 @@
 
       <main class="main">
         <section class="hero-core" id="coreSection">
-          <div class="core" id="intelCore" data-state="idle" aria-live="polite">
-            <canvas id="coreCanvas" width="360" height="360" aria-hidden="true"></canvas>
+          <div class="core core-enter" id="intelCore" data-state="idle" aria-live="polite">
+            <canvas id="coreCanvas" width="380" height="380" aria-hidden="true"></canvas>
+            <div class="mic-badge" id="micBadge" hidden aria-hidden="true">Mic</div>
             <div class="core-label">
               <span id="coreState">Idle</span>
               <small id="coreHint">Ready when you are</small>
@@ -93,7 +107,7 @@
             <div class="composer-bar">
               <div class="composer-meta">
                 <span id="statusPill" class="pill">Idle</span>
-                <span class="meta">Enter to send · Voice reacts instantly when enabled</span>
+                <span class="meta">Sound reacts instantly when Voice is on</span>
               </div>
               <button type="submit" class="btn btn-primary" id="sendBtn">Send</button>
             </div>

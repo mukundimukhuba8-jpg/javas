@@ -18,6 +18,11 @@ import {
 } from "./js/experiences.js";
 
 const els = {
+  boot: document.getElementById("boot"),
+  bootLines: document.getElementById("bootLines"),
+  bootWelcome: document.getElementById("bootWelcome"),
+  enableAudioBtn: document.getElementById("enableAudioBtn"),
+  bootNote: document.getElementById("bootNote"),
   onboarding: document.getElementById("onboarding"),
   app: document.getElementById("app"),
   goalGrid: document.getElementById("goalGrid"),
@@ -31,6 +36,7 @@ const els = {
   coreHint: document.getElementById("coreHint"),
   thinkLine: document.getElementById("thinkLine"),
   intelCore: document.getElementById("intelCore"),
+  micBadge: document.getElementById("micBadge"),
   coreSection: document.getElementById("coreSection"),
   chatSection: document.getElementById("chatSection"),
   chatStream: document.getElementById("chatStream"),
@@ -73,38 +79,46 @@ const sound = createSoundscape();
 const voice = createVoiceSensor({
   onLevel: (energy) => {
     els.micEnergy.textContent = `${Math.round(energy * 100)}%`;
-    bg.setEnergy(energy);
-    if (!state.busy) {
-      if (energy > 0.05) {
-        setAiState("Listening");
-        setPipeline("Listening");
-        core.setLevel(energy);
-      } else if (state.ai === "Listening") {
-        setAiState("Idle");
-        setPipeline(null);
-        core.setLevel(0);
-      } else {
-        core.setLevel(energy * 0.4);
-      }
-    } else {
-      core.setLevel(energy);
-    }
-  },
-  onClap: () => {
-    sound.listen();
-    if (!state.busy) {
+    bg.setEnergy(Math.min(1, energy * 1.2));
+    core.setLevel(energy);
+
+    const hearing = energy > 0.04;
+    els.micBadge.hidden = !hearing && state.ai !== "Listening";
+
+    // Always visually respond to sound, even mid-task
+    if (hearing && !state.busy) {
       setAiState("Listening");
       setPipeline("Listening");
-      els.thinkLine.textContent = "Audio spike detected";
-      core.setLevel(1);
+    } else if (!hearing && !state.busy && state.ai === "Listening") {
+      setAiState("Idle");
+      setPipeline(null);
+      els.micBadge.hidden = true;
+    } else if (hearing && state.busy) {
+      // Keep core reactive during missions
+      core.setLevel(Math.max(energy, 0.25));
+      els.micBadge.hidden = false;
+    }
+  },
+  onClap: (energy) => {
+    sound.listen();
+    core.setLevel(Math.max(energy, 0.9));
+    bg.setEnergy(1);
+    els.micBadge.hidden = false;
+    els.thinkLine.textContent = "Sound detected";
+    if (!state.busy) {
+      setAiState("Listening");
+      setPipeline("Voice Recognition");
+      window.setTimeout(() => {
+        if (!state.busy) setPipeline("Listening");
+      }, 450);
     }
   },
 });
 
 function setAiState(label) {
   state.ai = label;
-  els.coreState.textContent = label;
-  els.statusPill.textContent = label;
+  els.coreState.textContent = label === "Weather" ? "Weather" : label;
+  els.statusPill.textContent = label === "Weather" ? "Weather" : label;
   els.intelCore.dataset.state = label.toLowerCase();
   core.setState(label.toLowerCase());
 
@@ -117,6 +131,7 @@ function setAiState(label) {
     Coding: "Preparing implementation detail",
     Writing: "Streaming the answer",
     Speaking: "Responding out loud",
+    Weather: "Live conditions loaded",
     Finished: "Ready for the next step",
   };
   els.coreHint.textContent = hints[label] || "In progress";
@@ -145,6 +160,98 @@ function setActivity(partial = {}) {
   };
   for (const [key, el] of Object.entries(map)) {
     if (partial[key] !== undefined) el.textContent = partial[key];
+  }
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function runBootSequence() {
+  const stages = [
+    { label: "Initializing Core...", target: 41, ms: 700 },
+    { label: "Loading Memory...", target: 78, ms: 700 },
+    { label: "Connecting Intelligence Engine...", target: 100, ms: 650 },
+  ];
+
+  els.bootLines.innerHTML = "";
+  const rows = stages.map((stage) => {
+    const row = document.createElement("div");
+    row.className = "boot-row";
+    row.innerHTML = `
+      <div class="label"><span>${stage.label}</span><b>0%</b></div>
+      <div class="boot-bar"><span></span></div>
+    `;
+    els.bootLines.appendChild(row);
+    return { row, stage };
+  });
+
+  const checks = document.createElement("ul");
+  checks.className = "boot-checks";
+  checks.innerHTML = `
+    <li data-check>Voice Online</li>
+    <li data-check>Knowledge Loaded</li>
+    <li data-check>Memory Synced</li>
+    <li data-check>Agents Ready</li>
+  `;
+  els.bootLines.appendChild(checks);
+
+  sound.startup();
+  await sound.humStart();
+
+  for (const { row, stage } of rows) {
+    row.classList.add("show");
+    const pct = row.querySelector("b");
+    const bar = row.querySelector(".boot-bar > span");
+    const steps = 12;
+    for (let i = 1; i <= steps; i += 1) {
+      const value = Math.round((stage.target * i) / steps);
+      pct.textContent = `${value}%`;
+      bar.style.width = `${value}%`;
+      await wait(stage.ms / steps);
+    }
+    sound.click();
+  }
+
+  for (const li of checks.querySelectorAll("li")) {
+    li.classList.add("show");
+    await wait(180);
+  }
+
+  els.bootWelcome.hidden = false;
+  await wait(700);
+}
+
+async function enableVoice() {
+  await sound.unlock();
+  await voice.start();
+  els.voiceBtn.setAttribute("aria-pressed", "true");
+  sound.listen();
+  setAiState("Listening");
+  setPipeline("Listening");
+  window.setTimeout(() => {
+    if (!state.busy) {
+      setAiState("Idle");
+      setPipeline(null);
+    }
+  }, 900);
+}
+
+async function finishBootIntoApp() {
+  els.boot.hidden = true;
+  const seen = localStorage.getItem("cloudy_onboarded") === "1";
+  if (!seen) {
+    els.onboarding.hidden = false;
+    els.app.hidden = true;
+  } else {
+    els.onboarding.hidden = true;
+    els.app.hidden = false;
+    renderMemory(localStorage.getItem("cloudy_goals") || "Custom workspace");
+    // Retrigger core enter animation
+    els.intelCore.classList.remove("core-enter");
+    void els.intelCore.offsetWidth;
+    els.intelCore.classList.add("core-enter");
+    setAiState("Idle");
   }
 }
 
@@ -242,7 +349,7 @@ function showPanel(label) {
         ["Decisions", "Updated during missions"],
       ],
       Voice: [
-        ["Wake reactivity", "Mic + clap"],
+        ["Live reactivity", "Mic + clap"],
         ["Style", "Natural · interruptible"],
       ],
       Settings: [
@@ -270,13 +377,14 @@ function openStage(stage) {
   sound.click();
 }
 
-async function enterApp() {
+async function enterAppFromOnboarding() {
   const labels = [...state.goals]
     .map((id) => GOALS.find((g) => g.id === id)?.label)
     .filter(Boolean);
   els.confirmLine.hidden = false;
   els.startBtn.disabled = true;
-  sound.startup();
+  localStorage.setItem("cloudy_onboarded", "1");
+  localStorage.setItem("cloudy_goals", labels.join(" · ") || "Custom workspace");
   await wait(850);
   els.onboarding.hidden = true;
   els.app.hidden = false;
@@ -327,6 +435,7 @@ async function handlePrompt(prompt) {
   };
 
   try {
+    setPipeline("Understanding Intent");
     if (kind === "crm") await runCrmMission(hooks);
     else if (kind === "weather") await runWeatherExperience(hooks);
     else if (kind === "search") await runSearchExperience({ ...hooks, prompt: text });
@@ -341,32 +450,41 @@ async function handlePrompt(prompt) {
     els.prompt.value = "";
     els.prompt.focus();
     els.thinkLine.textContent = "";
+    if (voice.active) {
+      setAiState("Idle");
+      setPipeline(null);
+    }
   }
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 els.voiceBtn.addEventListener("click", async () => {
   try {
-    await sound.unlock();
     if (voice.active) {
       voice.stop();
+      sound.humStop();
       els.voiceBtn.setAttribute("aria-pressed", "false");
+      els.micBadge.hidden = true;
       setAiState("Idle");
       setPipeline(null);
       return;
     }
-    await voice.start();
-    els.voiceBtn.setAttribute("aria-pressed", "true");
-    sound.listen();
-    setAiState("Listening");
-    setPipeline("Listening");
+    await enableVoice();
+    await sound.humStart();
   } catch (error) {
     els.voiceBtn.setAttribute("aria-pressed", "false");
     els.thinkLine.textContent =
       error instanceof Error ? error.message : "Microphone permission required";
+  }
+});
+
+els.enableAudioBtn.addEventListener("click", async () => {
+  try {
+    els.bootNote.textContent = "";
+    await enableVoice();
+    await finishBootIntoApp();
+  } catch (error) {
+    els.bootNote.textContent =
+      error instanceof Error ? error.message : "Microphone permission is required for live core.";
   }
 });
 
@@ -391,7 +509,7 @@ els.prompt.addEventListener("keydown", (e) => {
   }
 });
 
-els.startBtn.addEventListener("click", () => void enterApp());
+els.startBtn.addEventListener("click", () => void enterAppFromOnboarding());
 els.closeStage.addEventListener("click", () => {
   els.stageModal.hidden = true;
 });
@@ -401,4 +519,19 @@ renderSideNav();
 renderPipeline();
 renderMemory();
 renderSuggestions();
-setAiState("Idle");
+
+// Boot first — never jump straight into chat
+els.onboarding.hidden = true;
+els.app.hidden = true;
+void (async () => {
+  await runBootSequence();
+  // Prefer auto mic; if blocked, show enable button on boot card
+  try {
+    await enableVoice();
+    await finishBootIntoApp();
+  } catch {
+    els.enableAudioBtn.hidden = false;
+    els.bootNote.textContent =
+      "Allow the microphone so the intelligence core can react to voice and claps.";
+  }
+})();

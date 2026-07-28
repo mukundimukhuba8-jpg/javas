@@ -165,7 +165,26 @@ export function createIntelligenceCore(canvas) {
       ctx.stroke();
     }
 
-    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    if (state === "weather") {
+      const sun = ctx.createRadialGradient(cx - 8, cy - 10, 4, cx, cy, 72);
+      sun.addColorStop(0, "rgba(254,243,199,0.95)");
+      sun.addColorStop(0.35, "rgba(251,191,36,0.55)");
+      sun.addColorStop(1, "rgba(251,191,36,0)");
+      ctx.fillStyle = sun;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 72, 0, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 3; i += 1) {
+        const cxCloud = cx - 40 + i * 34 + Math.sin(t + i) * 6;
+        const cyCloud = cy + 34 + Math.cos(t * 0.8 + i) * 4;
+        ctx.fillStyle = "rgba(226,232,240,0.22)";
+        ctx.beginPath();
+        ctx.ellipse(cxCloud, cyCloud, 22, 12, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.fillStyle = state === "weather" ? "rgba(254,243,199,0.95)" : "rgba(255,255,255,0.9)";
     ctx.beginPath();
     ctx.arc(cx, cy, 3.5 + level * 1.5, 0, Math.PI * 2);
     ctx.fill();

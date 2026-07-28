@@ -31,20 +31,21 @@ export const SIDE_LINKS = [
 
 export const PIPELINE = [
   "Listening",
+  "Voice Recognition",
   "Understanding Intent",
   "Searching Memory",
   "Searching Knowledge",
   "Running AI Tools",
-  "Planning",
-  "Generating",
+  "Validating Results",
+  "Generating Response",
   "Speaking",
 ];
 
 export const SUGGESTIONS = [
   "Build me a CRM",
   "What's the weather?",
+  "Tell me about Tesla",
   "Search my knowledge for auth patterns",
-  "Create a trading SaaS",
 ];
 
 export const MEMORY_SEED = [
@@ -57,22 +58,21 @@ export const MEMORY_SEED = [
 ];
 
 export const THINKING_LINES = [
-  "Analyzing request...",
-  "Understanding intent...",
-  "Searching memory...",
-  "Connecting knowledge...",
-  "Planning response...",
-  "Generating answer...",
+  "Analyzing Request...",
+  "Searching Memory...",
+  "Building Plan...",
+  "Connecting Knowledge...",
+  "Preparing Response...",
 ];
 
 export const CRM_STAGES = [
   {
     id: "architecture",
-    name: "Planning Architecture",
+    name: "Planning System Architecture",
     detail: [
       "Modular monolith for MVP speed",
       "Next.js app router + Postgres",
-      "Clear bounded contexts: CRM, Auth, Billing",
+      "Bounded contexts: CRM, Auth, Billing",
     ],
   },
   {
@@ -81,18 +81,18 @@ export const CRM_STAGES = [
     detail: ["contacts", "companies", "deals", "activities", "users / workspaces"],
   },
   {
-    id: "ui",
-    name: "Preparing UI",
+    id: "frontend",
+    name: "Building Frontend",
     detail: ["Pipeline board", "Contact profile", "Activity timeline", "Command palette"],
   },
   {
     id: "auth",
-    name: "Authentication",
+    name: "Preparing Authentication",
     detail: ["Email magic link", "Google OAuth", "Workspace invites"],
   },
   {
     id: "backend",
-    name: "Backend",
+    name: "Backend Services",
     detail: ["CRUD APIs", "Permissions", "Audit log", "Webhooks"],
   },
   {
@@ -106,7 +106,8 @@ export function detectExperience(prompt) {
   const p = prompt.toLowerCase();
   if (p.includes("crm") || (p.includes("build") && p.includes("crm"))) return "crm";
   if (p.includes("weather")) return "weather";
-  if (p.includes("search") || p.includes("knowledge") || p.includes("find")) return "search";
+  if (p.includes("tesla") || p.includes("search") || p.includes("tell me about") || p.includes("knowledge"))
+    return "search";
   if (p.includes("trading")) return "trading";
   return "general";
 }

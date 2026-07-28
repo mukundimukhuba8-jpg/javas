@@ -1,7 +1,11 @@
-/** Subtle premium UI sounds via Web Audio (no assets required). */
+/** Subtle premium UI sounds + low ambient hum. */
 export function createSoundscape() {
   /** @type {AudioContext | null} */
   let ctx = null;
+  /** @type {OscillatorNode | null} */
+  let humOsc = null;
+  /** @type {GainNode | null} */
+  let humGain = null;
 
   async function ensure() {
     if (!ctx) ctx = new AudioContext();
@@ -28,17 +32,45 @@ export function createSoundscape() {
   }
 
   return {
-    unlock: () => void ensure(),
+    unlock: () => ensure(),
     startup: () => {
-      tone({ freq: 320, dur: 0.18, gain: 0.03 });
-      tone({ freq: 480, dur: 0.22, gain: 0.025, slide: 120 });
+      tone({ freq: 280, dur: 0.2, gain: 0.028 });
+      tone({ freq: 420, dur: 0.26, gain: 0.022, slide: 160 });
     },
-    click: () => tone({ freq: 660, dur: 0.05, gain: 0.015, type: "triangle" }),
-    listen: () => tone({ freq: 240, dur: 0.1, gain: 0.02, slide: 80 }),
-    think: () => tone({ freq: 180, dur: 0.14, gain: 0.012 }),
+    click: () => tone({ freq: 700, dur: 0.045, gain: 0.012, type: "triangle" }),
+    listen: () => tone({ freq: 220, dur: 0.09, gain: 0.018, slide: 90 }),
+    think: () => tone({ freq: 170, dur: 0.12, gain: 0.01 }),
     done: () => {
-      tone({ freq: 520, dur: 0.1, gain: 0.02 });
-      tone({ freq: 780, dur: 0.14, gain: 0.016, slide: 40 });
+      tone({ freq: 520, dur: 0.09, gain: 0.018 });
+      tone({ freq: 760, dur: 0.12, gain: 0.014, slide: 40 });
+    },
+    async humStart() {
+      const audio = await ensure();
+      if (humOsc) return;
+      humOsc = audio.createOscillator();
+      humGain = audio.createGain();
+      humOsc.type = "sine";
+      humOsc.frequency.value = 92;
+      humGain.gain.value = 0.0001;
+      humOsc.connect(humGain);
+      humGain.connect(audio.destination);
+      humOsc.start();
+      humGain.gain.exponentialRampToValueAtTime(0.006, audio.currentTime + 0.8);
+    },
+    humStop() {
+      if (!ctx || !humOsc || !humGain) return;
+      const now = ctx.currentTime;
+      humGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+      const osc = humOsc;
+      humOsc = null;
+      humGain = null;
+      window.setTimeout(() => {
+        try {
+          osc.stop();
+        } catch {
+          /* ignore */
+        }
+      }, 500);
     },
   };
 }
