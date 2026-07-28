@@ -1,258 +1,255 @@
 import {
   GOALS,
-  MEMORY_SEED,
-  PIPELINE,
   SIDE_LINKS,
+  MODE_ACTIONS,
+  FORECAST,
   SUGGESTIONS,
   detectExperience,
 } from "./js/data.js";
-import { createBackground } from "./js/background.js";
+import { createBackground, createWeatherScene } from "./js/background.js";
 import { createIntelligenceCore } from "./js/core.js";
 import { createSoundscape } from "./js/sound.js";
-import { createVoiceSensor } from "./js/voice.js";
+import { createVoiceSensor, drawVoiceWave, drawMiniMap, drawBrain } from "./js/voice.js";
 import {
+  createCardStack,
   runCrmMission,
-  runGeneralExperience,
-  runSearchExperience,
   runWeatherExperience,
+  runSearchExperience,
+  runGeneralExperience,
 } from "./js/experiences.js";
 
+const $ = (id) => document.getElementById(id);
+
 const els = {
-  boot: document.getElementById("boot"),
-  bootLines: document.getElementById("bootLines"),
-  bootWelcome: document.getElementById("bootWelcome"),
-  enableAudioBtn: document.getElementById("enableAudioBtn"),
-  bootNote: document.getElementById("bootNote"),
-  onboarding: document.getElementById("onboarding"),
-  app: document.getElementById("app"),
-  goalGrid: document.getElementById("goalGrid"),
-  goalCount: document.getElementById("goalCount"),
-  startBtn: document.getElementById("startBtn"),
-  confirmLine: document.getElementById("confirmLine"),
-  sideNav: document.getElementById("sideNav"),
-  coreCanvas: document.getElementById("coreCanvas"),
-  bgCanvas: document.getElementById("bgCanvas"),
-  coreState: document.getElementById("coreState"),
-  coreHint: document.getElementById("coreHint"),
-  thinkLine: document.getElementById("thinkLine"),
-  intelCore: document.getElementById("intelCore"),
-  micBadge: document.getElementById("micBadge"),
-  coreSection: document.getElementById("coreSection"),
-  chatSection: document.getElementById("chatSection"),
-  chatStream: document.getElementById("chatStream"),
-  panelView: document.getElementById("panelView"),
-  composer: document.getElementById("composer"),
-  prompt: document.getElementById("prompt"),
-  sendBtn: document.getElementById("sendBtn"),
-  statusPill: document.getElementById("statusPill"),
-  suggestions: document.getElementById("suggestions"),
-  currentTask: document.getElementById("currentTask"),
-  pipeline: document.getElementById("pipeline"),
-  memoryPanel: document.getElementById("memoryPanel"),
-  voiceBtn: document.getElementById("voiceBtn"),
-  micEnergy: document.getElementById("micEnergy"),
-  aThink: document.getElementById("aThink"),
-  aMemory: document.getElementById("aMemory"),
-  aSearch: document.getElementById("aSearch"),
-  aTools: document.getElementById("aTools"),
-  aGen: document.getElementById("aGen"),
-  sysCpu: document.getElementById("sysCpu"),
-  sysTokens: document.getElementById("sysTokens"),
-  sysLatency: document.getElementById("sysLatency"),
-  stageModal: document.getElementById("stageModal"),
-  stageEyebrow: document.getElementById("stageEyebrow"),
-  stageTitle: document.getElementById("stageTitle"),
-  stageBody: document.getElementById("stageBody"),
-  closeStage: document.getElementById("closeStage"),
+  hud: $("hud"),
+  boot: $("boot"),
+  bootSteps: $("bootSteps"),
+  bootNote: $("bootNote"),
+  enableMic: $("enableMic"),
+  onboarding: $("onboarding"),
+  goalGrid: $("goalGrid"),
+  startBtn: $("startBtn"),
+  sideNav: $("sideNav"),
+  modeRow: $("modeRow"),
+  coreCanvas: $("coreCanvas"),
+  bgCanvas: $("bgCanvas"),
+  weatherCanvas: $("weatherCanvas"),
+  voiceWave: $("voiceWave"),
+  mapCanvas: $("mapCanvas"),
+  brainCanvas: $("brainCanvas"),
+  coreState: $("coreState"),
+  coreHint: $("coreHint"),
+  liveStack: $("liveStack"),
+  streamPanel: $("streamPanel"),
+  crmBoard: $("crmBoard"),
+  crmStages: $("crmStages"),
+  activityLog: $("activityLog"),
+  weatherDock: $("weatherDock"),
+  forecast: $("forecast"),
+  composer: $("composer"),
+  prompt: $("prompt"),
+  sendBtn: $("sendBtn"),
+  micBtn: $("micBtn"),
+  voiceToggle: $("voiceToggle"),
+  voiceLive: $("voiceLive"),
+  noiseFill: $("noiseFill"),
+  noisePct: $("noisePct"),
+  clock: $("clock"),
+  sysMode: $("sysMode"),
+  stageModal: $("stageModal"),
+  stageTitle: $("stageTitle"),
+  stageBody: $("stageBody"),
+  closeStage: $("closeStage"),
+  mCpu: $("mCpu"),
+  mMem: $("mMem"),
+  mNet: $("mNet"),
+  mNeu: $("mNeu"),
+  mCpuFill: $("mCpuFill"),
+  mMemFill: $("mMemFill"),
+  mNetFill: $("mNetFill"),
+  mNeuFill: $("mNeuFill"),
 };
 
 const state = {
   goals: new Set(),
   busy: false,
-  ai: "Idle",
+  ai: "idle",
+  lastSpeechAt: 0,
+  pendingTranscript: "",
 };
 
 const bg = createBackground(els.bgCanvas);
+const weatherScene = createWeatherScene(els.weatherCanvas);
 const core = createIntelligenceCore(els.coreCanvas);
 const sound = createSoundscape();
+const stack = createCardStack(els.liveStack);
+
+let latestTimeData = null;
+let latestEnergy = 0;
 
 const voice = createVoiceSensor({
-  onLevel: (energy) => {
-    els.micEnergy.textContent = `${Math.round(energy * 100)}%`;
-    bg.setEnergy(Math.min(1, energy * 1.2));
+  onLevel: (energy, data) => {
+    latestEnergy = energy;
+    latestTimeData = data?.timeData || null;
     core.setLevel(energy);
+    bg.setEnergy(energy);
 
-    const hearing = energy > 0.04;
-    els.micBadge.hidden = !hearing && state.ai !== "Listening";
+    els.noiseFill.style.width = `${Math.round(energy * 100)}%`;
+    els.noisePct.textContent = `${Math.round(energy * 100)}%`;
 
-    // Always visually respond to sound, even mid-task
+    const hearing = energy > 0.045;
+    if (hearing) {
+      els.voiceLive.textContent = "LIVE";
+      els.micBtn.classList.add("live");
+    } else if (!state.busy) {
+      els.voiceLive.textContent = voice.active ? "READY" : "STANDBY";
+      els.micBtn.classList.remove("live");
+    }
+
     if (hearing && !state.busy) {
-      setAiState("Listening");
-      setPipeline("Listening");
-    } else if (!hearing && !state.busy && state.ai === "Listening") {
-      setAiState("Idle");
-      setPipeline(null);
-      els.micBadge.hidden = true;
+      setAiState("listening");
+      bumpMeters(energy);
+    } else if (!hearing && !state.busy && state.ai === "listening") {
+      setAiState("idle");
     } else if (hearing && state.busy) {
-      // Keep core reactive during missions
-      core.setLevel(Math.max(energy, 0.25));
-      els.micBadge.hidden = false;
+      core.setLevel(Math.max(energy, 0.2));
     }
   },
   onClap: (energy) => {
     sound.listen();
-    core.setLevel(Math.max(energy, 0.9));
+    core.burst(1.2);
+    core.setLevel(Math.max(energy, 0.95));
     bg.setEnergy(1);
-    els.micBadge.hidden = false;
-    els.thinkLine.textContent = "Sound detected";
-    if (!state.busy) {
-      setAiState("Listening");
-      setPipeline("Voice Recognition");
-      window.setTimeout(() => {
-        if (!state.busy) setPipeline("Listening");
-      }, 450);
-    }
+    log("Clap / pulse detected", "warn");
+    if (!state.busy) setAiState("listening");
+  },
+  onTranscript: (text, isFinal) => {
+    if (!text) return;
+    els.prompt.value = text;
+    state.pendingTranscript = text;
+    state.lastSpeechAt = performance.now();
+    if (!isFinal && !state.busy) setAiState("listening");
+  },
+  onSpeechEnd: (text) => {
+    if (state.busy) return;
+    const cleaned = text.trim();
+    if (cleaned.length < 2) return;
+    // Avoid double-fire: small debounce via busy flag in handlePrompt
+    void handlePrompt(cleaned);
   },
 });
 
 function setAiState(label) {
-  state.ai = label;
-  els.coreState.textContent = label === "Weather" ? "Weather" : label;
-  els.statusPill.textContent = label === "Weather" ? "Weather" : label;
-  els.intelCore.dataset.state = label.toLowerCase();
-  core.setState(label.toLowerCase());
+  const key = String(label || "idle").toLowerCase();
+  state.ai = key;
+  const pretty = key.charAt(0).toUpperCase() + key.slice(1);
+  els.coreState.textContent = pretty.toUpperCase();
+  els.sysMode.textContent = pretty.toUpperCase();
+  core.setState(key);
 
   const hints = {
-    Idle: "Ready when you are",
-    Listening: "Hearing you in real time",
-    Thinking: "Working through the request",
-    Searching: "Scanning knowledge and tools",
-    Planning: "Structuring the approach",
-    Coding: "Preparing implementation detail",
-    Writing: "Streaming the answer",
-    Speaking: "Responding out loud",
-    Weather: "Live conditions loaded",
-    Finished: "Ready for the next step",
+    idle: "Ready",
+    listening: "Hearing you",
+    thinking: "Neural surge",
+    searching: "Scanning layers",
+    planning: "Structuring",
+    writing: "Streaming",
+    speaking: "Voicing reply",
+    weather: "Atmosphere live",
   };
-  els.coreHint.textContent = hints[label] || "In progress";
-  els.sysCpu.textContent =
-    label === "Idle" || label === "Finished" ? "3%" : `${16 + Math.floor(Math.random() * 24)}%`;
+  els.coreHint.textContent = hints[key] || "In progress";
 }
 
-function setPipeline(active) {
-  const order = PIPELINE;
-  const activeIndex = active ? order.indexOf(active) : -1;
-  els.pipeline.querySelectorAll("li").forEach((li, idx) => {
-    li.classList.remove("active", "done");
-    if (activeIndex === -1) return;
-    if (idx < activeIndex) li.classList.add("done");
-    if (idx === activeIndex) li.classList.add("active");
-  });
+function bumpMeters(energy = 0.2) {
+  setMeter("cpu", 22 + energy * 50 + Math.random() * 10);
+  setMeter("mem", 40 + energy * 20 + Math.random() * 8);
+  setMeter("net", 50 + energy * 35 + Math.random() * 10);
+  setMeter("neu", 55 + energy * 40 + Math.random() * 10);
 }
 
-function setActivity(partial = {}) {
+function setMeter(which, value) {
+  const v = Math.max(5, Math.min(98, Math.round(value)));
   const map = {
-    think: els.aThink,
-    memory: els.aMemory,
-    search: els.aSearch,
-    tools: els.aTools,
-    gen: els.aGen,
+    cpu: [els.mCpu, els.mCpuFill],
+    mem: [els.mMem, els.mMemFill],
+    net: [els.mNet, els.mNetFill],
+    neu: [els.mNeu, els.mNeuFill],
   };
-  for (const [key, el] of Object.entries(map)) {
-    if (partial[key] !== undefined) el.textContent = partial[key];
-  }
+  const pair = map[which];
+  if (!pair) return;
+  pair[0].textContent = `${v}%`;
+  pair[1].style.width = `${v}%`;
+}
+
+function log(message, level = "ok") {
+  const item = document.createElement("div");
+  item.className = `log-item ${level}`;
+  const now = new Date();
+  const ts = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  item.innerHTML = `<time>${ts}</time><span>${message}</span><span class="tag">${level}</span>`;
+  els.activityLog.prepend(item);
+  while (els.activityLog.children.length > 24) els.activityLog.lastChild?.remove();
+}
+
+function setPipeline(label) {
+  if (!label) return;
+  log(label, "ok");
 }
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function runBootSequence() {
-  const stages = [
-    { label: "Initializing Core...", target: 41, ms: 700 },
-    { label: "Loading Memory...", target: 78, ms: 700 },
-    { label: "Connecting Intelligence Engine...", target: 100, ms: 650 },
-  ];
-
-  els.bootLines.innerHTML = "";
-  const rows = stages.map((stage) => {
-    const row = document.createElement("div");
-    row.className = "boot-row";
-    row.innerHTML = `
-      <div class="label"><span>${stage.label}</span><b>0%</b></div>
-      <div class="boot-bar"><span></span></div>
-    `;
-    els.bootLines.appendChild(row);
-    return { row, stage };
-  });
-
-  const checks = document.createElement("ul");
-  checks.className = "boot-checks";
-  checks.innerHTML = `
-    <li data-check>Voice Online</li>
-    <li data-check>Knowledge Loaded</li>
-    <li data-check>Memory Synced</li>
-    <li data-check>Agents Ready</li>
-  `;
-  els.bootLines.appendChild(checks);
-
-  sound.startup();
-  await sound.humStart();
-
-  for (const { row, stage } of rows) {
-    row.classList.add("show");
-    const pct = row.querySelector("b");
-    const bar = row.querySelector(".boot-bar > span");
-    const steps = 12;
-    for (let i = 1; i <= steps; i += 1) {
-      const value = Math.round((stage.target * i) / steps);
-      pct.textContent = `${value}%`;
-      bar.style.width = `${value}%`;
-      await wait(stage.ms / steps);
-    }
-    sound.click();
-  }
-
-  for (const li of checks.querySelectorAll("li")) {
-    li.classList.add("show");
-    await wait(180);
-  }
-
-  els.bootWelcome.hidden = false;
-  await wait(700);
+function tickClock() {
+  const d = new Date();
+  els.clock.textContent = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-async function enableVoice() {
-  await sound.unlock();
-  await voice.start();
-  els.voiceBtn.setAttribute("aria-pressed", "true");
-  sound.listen();
-  setAiState("Listening");
-  setPipeline("Listening");
-  window.setTimeout(() => {
-    if (!state.busy) {
-      setAiState("Idle");
-      setPipeline(null);
-    }
-  }, 900);
+function renderNav() {
+  els.sideNav.innerHTML = "";
+  for (const label of SIDE_LINKS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "nav-item" + (label === "Home" ? " active" : "");
+    btn.textContent = label;
+    btn.addEventListener("click", () => {
+      sound.click();
+      els.sideNav.querySelectorAll(".nav-item").forEach((el) => el.classList.remove("active"));
+      btn.classList.add("active");
+      core.burst(0.4);
+      log(`Nav · ${label}`, "ok");
+      if (label === "Projects") els.prompt.value = "Build me a CRM";
+      if (label === "Voice") void toggleVoice();
+    });
+    els.sideNav.appendChild(btn);
+  }
 }
 
-async function finishBootIntoApp() {
-  els.boot.hidden = true;
-  const seen = localStorage.getItem("cloudy_onboarded") === "1";
-  if (!seen) {
-    els.onboarding.hidden = false;
-    els.app.hidden = true;
-  } else {
-    els.onboarding.hidden = true;
-    els.app.hidden = false;
-    renderMemory(localStorage.getItem("cloudy_goals") || "Custom workspace");
-    // Retrigger core enter animation
-    els.intelCore.classList.remove("core-enter");
-    void els.intelCore.offsetWidth;
-    els.intelCore.classList.add("core-enter");
-    setAiState("Idle");
+function renderModes() {
+  els.modeRow.innerHTML = "";
+  for (const mode of MODE_ACTIONS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "qa";
+    btn.title = mode.title;
+    btn.textContent = mode.icon;
+    btn.addEventListener("click", () => {
+      sound.click();
+      core.burst(0.6);
+      setAiState("thinking");
+      log(`Mode · ${mode.title}`, "ok");
+      window.setTimeout(() => {
+        if (!state.busy) setAiState(voice.active ? "listening" : "idle");
+      }, 700);
+    });
+    els.modeRow.appendChild(btn);
   }
+}
+
+function renderForecast() {
+  els.forecast.innerHTML = FORECAST.map(
+    (d) => `<div class="day"><b>${d.d}</b><div>${d.icon}</div><div class="t">${d.t}</div></div>`,
+  ).join("");
 }
 
 function renderGoals() {
@@ -261,138 +258,101 @@ function renderGoals() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "goal";
-    btn.setAttribute("aria-pressed", "false");
-    btn.innerHTML = `<span class="emoji">${goal.emoji}</span><span class="label">${goal.label}</span>`;
+    btn.textContent = goal.label;
     btn.addEventListener("click", () => {
       sound.click();
       if (state.goals.has(goal.id)) state.goals.delete(goal.id);
       else state.goals.add(goal.id);
-      btn.setAttribute("aria-pressed", String(state.goals.has(goal.id)));
-      els.goalCount.textContent = `${state.goals.size} selected`;
+      btn.classList.toggle("on", state.goals.has(goal.id));
       els.startBtn.disabled = state.goals.size === 0;
     });
     els.goalGrid.appendChild(btn);
   }
 }
 
-function renderSideNav() {
-  els.sideNav.innerHTML = "";
-  for (const label of SIDE_LINKS) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "side-link";
-    btn.textContent = label;
-    if (label === "Home") btn.classList.add("is-active");
-    btn.addEventListener("click", () => {
-      sound.click();
-      els.sideNav.querySelectorAll(".side-link").forEach((el) => {
-        el.classList.toggle("is-active", el.textContent === label);
-      });
-      if (label === "Chat" || label === "Home") showChatWorkspace();
-      else showPanel(label);
-    });
-    els.sideNav.appendChild(btn);
+async function runBoot() {
+  const steps = [
+    "Initializing Core",
+    "Loading Memory",
+    "Calibrating Sensors",
+    "Connecting Intelligence Engine",
+  ];
+  els.bootSteps.innerHTML = "";
+  const rows = steps.map((label) => {
+    const row = document.createElement("div");
+    row.className = "boot-step";
+    row.innerHTML = `<span>${label}</span><b>…</b>`;
+    els.bootSteps.appendChild(row);
+    return row;
+  });
+  sound.startup();
+  await sound.humStart();
+  for (const row of rows) {
+    row.classList.add("on");
+    await wait(420);
+    row.classList.remove("on");
+    row.classList.add("done");
+    row.querySelector("b").textContent = "OK";
+    sound.click();
+  }
+  await wait(350);
+}
+
+async function enableVoice() {
+  await sound.unlock();
+  await voice.start({ speech: true });
+  els.micBtn.setAttribute("aria-pressed", "true");
+  els.micBtn.classList.add("live");
+  els.voiceLive.textContent = "READY";
+  sound.listen();
+  setAiState("listening");
+  log("Live sensors online", "ok");
+  window.setTimeout(() => {
+    if (!state.busy) setAiState("idle");
+  }, 800);
+}
+
+async function toggleVoice() {
+  try {
+    if (voice.active) {
+      voice.stop();
+      sound.humStop();
+      els.micBtn.setAttribute("aria-pressed", "false");
+      els.micBtn.classList.remove("live");
+      els.voiceLive.textContent = "STANDBY";
+      setAiState("idle");
+      log("Voice offline", "warn");
+      return;
+    }
+    await enableVoice();
+    await sound.humStart();
+  } catch (error) {
+    log(error instanceof Error ? error.message : "Mic blocked", "err");
   }
 }
 
-function renderPipeline() {
-  els.pipeline.innerHTML = PIPELINE.map(
-    (step) => `<li data-step="${step}"><span class="tick">✓</span><span>${step}</span></li>`,
-  ).join("");
-}
-
-function renderMemory(goalsText) {
-  const items = MEMORY_SEED.map((item) =>
-    item.title === "Goals" ? { ...item, body: goalsText || item.body } : item,
-  );
-  els.memoryPanel.innerHTML = items
-    .map(
-      (item) =>
-        `<div class="memory-item"><strong>${item.title}</strong><span>${item.body}</span></div>`,
-    )
-    .join("");
-}
-
-function renderSuggestions() {
-  els.suggestions.innerHTML = "";
-  for (const text of SUGGESTIONS) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "suggestion";
-    btn.textContent = text;
-    btn.addEventListener("click", () => {
-      els.prompt.value = text;
-      els.prompt.focus();
-    });
-    els.suggestions.appendChild(btn);
+function showHud() {
+  els.boot.hidden = true;
+  const seen = localStorage.getItem("cloudy_onboarded") === "1";
+  if (!seen) {
+    els.onboarding.hidden = false;
+    els.hud.hidden = true;
+  } else {
+    els.onboarding.hidden = true;
+    els.hud.hidden = false;
+    document.body.dataset.mode = "live";
+    setAiState("idle");
+    core.resize();
+    log("Welcome back, Mukundi", "ok");
   }
-}
-
-function showChatWorkspace() {
-  els.panelView.hidden = true;
-  els.chatSection.hidden = els.chatStream.children.length === 0;
-  els.coreSection.hidden = els.chatStream.children.length > 0;
-}
-
-function showPanel(label) {
-  els.coreSection.hidden = true;
-  els.chatSection.hidden = true;
-  els.panelView.hidden = false;
-  const cards =
-    {
-      Projects: [
-        ["CRM Mission", "Architecture in progress"],
-        ["Trading SaaS", "Queued"],
-      ],
-      Knowledge: [
-        ["Vision", "Live project brain"],
-        ["Decisions", "Updated during missions"],
-      ],
-      Voice: [
-        ["Live reactivity", "Mic + clap"],
-        ["Style", "Natural · interruptible"],
-      ],
-      Settings: [
-        ["Wake Word", "Hey Cloudy"],
-        ["Appearance", "Graphite glass"],
-        ["Voice", "Realtime core response"],
-      ],
-    }[label] || [["Cloudy", "Premium AI operating system"]];
-
-  els.panelView.innerHTML = `
-    <h1 style="margin:0 0 1rem;font-size:1.4rem;font-weight:700;letter-spacing:-0.02em">${label}</h1>
-    <div class="panel-grid">
-      ${cards
-        .map(([title, desc]) => `<article class="card"><h3>${title}</h3><p>${desc}</p></article>`)
-        .join("")}
-    </div>
-  `;
 }
 
 function openStage(stage) {
-  els.stageEyebrow.textContent = "Mission stage";
   els.stageTitle.textContent = stage.name;
   els.stageBody.innerHTML = `<ul>${stage.detail.map((d) => `<li>${d}</li>`).join("")}</ul>`;
   els.stageModal.hidden = false;
   sound.click();
-}
-
-async function enterAppFromOnboarding() {
-  const labels = [...state.goals]
-    .map((id) => GOALS.find((g) => g.id === id)?.label)
-    .filter(Boolean);
-  els.confirmLine.hidden = false;
-  els.startBtn.disabled = true;
-  localStorage.setItem("cloudy_onboarded", "1");
-  localStorage.setItem("cloudy_goals", labels.join(" · ") || "Custom workspace");
-  await wait(850);
-  els.onboarding.hidden = true;
-  els.app.hidden = false;
-  renderMemory(labels.join(" · ") || "Custom workspace");
-  setAiState("Idle");
-  setPipeline(null);
-  setActivity({ think: "—", memory: "ready", search: "—", tools: "—", gen: "—" });
-  els.currentTask.textContent = "Waiting for input";
+  core.burst(0.5);
 }
 
 async function handlePrompt(prompt) {
@@ -400,138 +360,148 @@ async function handlePrompt(prompt) {
   if (!text || state.busy) return;
   state.busy = true;
   els.sendBtn.disabled = true;
-  els.suggestions.hidden = true;
-  els.coreSection.hidden = true;
-  els.panelView.hidden = true;
-  els.chatSection.hidden = false;
+  voice.stopSpeech();
+  els.crmBoard.classList.remove("show");
+  els.crmBoard.hidden = true;
 
   const kind = detectExperience(text);
-  els.currentTask.textContent =
-    kind === "crm"
-      ? "Build CRM mission"
-      : kind === "weather"
-        ? "Weather briefing"
-        : kind === "search"
-          ? "Knowledge search"
-          : "Planning response";
-
-  const working = els.memoryPanel.querySelector(".memory-item span");
-  if (working) working.textContent = text;
+  log(`Query · ${text.slice(0, 48)}`, "ok");
+  setPipeline("Intent Recognised");
+  setAiState("thinking");
+  core.burst(0.8);
+  bumpMeters(0.5);
 
   const hooks = {
-    chatStream: els.chatStream,
+    stack,
+    crmBoard: els.crmBoard,
+    crmStages: els.crmStages,
+    streamPanel: els.streamPanel,
+    weatherDock: els.weatherDock,
+    weatherScene,
+    bg,
+    prompt: text,
     onState: setAiState,
     onPipeline: setPipeline,
-    onActivity: setActivity,
-    onTokens: (tokens, latency) => {
-      els.sysTokens.textContent = String(tokens);
-      els.sysLatency.textContent = `${latency} ms`;
-    },
-    onLine: (line) => {
-      els.thinkLine.textContent = line;
-    },
+    onLog: log,
     onOpenStage: openStage,
+    onMeters: (m) => {
+      if (m.cpu != null) setMeter("cpu", m.cpu);
+      if (m.mem != null) setMeter("mem", m.mem);
+      if (m.net != null) setMeter("net", m.net);
+      if (m.neu != null) setMeter("neu", m.neu);
+    },
+    onTokens: () => bumpMeters(0.4 + Math.random() * 0.3),
+    onSpeechLevel: (v) => {
+      core.setLevel(v);
+      core.setSpeech(v);
+      bg.setEnergy(v);
+    },
     sound,
   };
 
   try {
-    setPipeline("Understanding Intent");
     if (kind === "crm") await runCrmMission(hooks);
     else if (kind === "weather") await runWeatherExperience(hooks);
-    else if (kind === "search") await runSearchExperience({ ...hooks, prompt: text });
-    else await runGeneralExperience({ ...hooks, prompt: text });
-
-    const items = els.memoryPanel.querySelectorAll(".memory-item");
-    if (items[1]) items[1].querySelector("span").textContent = els.currentTask.textContent;
-    if (items[2]) items[2].querySelector("span").textContent = els.currentTask.textContent;
+    else if (kind === "search") await runSearchExperience(hooks);
+    else await runGeneralExperience(hooks);
+  } catch (error) {
+    log(error instanceof Error ? error.message : "Response failed", "err");
+    els.streamPanel.classList.add("show");
+    els.streamPanel.textContent =
+      "Something failed while generating a response. Sensors are still live — try again.";
+    setAiState("idle");
   } finally {
     state.busy = false;
     els.sendBtn.disabled = false;
     els.prompt.value = "";
-    els.prompt.focus();
-    els.thinkLine.textContent = "";
-    if (voice.active) {
-      setAiState("Idle");
-      setPipeline(null);
-    }
+    if (voice.active) voice.startSpeech();
+    bumpMeters(0.15);
   }
 }
 
-els.voiceBtn.addEventListener("click", async () => {
-  try {
-    if (voice.active) {
-      voice.stop();
-      sound.humStop();
-      els.voiceBtn.setAttribute("aria-pressed", "false");
-      els.micBadge.hidden = true;
-      setAiState("Idle");
-      setPipeline(null);
-      return;
-    }
-    await enableVoice();
-    await sound.humStart();
-  } catch (error) {
-    els.voiceBtn.setAttribute("aria-pressed", "false");
-    els.thinkLine.textContent =
-      error instanceof Error ? error.message : "Microphone permission required";
-  }
-});
-
-els.enableAudioBtn.addEventListener("click", async () => {
-  try {
-    els.bootNote.textContent = "";
-    await enableVoice();
-    await finishBootIntoApp();
-  } catch (error) {
-    els.bootNote.textContent =
-      error instanceof Error ? error.message : "Microphone permission is required for live core.";
-  }
-});
-
-document.querySelectorAll(".top-link").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".top-link").forEach((el) => el.classList.remove("is-active"));
-    btn.classList.add("is-active");
-    if (btn.dataset.route === "home") showChatWorkspace();
-    else showPanel(btn.textContent?.trim() || "Workspace");
-  });
-});
+// Ambient UI loops
+function uiLoop(now) {
+  drawVoiceWave(els.voiceWave, latestTimeData, latestEnergy);
+  drawMiniMap(els.mapCanvas, now);
+  drawBrain(
+    els.brainCanvas,
+    latestEnergy,
+    state.ai === "thinking" || state.ai === "searching" || state.ai === "planning",
+  );
+  requestAnimationFrame(uiLoop);
+}
 
 els.composer.addEventListener("submit", (e) => {
   e.preventDefault();
   void handlePrompt(els.prompt.value);
 });
 
-els.prompt.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    void handlePrompt(els.prompt.value);
-  }
-});
-
-els.startBtn.addEventListener("click", () => void enterAppFromOnboarding());
+els.micBtn.addEventListener("click", () => void toggleVoice());
+els.voiceToggle.addEventListener("click", () => void toggleVoice());
 els.closeStage.addEventListener("click", () => {
   els.stageModal.hidden = true;
 });
+els.enableMic.addEventListener("click", async () => {
+  try {
+    els.bootNote.textContent = "";
+    await enableVoice();
+    showHud();
+  } catch (error) {
+    els.bootNote.textContent =
+      error instanceof Error ? error.message : "Microphone permission required.";
+  }
+});
+els.startBtn.addEventListener("click", () => {
+  const labels = [...state.goals]
+    .map((id) => GOALS.find((g) => g.id === id)?.label)
+    .filter(Boolean);
+  localStorage.setItem("cloudy_onboarded", "1");
+  localStorage.setItem("cloudy_goals", labels.join(" · "));
+  els.onboarding.hidden = true;
+  els.hud.hidden = false;
+  document.body.dataset.mode = "live";
+  sound.done();
+  core.resize();
+  log("Workspace configured", "ok");
+  setAiState("idle");
+});
 
+$("globalSearch")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    const q = e.target.value.trim();
+    if (q) void handlePrompt(q);
+  }
+});
+
+// Suggestion chips via placeholder cycling / quick demos on first load
+window.addEventListener("load", () => {
+  // Prefill nothing; expose suggestions in log
+  SUGGESTIONS.forEach((s) => log(`Try · ${s}`, "ok"));
+});
+
+renderNav();
+renderModes();
+renderForecast();
 renderGoals();
-renderSideNav();
-renderPipeline();
-renderMemory();
-renderSuggestions();
+tickClock();
+setInterval(tickClock, 1000);
+requestAnimationFrame(uiLoop);
+setMeter("cpu", 28);
+setMeter("mem", 46);
+setMeter("net", 62);
+setMeter("neu", 71);
 
-// Boot first — never jump straight into chat
-els.onboarding.hidden = true;
-els.app.hidden = true;
 void (async () => {
-  await runBootSequence();
-  // Prefer auto mic; if blocked, show enable button on boot card
+  els.hud.hidden = true;
+  els.onboarding.hidden = true;
+  await runBoot();
   try {
     await enableVoice();
-    await finishBootIntoApp();
+    showHud();
   } catch {
-    els.enableAudioBtn.hidden = false;
+    els.enableMic.hidden = false;
     els.bootNote.textContent =
-      "Allow the microphone so the intelligence core can react to voice and claps.";
+      "Allow the microphone so the AI Core reacts to voice, claps, and ambient sound.";
   }
 })();
