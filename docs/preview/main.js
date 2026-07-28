@@ -233,11 +233,22 @@ function playStartupSound() {
   noise.start(now + 0.05);
 }
 
+function stopSpeechRecognition() {
+  if (!recognition) return;
+  try {
+    recognition.onend = null;
+    recognition.stop();
+  } catch {
+    /* ignore */
+  }
+}
+
 function speakGreeting() {
   const text = "Hello. Cloudy online. How can I help you today?";
   els.transcript.textContent = text;
   logActivity("Greeting · TTS");
   setState("speaking");
+  stopSpeechRecognition();
 
   const utter = new SpeechSynthesisUtterance(text);
   utter.rate = 0.95;
