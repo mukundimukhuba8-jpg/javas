@@ -3,167 +3,142 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Cloudy — Intelligent Operating System</title>
-    <meta
-      name="description"
-      content="Cloudy is a premium AI operating system that listens, thinks, plans, builds, and speaks in real time."
-    />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <title>CLOUDY AI OS</title>
+    <meta name="description" content="Cloudy — living holographic AI operating system." />
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body>
+  <body data-mode="boot">
     <canvas id="bgCanvas" aria-hidden="true"></canvas>
+    <div id="weatherScene" aria-hidden="true">
+      <canvas id="weatherCanvas"></canvas>
+    </div>
 
-    <!-- Boot sequence -->
-    <section class="boot" id="boot">
-      <div class="boot-card glass">
-        <p class="boot-mark">◉ CLOUDY AI OPERATING SYSTEM</p>
-        <div class="boot-lines" id="bootLines"></div>
-        <p class="boot-welcome" id="bootWelcome" hidden>Welcome back, Mukundi.</p>
-        <button type="button" class="btn btn-primary boot-mic" id="enableAudioBtn" hidden>
-          Enable microphone for live core
-        </button>
-        <p class="meta" id="bootNote"></p>
-      </div>
-    </section>
-
-    <section class="screen" id="onboarding" hidden>
-      <div class="onboard-card glass">
-        <p class="eyebrow">Cloudy</p>
-        <h1>What do you want to build today?</h1>
-        <p class="sub">
-          Select everything that applies. Cloudy will shape your workspace around these goals.
-        </p>
-        <div class="goal-grid" id="goalGrid"></div>
-        <div class="onboard-actions">
-          <span id="goalCount" class="meta">0 selected</span>
-          <button type="button" class="btn btn-primary" id="startBtn" disabled>Continue</button>
-        </div>
-        <p class="confirm-line" id="confirmLine" hidden>
-          Great. I’ll build your workspace around these goals.
-        </p>
-      </div>
-    </section>
-
-    <div class="app" id="app" hidden>
-      <header class="topbar glass-bar">
-        <div class="top-left">
-          <span class="logo">Cloudy</span>
-          <nav class="top-nav" aria-label="Primary">
-            <button type="button" data-route="home" class="top-link is-active">Workspace</button>
-            <button type="button" data-route="projects" class="top-link">Projects</button>
-            <button type="button" data-route="knowledge" class="top-link">Knowledge</button>
-            <button type="button" data-route="memory" class="top-link">Memory</button>
-            <button type="button" data-route="automation" class="top-link">Automation</button>
-            <button type="button" data-route="settings" class="top-link">Settings</button>
-          </nav>
-        </div>
-        <div class="top-right">
-          <button type="button" class="btn btn-quiet" id="voiceBtn" aria-pressed="false">
-            <span class="voice-dot" id="voiceDot"></span>
-            Voice
-          </button>
-          <label class="search">
-            <span class="sr-only">Search everywhere</span>
-            <input type="search" placeholder="Search everywhere" id="globalSearch" />
-          </label>
-          <button type="button" class="avatar" title="Profile" aria-label="Profile">M</button>
+    <div class="hud" id="hud" hidden>
+      <header class="topbar glass">
+        <a class="brand" href="#home" id="brandLink">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span class="brand-name">CLOUDY</span>
+        </a>
+        <label class="search">
+          <span aria-hidden="true">⌕</span>
+          <span class="sr-only">Search</span>
+          <input id="globalSearch" type="search" placeholder="SEARCH FOR SYSTEM FILES..." />
+        </label>
+        <div class="status-icons">
+          <span class="dot" title="Notifications"></span>
+          <span title="Network">◈</span>
+          <span title="Battery">84%</span>
+          <time class="clock" id="clock">22:48</time>
         </div>
       </header>
 
-      <aside class="sidebar" aria-label="Sidebar">
-        <nav id="sideNav"></nav>
-      </aside>
+      <div class="main">
+        <aside class="panel left glass">
+          <p class="panel-title">Navigation</p>
+          <nav class="nav" id="sideNav"></nav>
+          <div class="widget">
+            <div class="widget-h"><span>Voice Input</span><span class="live" id="voiceLive">STANDBY</span></div>
+            <canvas id="voiceWave" width="360" height="144"></canvas>
+            <div class="noise-meter"><div class="noise-fill" id="noiseFill"></div></div>
+            <div class="map-meta"><span id="noisePct">0%</span> noise · mic reactive</div>
+          </div>
+          <div class="widget">
+            <div class="widget-h"><span>Active Nodes</span><span class="live">LIVE</span></div>
+            <canvas id="mapCanvas" width="360" height="220"></canvas>
+            <div class="map-meta" id="mapMeta">12 nodes · Pretoria focus</div>
+          </div>
+        </aside>
 
-      <main class="main">
-        <section class="hero-core" id="coreSection">
-          <div class="core core-enter" id="intelCore" data-state="idle" aria-live="polite">
-            <canvas id="coreCanvas" width="380" height="380" aria-hidden="true"></canvas>
-            <div class="mic-badge" id="micBadge" hidden aria-hidden="true">Mic</div>
-            <div class="core-label">
-              <span id="coreState">Idle</span>
-              <small id="coreHint">Ready when you are</small>
+        <main class="stage" id="stage">
+          <div class="quick-actions" id="modeRow"></div>
+
+          <div class="core-wrap">
+            <canvas id="coreCanvas" width="720" height="720" aria-label="AI Core"></canvas>
+            <div class="core-platform" aria-hidden="true"></div>
+            <div class="core-label"><span id="coreState">IDLE</span> · <span id="coreHint">Ready</span></div>
+          </div>
+
+          <div class="crm-board" id="crmBoard" hidden>
+            <div class="crm-title">EXECUTION BOARD · CRM MISSION</div>
+            <div class="crm-stages" id="crmStages"></div>
+          </div>
+
+          <div class="live-stack" id="liveStack" aria-live="polite"></div>
+          <div class="stream-panel" id="streamPanel"></div>
+        </main>
+
+        <aside class="panel right glass">
+          <p class="panel-title">Intelligence Monitor</p>
+          <div class="widget">
+            <div class="widget-h"><span>Core</span><span class="live" id="brainLive">SYNC</span></div>
+            <canvas id="brainCanvas" width="400" height="216"></canvas>
+          </div>
+          <div class="widget">
+            <div class="widget-h"><span>System</span><span id="sysMode">IDLE</span></div>
+            <div class="meters">
+              <div class="meter-row"><span>CPU Usage</span><div class="track"><div class="fill" id="mCpuFill"></div></div><b id="mCpu">28%</b></div>
+              <div class="meter-row"><span>Memory</span><div class="track"><div class="fill" id="mMemFill"></div></div><b id="mMem">46%</b></div>
+              <div class="meter-row"><span>Network</span><div class="track"><div class="fill" id="mNetFill"></div></div><b id="mNet">62%</b></div>
+              <div class="meter-row"><span>Neural Engine</span><div class="track"><div class="fill" id="mNeuFill"></div></div><b id="mNeu">71%</b></div>
             </div>
           </div>
-          <p class="core-foot meta" id="thinkLine"></p>
-        </section>
+          <p class="panel-title">Log Activity</p>
+          <div class="log" id="activityLog"></div>
+        </aside>
+      </div>
 
-        <section class="chat" id="chatSection" hidden>
-          <div class="chat-stream" id="chatStream" aria-live="polite"></div>
-        </section>
-
-        <section class="composer-wrap">
-          <form class="composer glass" id="composer">
-            <textarea
-              id="prompt"
-              rows="2"
-              placeholder="Ask Cloudy to think, build, search, or check the weather…"
-            ></textarea>
-            <div class="composer-bar">
-              <div class="composer-meta">
-                <span id="statusPill" class="pill">Idle</span>
-                <span class="meta">Sound reacts instantly when Voice is on</span>
-              </div>
-              <button type="submit" class="btn btn-primary" id="sendBtn">Send</button>
-            </div>
-          </form>
-          <div class="suggestions" id="suggestions"></div>
-        </section>
-
-        <section class="panel-view" id="panelView" hidden></section>
-      </main>
-
-      <aside class="rail" aria-label="Status and memory">
-        <div class="rail-block glass">
-          <h2>Current task</h2>
-          <p id="currentTask" class="rail-text">Waiting for input</p>
+      <section class="weather-dock glass" id="weatherDock">
+        <div>
+          <div class="temp" id="wxTemp">18<span>°C</span></div>
+          <div class="cond" id="wxCond">Partly Cloudy</div>
         </div>
-
-        <div class="rail-block glass">
-          <h2>System status</h2>
-          <ul class="pipeline" id="pipeline"></ul>
+        <div class="wx-icon" aria-hidden="true">
+          <div class="wx-sun"></div>
+          <div class="wx-cloud"></div>
         </div>
+        <div class="forecast" id="forecast"></div>
+        <p class="wx-meta" id="wxMeta">Pretoria · Wind 12 km/h · Humidity 63% · Rain 4%</p>
+      </section>
 
-        <div class="rail-block glass">
-          <h2>Live activity</h2>
-          <ul class="activity">
-            <li><span>Mic energy</span><b id="micEnergy">0%</b></li>
-            <li><span>Thinking</span><b id="aThink">—</b></li>
-            <li><span>Memory</span><b id="aMemory">—</b></li>
-            <li><span>Search</span><b id="aSearch">—</b></li>
-            <li><span>Tools</span><b id="aTools">—</b></li>
-            <li><span>Generating</span><b id="aGen">—</b></li>
-          </ul>
-        </div>
-
-        <div class="rail-block glass">
-          <h2>System</h2>
-          <ul class="activity">
-            <li><span>CPU</span><b id="sysCpu">3%</b></li>
-            <li><span>Tokens</span><b id="sysTokens">0</b></li>
-            <li><span>Latency</span><b id="sysLatency">—</b></li>
-            <li><span>APIs</span><b>Weather · Memory · Tools</b></li>
-          </ul>
-        </div>
-
-        <div class="rail-block glass grow">
-          <h2>Memory</h2>
-          <div class="memory" id="memoryPanel"></div>
-        </div>
-      </aside>
+      <footer class="command glass">
+        <form id="composer" style="display:contents">
+          <input id="prompt" type="text" placeholder="Ask Cloudy or enter a command..." autocomplete="off" />
+          <button type="button" class="mic-btn" id="micBtn" aria-pressed="false" title="Voice">◉</button>
+          <div class="cmd-actions">
+            <button type="button" class="ghost" id="voiceToggle">Voice</button>
+            <button type="submit" class="send" id="sendBtn">Send</button>
+          </div>
+        </form>
+      </footer>
     </div>
 
-    <div class="stage-modal" id="stageModal" hidden>
-      <div class="stage-card glass">
-        <button type="button" class="icon-close" id="closeStage" aria-label="Close">×</button>
-        <p class="eyebrow" id="stageEyebrow">Stage</p>
-        <h3 id="stageTitle">Details</h3>
-        <div id="stageBody" class="stage-body"></div>
+    <div class="overlay" id="boot">
+      <div class="boot-card glass">
+        <div class="boot-mark"></div>
+        <h1>CLOUDY AI OS</h1>
+        <p>Initializing holographic interface</p>
+        <div class="boot-steps" id="bootSteps"></div>
+        <p id="bootNote" style="text-align:center;color:var(--muted);font-size:13px;margin-top:14px"></p>
+        <button type="button" class="primary" id="enableMic" hidden style="margin-top:12px">Enable Live Sensors</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="onboarding" hidden>
+      <div class="onboard-card glass">
+        <h2>What are you building?</h2>
+        <p>Select goals so Cloudy can shape your workspace.</p>
+        <div class="goals" id="goalGrid"></div>
+        <button type="button" class="primary" id="startBtn" disabled>Enter Cloudy</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="stageModal" hidden>
+      <div class="modal glass">
+        <div class="modal-h">
+          <h3 id="stageTitle">Stage</h3>
+          <button type="button" class="icon-btn" id="closeStage" aria-label="Close">✕</button>
+        </div>
+        <div class="workspace" id="stageBody"></div>
       </div>
     </div>
 
