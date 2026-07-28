@@ -132,7 +132,9 @@ export async function runCrmMission({
     row.classList.add("active");
     row.querySelector(".state").textContent = "Running...";
     onState?.(stage.id === "ui" || stage.id === "backend" ? "Coding" : "Planning");
-    onPipeline?.(stage.id === "architecture" ? "Planning" : "Running AI Tools");
+    onPipeline?.(
+      stage.id === "architecture" ? "Understanding Intent" : "Running AI Tools",
+    );
     onActivity?.({ tools: "active", gen: "active" });
 
     const fill = row.querySelector(".bar > span");
@@ -147,7 +149,7 @@ export async function runCrmMission({
   }
 
   onState?.("Writing");
-  onPipeline?.("Generating");
+  onPipeline?.("Generating Response");
   answerBody.hidden = false;
   const answer = `CRM mission scaffold is live.
 
@@ -372,7 +374,7 @@ export async function runGeneralExperience({
   const answerBody = card.querySelector("#answerBody");
   answerBody.hidden = false;
   onState?.("Writing");
-  onPipeline?.("Generating");
+  onPipeline?.("Generating Response");
   const answer = `Understood. I’ll handle this as an operating-system task.
 
 1. Capture the outcome in memory  
