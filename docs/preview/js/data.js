@@ -32,38 +32,11 @@ export const MODE_ACTIONS = [
   { id: "pulse", icon: "◎", title: "Pulse" },
 ];
 
-export const PIPELINE = [
-  "Listening",
-  "Voice Recognition",
-  "Intent Recognised",
-  "Memory Search",
-  "Knowledge Retrieval",
-  "Tool Execution",
-  "Response Generation",
-  "Speaking",
-];
-
 export const SUGGESTIONS = [
   "Build me a CRM",
   "What's the weather?",
   "Tell me about Tesla",
-  "Search my knowledge for auth patterns",
-];
-
-export const THINKING_STAGES = [
-  { id: "intent", label: "Intent recognised", icon: "◎" },
-  { id: "memory", label: "Memory search", icon: "⬡" },
-  { id: "knowledge", label: "Knowledge retrieval", icon: "◈" },
-  { id: "tools", label: "Tool execution", icon: "⚙" },
-  { id: "response", label: "Response generation", icon: "✧" },
-];
-
-export const WEATHER_STEPS = [
-  { id: "loc", label: "Detect Location", detail: "Searching GPS lock...", icon: "📍" },
-  { id: "gps", label: "Finding GPS", detail: "Triangulating Pretoria node...", icon: "🛰️" },
-  { id: "wx", label: "Checking Weather", detail: "Reading satellite layers...", icon: "☁" },
-  { id: "data", label: "Gathering Data", detail: "Wind · humidity · pressure...", icon: "📊" },
-  { id: "forecast", label: "Generating Forecast", detail: "Composing briefing...", icon: "✦" },
+  "I need help",
 ];
 
 export const CRM_STAGES = [
@@ -71,18 +44,18 @@ export const CRM_STAGES = [
     id: "planning",
     name: "Planning",
     detail: [
-      "Mission scope: contacts, companies, deals, activities",
-      "Modular monolith for MVP velocity",
-      "Bounded contexts: CRM · Auth · Billing",
+      "Scope: contacts, companies, deals, activities",
+      "Fast MVP path with a modular monolith",
+      "Clear boundaries for CRM, auth, and billing",
     ],
   },
   {
     id: "design",
     name: "Design",
     detail: [
-      "Pipeline board as primary surface",
-      "Contact profile + activity timeline",
-      "Command palette for power users",
+      "Pipeline board as the main surface",
+      "Contact profile and activity timeline",
+      "Command palette for quick actions",
     ],
   },
   {
@@ -93,22 +66,22 @@ export const CRM_STAGES = [
   {
     id: "frontend",
     name: "Frontend",
-    detail: ["Next.js app router", "Deal board DnD", "Realtime presence chips"],
+    detail: ["App shell", "Deal board", "Lightweight realtime cues"],
   },
   {
     id: "backend",
     name: "Backend",
-    detail: ["CRUD APIs", "RBAC", "Audit log", "Webhooks"],
+    detail: ["CRUD APIs", "Permissions", "Audit log", "Webhooks"],
   },
   {
     id: "ai",
     name: "AI",
-    detail: ["Lead scoring", "Email draft assist", "Meeting summary hooks"],
+    detail: ["Lead scoring", "Email draft help", "Meeting summaries"],
   },
   {
     id: "deployment",
     name: "Deployment",
-    detail: ["Vercel web", "Supabase db", "Preview environments"],
+    detail: ["Web hosting", "Managed database", "Preview environments"],
   },
 ];
 
@@ -121,7 +94,15 @@ export const FORECAST = [
 ];
 
 export function detectExperience(prompt) {
-  const p = prompt.toLowerCase();
+  const p = prompt.toLowerCase().trim();
+  if (/^(hi|hello|hey|good (morning|afternoon|evening)|howdy)\b/.test(p) || p === "yo")
+    return "greeting";
+  if (
+    /\b(i need help|help me|can you help|stuck|not sure)\b/.test(p) ||
+    p === "help" ||
+    p === "i need help"
+  )
+    return "help";
   if (p.includes("crm") || (p.includes("build") && (p.includes("crm") || p.includes("customer"))))
     return "crm";
   if (p.includes("weather") || p.includes("forecast") || p.includes("temperature"))
@@ -136,67 +117,124 @@ export function detectExperience(prompt) {
   return "general";
 }
 
-export function answerFor(prompt) {
+/**
+ * Natural conversational replies — never system-telemetry narration.
+ */
+export function answerFor(prompt, history = []) {
   const kind = detectExperience(prompt);
+  const trimmed = prompt.trim();
+
+  if (kind === "greeting") {
+    return {
+      kind,
+      opener: null,
+      text: "Hi! How can I help you today?",
+      speak: "Hi! How can I help you today?",
+      status: [],
+    };
+  }
+
+  if (kind === "help") {
+    return {
+      kind,
+      opener: null,
+      text: "Of course. Tell me what's going on, and we'll work through it together.",
+      speak: "Of course. Tell me what's going on, and we'll work through it together.",
+      status: [],
+    };
+  }
+
   if (kind === "weather") {
     return {
       kind,
+      opener: "Let me check the weather for your current location.",
       text:
-        "It’s currently 18°C in Pretoria with partly cloudy skies. Comfortable outside, light wind at 12 km/h, and only a small chance of rain. You won’t need an umbrella.",
+        "It's currently 18°C with partly cloudy skies. There's a light breeze and only a small chance of rain today. Perfect for being outside if you'd like.",
       speak:
-        "Good day. It’s currently 18 degrees in Pretoria with partly cloudy skies. Comfortable outside, and only a small chance of rain.",
+        "It's currently 18 degrees with partly cloudy skies. There's a light breeze and only a small chance of rain today.",
+      status: ["Checking your location", "Reading current conditions"],
     };
   }
+
   if (kind === "crm") {
     return {
       kind,
-      text: `CRM mission accepted. I’ve spun up a live execution board across Planning, Design, Database, Frontend, Backend, AI, and Deployment.
-
-Each stage is interactive — open any card for the workspace detail. Next I can generate schema SQL, API routes, or the deal board UI.`,
+      opener:
+        "Absolutely. I'll plan the project first, then break it into manageable stages so you can review each part before we build.",
+      text:
+        "I've laid out Planning, Design, Database, Frontend, Backend, AI, and Deployment. Open any stage when you want the detail — or tell me which part you'd like to start with.",
       speak:
-        "CRM mission accepted. I’ve opened a live execution board. Click any stage to inspect the workspace, and tell me which slice to generate next.",
+        "I've laid out the project in clear stages. Open any one when you want more detail, or tell me which part you'd like to start with.",
+      status: ["Mapping the project", "Preparing stages"],
     };
   }
+
   if (kind === "search") {
-    const tesla = prompt.toLowerCase().includes("tesla");
+    const tesla = trimmed.toLowerCase().includes("tesla");
+    if (tesla) {
+      return {
+        kind,
+        opener: "Let me pull together a clear overview.",
+        text:
+          "Tesla builds electric vehicles and energy products, and software is a big part of what makes them stand out — things like over-the-air updates and autonomy work.\n\nIf it helps, I can go deeper on the cars, the energy business, or how they compare with competitors. What would be most useful?",
+        speak:
+          "Tesla builds electric vehicles and energy products, and software is a big part of what makes them stand out. I can go deeper on the cars, energy, or competitors — what would help most?",
+        status: ["Gathering the latest context"],
+      };
+    }
     return {
       kind,
-      text: tesla
-        ? `**Tesla — concise briefing**
-
-Tesla designs electric vehicles, energy storage, and solar. Software (OTA updates, autonomy ambitions) is as central as hardware.
-
-**Signals**
-- Products: Model 3 / Y / S / X, Cybertruck, Powerwall, Megapack
-- Moat: charging network, manufacturing scale, brand demand
-- Watch: margins, competition, autonomy timelines
-
-I can go deeper on vehicles, energy, or competitors.`
-        : `I searched memory and project knowledge.
-
-**Findings**
-- Prefer magic-link auth for CRM MVP
-- Keep RBAC at workspace + role level
-- Store audit events beside deals and contacts
-
-I can draft the auth flow or generate schema next.`,
-      speak: tesla
-        ? "Tesla builds electric vehicles and energy products, with software as a core advantage. I can go deeper on any slice you want."
-        : "I found relevant patterns in your knowledge. Prefer magic link auth and workspace-level RBAC for the CRM MVP.",
+      opener: "I've found what you're looking for.",
+      text:
+        "From your project knowledge, a solid CRM MVP path is magic-link auth, workspace-level permissions, and audit events kept next to deals and contacts.\n\nWant me to draft the auth flow, or sketch the database next?",
+      speak:
+        "From your project knowledge, a solid CRM MVP path is magic-link auth, workspace-level permissions, and audit events next to deals and contacts. Want me to draft auth, or sketch the database next?",
+      status: ["Checking your notes"],
     };
   }
+
+  // Context-aware general replies
+  const recent = history.filter((m) => m.role === "user").slice(-2).map((m) => m.content.toLowerCase());
+  const afterCrm = recent.some((t) => t.includes("crm"));
+  const afterWeather = recent.some((t) => t.includes("weather"));
+
+  if (/\b(thanks|thank you|thx)\b/i.test(trimmed)) {
+    return {
+      kind: "general",
+      opener: null,
+      text: "You're welcome. Anything else I can help with?",
+      speak: "You're welcome. Anything else I can help with?",
+      status: [],
+    };
+  }
+
+  if (afterCrm && /\b(schema|database|sql|api|frontend|backend|start|next)\b/i.test(trimmed)) {
+    return {
+      kind: "general",
+      opener: "Happy to keep going on the CRM.",
+      text: `For “${trimmed}”, I'd start with the thinnest useful slice, show it clearly, then iterate with you.\n\nShould I draft the database schema first, or the deal board UI?`,
+      speak:
+        "Happy to keep going on the CRM. Should I draft the database schema first, or the deal board UI?",
+      status: [],
+    };
+  }
+
+  if (afterWeather && /\b(tomorrow|weekend|umbrella|rain|jacket)\b/i.test(trimmed)) {
+    return {
+      kind: "general",
+      opener: null,
+      text: "Looking at the next few days, it stays mild — around 17 to 22°C — with Thursday looking like the wetter day. A light jacket is enough; an umbrella is only really useful if you're out Thursday.",
+      speak:
+        "It stays mild over the next few days, with Thursday looking wetter. A light jacket is enough, and an umbrella mainly if you're out Thursday.",
+      status: [],
+    };
+  }
+
   return {
     kind: "general",
-    text: `Understood — treating this as an OS-level task.
-
-1. Capture the outcome in memory
-2. Plan the thinnest useful slice
-3. Execute with visible status
-4. Keep knowledge updated
-
-You asked: “${prompt.trim()}”
-
-I’ll proceed with that framing. Tell me the concrete result you want next and I’ll execute.`,
-    speak: `Understood. I’ve captured your request and I’m ready to execute the next concrete step.`,
+    opener: "I can help with that.",
+    text: `Here's how I'd approach it: clarify the outcome you want, take the smallest useful step, and keep you in the loop as we go.\n\nYou said: “${trimmed}”\n\nWhat would a good result look like for you?`,
+    speak: `I can help with that. What would a good result look like for you?`,
+    status: [],
   };
 }
