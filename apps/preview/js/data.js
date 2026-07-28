@@ -13,263 +13,186 @@ export const GOALS = [
   { id: "custom", emoji: "⚙️", label: "Custom Project" },
 ];
 
-export const NAV = [
-  { id: "world", label: "World", title: "Living brain", kicker: "World" },
-  { id: "configure", label: "Configure", title: "Build your AI team", kicker: "Configure" },
-  { id: "knowledge", label: "Knowledge", title: "Project brain", kicker: "Knowledge" },
-  { id: "skills", label: "Skills", title: "Reusable abilities", kicker: "Skills" },
-  {
-    id: "integrations",
-    label: "Integrations",
-    title: "Connect everything",
-    kicker: "Integrations",
-  },
-  { id: "automations", label: "Automations", title: "Natural language workflows", kicker: "Automations" },
-  { id: "portals", label: "Portals", title: "Shared workspaces", kicker: "Portals" },
-  { id: "settings", label: "Settings", title: "System controls", kicker: "Settings" },
-];
-
-export const AGENTS = [
-  {
-    id: "ceo",
-    name: "CEO Agent",
-    personality: "Decisive, calm, strategic",
-    model: "claude-sonnet-5",
-    permissions: "Strategy · Approvals · Budget",
-    memory: "Company vision, KPIs, priorities",
-    goals: "Ship revenue outcomes",
-    tools: "Notion, Slack, Analytics",
-  },
-  {
-    id: "marketing",
-    name: "Marketing Agent",
-    personality: "Persuasive, concise, data-aware",
-    model: "claude-sonnet-5",
-    permissions: "Campaigns · Copy · Ads read",
-    memory: "Brand voice, funnels, creatives",
-    goals: "Grow qualified demand",
-    tools: "Meta, X, Gmail, Analytics",
-  },
-  {
-    id: "developer",
-    name: "Developer Agent",
-    personality: "Precise, pragmatic, systems-minded",
-    model: "claude-sonnet-5",
-    permissions: "Code · PRs · Deploy staging",
-    memory: "Architecture, APIs, conventions",
-    goals: "Ship reliable software",
-    tools: "GitHub, Vercel, Supabase",
-  },
-  {
-    id: "designer",
-    name: "Designer Agent",
-    personality: "Tasteful, visual, user-centered",
-    model: "claude-sonnet-5",
-    permissions: "UI · Design systems",
-    memory: "Brand kit, components, flows",
-    goals: "Clarity and conversion",
-    tools: "Figma, Screenshots",
-  },
-  {
-    id: "finance",
-    name: "Finance Agent",
-    personality: "Conservative, exact, alert",
-    model: "claude-sonnet-5",
-    permissions: "Reports · Forecasts",
-    memory: "Burn, runway, pricing",
-    goals: "Protect cash efficiency",
-    tools: "Stripe, Sheets, Notion",
-  },
-  {
-    id: "research",
-    name: "Research Agent",
-    personality: "Curious, rigorous, cite-first",
-    model: "claude-sonnet-5",
-    permissions: "Web · Docs · Summaries",
-    memory: "Sources, competitors, briefs",
-    goals: "Reduce uncertainty",
-    tools: "Browser, Drive, Notion",
-  },
-];
-
-export const KNOWLEDGE = [
-  "Vision",
-  "Goals",
-  "Roadmap",
-  "Requirements",
-  "Documents",
-  "Research",
+export const SIDE_LINKS = [
+  "Home",
+  "Chat",
+  "Projects",
+  "Knowledge",
   "Tasks",
-  "Source Code",
-  "Database Design",
-  "API Structure",
-  "UI Ideas",
-  "Notes",
-  "Decisions",
+  "Agents",
+  "Automation",
+  "Documents",
+  "Code",
+  "Voice",
+  "Analytics",
+  "Marketplace",
+  "Settings",
 ];
 
-export const KNOWLEDGE_BODY = {
-  Vision:
-    "Build an AI-native trading SaaS that researches markets, executes strategy logic, and explains every decision.",
-  Goals: [
-    "Launch MVP in 30 days",
-    "Connect brokerage + alerts",
-    "Ship explainable trade journal",
-    "Reach first 100 waitlist users",
-  ],
-  Roadmap: [
-    "Week 1 — Architecture & auth",
-    "Week 2 — Market data + signals",
-    "Week 3 — Dashboard + journal",
-    "Week 4 — Billing + deploy",
-  ],
-  Requirements: [
-    "Realtime market feed",
-    "Strategy sandbox",
-    "Risk limits",
-    "Audit trail for every agent action",
-  ],
-  Documents: ["PRD", "Brand notes", "Compliance checklist"],
-  Research: ["Competitor matrix", "Broker API comparison", "Retail trader interviews"],
-  Tasks: ["Design signal cards", "Implement strategy runner", "Wire Stripe checkout"],
-  "Source Code": ["apps/web", "services/api", "packages/strategies"],
-  "Database Design": ["users", "strategies", "signals", "trades", "journals"],
-  "API Structure": ["POST /strategies", "GET /signals", "POST /execute", "GET /journal"],
-  "UI Ideas": ["Neon command deck", "Trade timeline", "Risk orb"],
-  Notes: ["Prefer paper trading first", "Keep explanations spoken + written"],
-  Decisions: ["Supabase for auth/db", "Vercel for web", "Claude for agent orchestration"],
-};
-
-export const SKILLS = [
-  "Build React App",
-  "Create Landing Page",
-  "Generate Database",
-  "Analyze Code",
-  "Create Trading Robot",
-  "Write Documentation",
-  "Design UI",
-  "Generate API",
-  "Create Marketing Plan",
-  "Create Business Plan",
-  "Build Mobile App",
+export const AI_STATES = [
+  "Idle",
+  "Thinking",
+  "Researching",
+  "Planning",
+  "Coding",
+  "Searching",
+  "Learning",
+  "Executing",
+  "Finished",
 ];
 
-export const INTEGRATIONS = [
-  "GitHub",
-  "OpenAI",
-  "Google Drive",
-  "Gmail",
-  "Slack",
-  "Discord",
-  "Notion",
-  "Stripe",
-  "Paystack",
-  "WhatsApp",
-  "Telegram",
-  "Meta",
-  "X",
-  "Firebase",
-  "Supabase",
-  "Vercel",
-  "Netlify",
-  "AWS",
-  "Cloudflare",
-  "Figma",
-  "Jira",
-  "Trello",
-  "Linear",
+export const SUGGESTIONS = [
+  "Build me a CRM",
+  "Create a trading SaaS",
+  "Design an onboarding automation",
+  "Plan a mobile app architecture",
 ];
 
-export const PORTALS = [
-  {
-    name: "Client Portal",
-    desc: "Shared AI, deliverables, approvals, and status.",
-  },
-  {
-    name: "Company Portal",
-    desc: "Internal ops brain for teams and leadership.",
-  },
-  {
-    name: "Team Portal",
-    desc: "Sprint knowledge, agents, and chat in one room.",
-  },
-  {
-    name: "Investor Portal",
-    desc: "Metrics, updates, and controlled document access.",
-  },
-  {
-    name: "Mentor Portal",
-    desc: "Guidance threads with shared project context.",
-  },
-  {
-    name: "Customer Portal",
-    desc: "Support AI, guides, and account dashboards.",
-  },
+export const MEMORY_SEED = [
+  { title: "Working Memory", body: "Awaiting first request" },
+  { title: "Recent Context", body: "Workspace initialized" },
+  { title: "Project Memory", body: "No active project yet" },
+  { title: "Goals", body: "Set during onboarding" },
+  { title: "Long-Term Memory", body: "Preferences · calm · premium" },
+  { title: "Knowledge Graph", body: "Ready to expand" },
 ];
 
-export const SETTINGS = [
-  ["Profile", "Name, avatar, timezone, working hours"],
-  ["Voice Settings", "TTS voice, speaking rate, language"],
-  ["Wake Word", "Hey Cloudy · clap activation"],
-  ["AI Models", "Default brain, specialist model routing"],
-  ["API Keys", "Secure vault for providers and tools"],
-  ["Memory Controls", "What Cloudy may remember or forget"],
-  ["Privacy", "Data retention and export controls"],
-  ["Appearance", "Glow intensity, density, theme"],
-  ["Notifications", "Desktop, email, and portal alerts"],
-  ["Billing", "Plan, usage, invoices"],
-  ["Security", "Sessions, devices, 2FA"],
-  ["Connected Devices", "Desktop, mobile, mic, speakers"],
-];
+/** Claude-like reasoning plans keyed by intent */
+export function planFor(prompt) {
+  const p = prompt.toLowerCase();
+  if (p.includes("crm")) {
+    return {
+      task: "Design and scaffold a CRM",
+      stateSequence: ["Thinking", "Planning", "Researching", "Coding", "Finished"],
+      steps: [
+        "Understanding request…",
+        "Identifying requirements…",
+        "Choosing architecture…",
+        "Designing database…",
+        "Selecting technologies…",
+        "Planning authentication…",
+        "Building response…",
+      ],
+      answer: `Here’s a clean CRM foundation.
 
-export const BUILD_STEPS = [
-  "Create the project",
-  "Generate the roadmap",
-  "Create the architecture",
-  "Build the database",
-  "Design the UI",
-  "Generate the backend",
-  "Create the frontend",
-  "Set up integrations",
-  "Deploy the application",
-  "Continue improving via the agent team",
-];
+## Product shape
+- **Contacts & companies** with ownership
+- **Deals pipeline** with stages
+- **Tasks & follow-ups**
+- **Activity timeline**
+- **Simple reporting**
 
-export const WORLD_NODES = [
-  { id: "projects", label: "Projects", group: "core" },
-  { id: "agents", label: "Agents", group: "core" },
-  { id: "memories", label: "Memories", group: "core" },
-  { id: "documents", label: "Documents", group: "data" },
-  { id: "automations", label: "Automations", group: "flow" },
-  { id: "conversations", label: "Conversations", group: "data" },
-  { id: "integrations", label: "Integrations", group: "flow" },
-  { id: "goals", label: "Goals", group: "core" },
-  { id: "trading", label: "Trading SaaS", group: "project" },
-  { id: "ceo", label: "CEO Agent", group: "agent" },
-  { id: "dev", label: "Developer Agent", group: "agent" },
-  { id: "mkt", label: "Marketing Agent", group: "agent" },
-  { id: "roadmap", label: "Roadmap", group: "doc" },
-  { id: "github", label: "GitHub", group: "integration" },
-  { id: "stripe", label: "Stripe", group: "integration" },
-  { id: "onboard", label: "Signup Flow", group: "automation" },
-];
+## Architecture
+| Layer | Choice |
+| --- | --- |
+| App | Next.js |
+| API | Node / tRPC |
+| Database | Postgres (Supabase) |
+| Auth | Email + Google |
+| Hosting | Vercel |
 
-export const WORLD_LINKS = [
-  ["projects", "trading"],
-  ["projects", "agents"],
-  ["agents", "ceo"],
-  ["agents", "dev"],
-  ["agents", "mkt"],
-  ["trading", "roadmap"],
-  ["trading", "goals"],
-  ["trading", "documents"],
-  ["documents", "memories"],
-  ["integrations", "github"],
-  ["integrations", "stripe"],
-  ["automations", "onboard"],
-  ["conversations", "agents"],
-  ["goals", "trading"],
-  ["dev", "github"],
-  ["mkt", "stripe"],
-  ["onboard", "conversations"],
-];
+## Database (starter)
+\`\`\`sql
+contacts(id, name, email, company_id, owner_id)
+companies(id, name, domain)
+deals(id, title, stage, value, contact_id)
+activities(id, type, body, deal_id, created_at)
+\`\`\`
+
+## First build slice
+1. Auth + workspace
+2. Contacts CRUD
+3. Deal board
+4. Activity log
+5. Basic dashboard
+
+I can generate the schema, API routes, and UI next—say which slice to start with.`,
+    };
+  }
+
+  if (p.includes("trading")) {
+    return {
+      task: "Build a trading SaaS plan",
+      stateSequence: ["Thinking", "Researching", "Planning", "Coding", "Finished"],
+      steps: [
+        "Understanding request…",
+        "Mapping trader workflows…",
+        "Choosing market data approach…",
+        "Designing risk controls…",
+        "Planning agent responsibilities…",
+        "Drafting architecture…",
+        "Building response…",
+      ],
+      answer: `I’ll treat this as an AI-native trading SaaS.
+
+## Core modules
+- Strategy lab
+- Signal engine
+- Risk limits
+- Trade journal with explanations
+- Alerts & billing
+
+## Suggested stack
+Next.js · Supabase · Worker for signals · Stripe · Claude for explanations
+
+## Delivery order
+1. Paper-trading journal
+2. Signal rules engine
+3. Broker read-only sync
+4. Agent explanations
+5. Billing + teams
+
+I can scaffold the project brain and agent team next.`,
+    };
+  }
+
+  if (p.includes("automation") || p.includes("onboarding")) {
+    return {
+      task: "Design onboarding automation",
+      stateSequence: ["Thinking", "Planning", "Executing", "Finished"],
+      steps: [
+        "Understanding request…",
+        "Extracting trigger and outcomes…",
+        "Selecting integrations…",
+        "Ordering workflow steps…",
+        "Checking failure paths…",
+        "Building response…",
+      ],
+      answer: `Automation drafted:
+
+**When** someone signs up  
+**Then**
+1. Create project workspace  
+2. Send welcome email  
+3. Notify Slack  
+4. Generate onboarding tasks  
+5. Schedule a reminder for tomorrow  
+
+Each step is auditable and can require approval before side effects.`,
+    };
+  }
+
+  return {
+    task: "Plan response",
+    stateSequence: ["Thinking", "Planning", "Finished"],
+    steps: [
+      "Understanding request…",
+      "Identifying requirements…",
+      "Choosing approach…",
+      "Structuring answer…",
+      "Building response…",
+    ],
+    answer: `Understood.
+
+I’ll treat this as an operating-system task—not a one-off chat answer.
+
+**Approach**
+1. Clarify outcome  
+2. Capture it in project memory  
+3. Choose architecture and agents  
+4. Execute in thin vertical slices  
+5. Keep knowledge updated as we go  
+
+Tell me the product outcome you want shipped first, and I’ll begin with a concrete plan and artifacts.`,
+  };
+}

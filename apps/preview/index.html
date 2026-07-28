@@ -3,130 +3,139 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Cloudy — AI Operating System</title>
+    <title>Cloudy — Intelligent Operating System</title>
     <meta
       name="description"
-      content="Cloudy is an AI operating system that builds products with a living neural world and a team of agents."
+      content="Cloudy is an intelligent operating system that thinks, plans, remembers, and executes."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body data-screen="boot">
-    <div id="bloom" aria-hidden="true"></div>
-    <canvas id="fx" aria-hidden="true"></canvas>
-
-    <!-- Boot / Wake -->
-    <section class="screen" id="screen-boot" data-screen-panel="boot">
-      <div class="gate" id="gate">
-        <p class="gate-brand">Cloudy</p>
-        <p class="gate-tag">AI Operating System</p>
-        <p class="gate-copy">
-          Wake with <strong>Hey Cloudy</strong> or a <strong>clap</strong> — or enter the workspace
-          directly.
-        </p>
-        <div class="gate-actions">
-          <button type="button" id="enableBtn" class="btn primary">Enable wake listening</button>
-          <button type="button" id="enterBtn" class="btn ghost">Enter Cloudy OS</button>
-        </div>
-        <p class="gate-note" id="gateNote"></p>
-      </div>
-
-      <div class="wake-stage" id="wakeStage" hidden>
-        <div class="zoom-layer" id="zoomLayer">
-          <div class="orb-wrap">
-            <div class="orb-rings"></div>
-            <div class="orb" id="orb">
-              <div class="orb-core"></div>
-            </div>
-          </div>
-          <svg class="neural wake-neural" id="wakeNeural" viewBox="0 0 1000 600"></svg>
-        </div>
-        <p class="sleep-status" id="sleepStatus">
-          <span class="dot"></span>
-          Sleeping · Listening for “Hey Cloudy” or Clap
-        </p>
-        <p class="wake-transcript" id="wakeTranscript"></p>
-      </div>
-    </section>
-
-    <!-- Welcome / Onboarding -->
-    <section class="screen" id="screen-welcome" data-screen-panel="welcome" hidden>
-      <div class="welcome">
-        <p class="eyebrow">Welcome</p>
+  <body>
+    <!-- Onboarding -->
+    <section class="screen" id="onboarding" hidden>
+      <div class="onboard-card">
+        <p class="eyebrow">Cloudy</p>
         <h1>What do you want to build today?</h1>
-        <p class="lede">Select everything that applies. Cloudy will shape your workspace around it.</p>
+        <p class="sub">
+          Select everything that applies. Cloudy will shape your workspace around these goals.
+        </p>
         <div class="goal-grid" id="goalGrid"></div>
-        <div class="welcome-foot">
-          <p class="selection-count" id="selectionCount">0 selected</p>
-          <button type="button" class="btn primary" id="confirmGoals" disabled>
-            Continue with Cloudy
-          </button>
+        <div class="onboard-actions">
+          <span id="goalCount" class="meta">0 selected</span>
+          <button type="button" class="btn btn-primary" id="startBtn" disabled>Continue</button>
         </div>
-        <p class="cloudy-line" id="welcomeLine" hidden>
+        <p class="confirm-line" id="confirmLine" hidden>
           Great. I’ll build your workspace around these goals.
         </p>
       </div>
     </section>
 
-    <!-- Main OS -->
-    <section class="screen os" id="screen-os" data-screen-panel="os" hidden>
-      <aside class="rail">
-        <div class="rail-brand">
-          <span class="rail-orb"></span>
-          <div>
-            <strong>Cloudy</strong>
-            <small>AI OS</small>
-          </div>
+    <!-- App shell -->
+    <div class="app" id="app">
+      <header class="topbar">
+        <div class="top-left">
+          <span class="logo">Cloudy</span>
+          <nav class="top-nav" aria-label="Primary">
+            <button type="button" data-route="home" class="top-link is-active">Workspace</button>
+            <button type="button" data-route="projects" class="top-link">Projects</button>
+            <button type="button" data-route="knowledge" class="top-link">Knowledge</button>
+            <button type="button" data-route="memory" class="top-link">Memory</button>
+            <button type="button" data-route="automation" class="top-link">Automation</button>
+            <button type="button" data-route="settings" class="top-link">Settings</button>
+          </nav>
         </div>
-        <nav class="rail-nav" id="railNav"></nav>
-        <button type="button" class="btn build-btn" id="buildBtn">
-          “Cloudy, build me a trading SaaS.”
-        </button>
+        <div class="top-right">
+          <label class="search">
+            <span class="sr-only">Search everywhere</span>
+            <input type="search" placeholder="Search everywhere" id="globalSearch" />
+          </label>
+          <button type="button" class="avatar" title="Profile" aria-label="Profile">M</button>
+        </div>
+      </header>
+
+      <aside class="sidebar" aria-label="Sidebar">
+        <nav id="sideNav"></nav>
       </aside>
 
-      <div class="os-main">
-        <header class="os-top">
-          <div>
-            <p class="view-kicker" id="viewKicker">World</p>
-            <h2 id="viewTitle">Living brain</h2>
+      <main class="main">
+        <section class="hero-core" id="coreSection">
+          <div class="core" id="intelCore" data-state="idle" aria-live="polite">
+            <canvas id="coreCanvas" width="320" height="320" aria-hidden="true"></canvas>
+            <div class="core-label">
+              <span id="coreState">Idle</span>
+              <small id="coreHint">Ready when you are</small>
+            </div>
           </div>
-          <div class="os-top-right">
-            <span class="chip" id="goalChip">Goals ready</span>
-            <span class="chip live"><span class="pulse"></span> Online</span>
-          </div>
-        </header>
+        </section>
 
-        <div class="view" id="view-world" data-view="world"></div>
-        <div class="view" id="view-configure" data-view="configure" hidden></div>
-        <div class="view" id="view-knowledge" data-view="knowledge" hidden></div>
-        <div class="view" id="view-skills" data-view="skills" hidden></div>
-        <div class="view" id="view-integrations" data-view="integrations" hidden></div>
-        <div class="view" id="view-automations" data-view="automations" hidden></div>
-        <div class="view" id="view-portals" data-view="portals" hidden></div>
-        <div class="view" id="view-settings" data-view="settings" hidden></div>
-      </div>
+        <section class="chat" id="chatSection" hidden>
+          <div class="chat-stream" id="chatStream" aria-live="polite"></div>
+        </section>
 
-      <aside class="inspector" id="inspector">
-        <p class="panel-label">Inspector</p>
-        <div id="inspectorBody">
-          <p class="muted">Select a node, agent, or skill to inspect it.</p>
+        <section class="composer-wrap">
+          <form class="composer" id="composer">
+            <textarea
+              id="prompt"
+              rows="2"
+              placeholder="Ask Cloudy to think, plan, or build…"
+            ></textarea>
+            <div class="composer-bar">
+              <div class="composer-meta">
+                <span id="statusPill" class="pill">Idle</span>
+                <span class="meta">Enter to send · Shift+Enter for line</span>
+              </div>
+              <button type="submit" class="btn btn-primary" id="sendBtn">Send</button>
+            </div>
+          </form>
+          <div class="suggestions" id="suggestions"></div>
+        </section>
+
+        <section class="panel-view" id="panelView" hidden></section>
+      </main>
+
+      <aside class="rail" aria-label="Status and memory">
+        <div class="rail-block">
+          <h2>Current task</h2>
+          <p id="currentTask" class="rail-text">Waiting for input</p>
+        </div>
+
+        <div class="rail-block">
+          <h2>AI status</h2>
+          <ul class="status-list" id="statusList"></ul>
+        </div>
+
+        <div class="rail-block">
+          <h2>Live activity</h2>
+          <ul class="activity" id="activity">
+            <li><span>Thinking</span><b id="aThink">—</b></li>
+            <li><span>Using memory</span><b id="aMemory">—</b></li>
+            <li><span>Using search</span><b id="aSearch">—</b></li>
+            <li><span>Running tools</span><b id="aTools">—</b></li>
+            <li><span>Generating</span><b id="aGen">—</b></li>
+          </ul>
+        </div>
+
+        <div class="rail-block">
+          <h2>System</h2>
+          <ul class="activity">
+            <li><span>CPU</span><b id="sysCpu">4%</b></li>
+            <li><span>Tokens</span><b id="sysTokens">0</b></li>
+            <li><span>Latency</span><b id="sysLatency">—</b></li>
+            <li><span>APIs</span><b id="sysApis">3 connected</b></li>
+          </ul>
+        </div>
+
+        <div class="rail-block grow">
+          <h2>Memory</h2>
+          <div class="memory" id="memoryPanel"></div>
         </div>
       </aside>
-    </section>
-
-    <!-- Build overlay -->
-    <div class="build-overlay" id="buildOverlay" hidden>
-      <div class="build-card">
-        <p class="eyebrow">Autonomous build</p>
-        <h3>Cloudy, build me a trading SaaS.</h3>
-        <ol id="buildSteps"></ol>
-        <button type="button" class="btn ghost" id="closeBuild" hidden>Enter workspace</button>
-      </div>
     </div>
 
     <script type="module" src="./main.js"></script>

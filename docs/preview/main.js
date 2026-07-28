@@ -1,70 +1,98 @@
 import {
-  AGENTS,
-  BUILD_STEPS,
+  AI_STATES,
   GOALS,
-  INTEGRATIONS,
-  KNOWLEDGE,
-  KNOWLEDGE_BODY,
-  NAV,
-  PORTALS,
-  SETTINGS,
-  SKILLS,
+  MEMORY_SEED,
+  SIDE_LINKS,
+  SUGGESTIONS,
+  planFor,
 } from "./js/data.js";
-import { createWakeController } from "./js/wake.js";
-import { createWorld } from "./js/world.js";
+import { createIntelligenceCore } from "./js/core.js";
+import { runClaudeStyleTurn } from "./js/chat.js";
+
+const els = {
+  onboarding: document.getElementById("onboarding"),
+  app: document.getElementById("app"),
+  goalGrid: document.getElementById("goalGrid"),
+  goalCount: document.getElementById("goalCount"),
+  startBtn: document.getElementById("startBtn"),
+  confirmLine: document.getElementById("confirmLine"),
+  sideNav: document.getElementById("sideNav"),
+  coreCanvas: document.getElementById("coreCanvas"),
+  coreState: document.getElementById("coreState"),
+  coreHint: document.getElementById("coreHint"),
+  intelCore: document.getElementById("intelCore"),
+  coreSection: document.getElementById("coreSection"),
+  chatSection: document.getElementById("chatSection"),
+  chatStream: document.getElementById("chatStream"),
+  panelView: document.getElementById("panelView"),
+  composer: document.getElementById("composer"),
+  prompt: document.getElementById("prompt"),
+  sendBtn: document.getElementById("sendBtn"),
+  statusPill: document.getElementById("statusPill"),
+  suggestions: document.getElementById("suggestions"),
+  currentTask: document.getElementById("currentTask"),
+  statusList: document.getElementById("statusList"),
+  memoryPanel: document.getElementById("memoryPanel"),
+  aThink: document.getElementById("aThink"),
+  aMemory: document.getElementById("aMemory"),
+  aSearch: document.getElementById("aSearch"),
+  aTools: document.getElementById("aTools"),
+  aGen: document.getElementById("aGen"),
+  sysCpu: document.getElementById("sysCpu"),
+  sysTokens: document.getElementById("sysTokens"),
+  sysLatency: document.getElementById("sysLatency"),
+};
 
 const state = {
   goals: new Set(),
-  view: "world",
-  knowledgeTab: "Vision",
-  world: null,
+  busy: false,
 };
 
-const els = {
-  body: document.body,
-  gate: document.getElementById("gate"),
-  gateNote: document.getElementById("gateNote"),
-  enableBtn: document.getElementById("enableBtn"),
-  enterBtn: document.getElementById("enterBtn"),
-  wakeStage: document.getElementById("wakeStage"),
-  orb: document.getElementById("orb"),
-  wakeTranscript: document.getElementById("wakeTranscript"),
-  goalGrid: document.getElementById("goalGrid"),
-  selectionCount: document.getElementById("selectionCount"),
-  confirmGoals: document.getElementById("confirmGoals"),
-  welcomeLine: document.getElementById("welcomeLine"),
-  railNav: document.getElementById("railNav"),
-  viewKicker: document.getElementById("viewKicker"),
-  viewTitle: document.getElementById("viewTitle"),
-  goalChip: document.getElementById("goalChip"),
-  inspectorBody: document.getElementById("inspectorBody"),
-  buildBtn: document.getElementById("buildBtn"),
-  buildOverlay: document.getElementById("buildOverlay"),
-  buildSteps: document.getElementById("buildSteps"),
-  closeBuild: document.getElementById("closeBuild"),
-  fx: document.getElementById("fx"),
-};
+const core = createIntelligenceCore(els.coreCanvas);
 
-function showScreen(name) {
-  document.querySelectorAll("[data-screen-panel]").forEach((panel) => {
-    panel.hidden = panel.dataset.screenPanel !== name;
+function setAiState(label) {
+  const normalized = label || "Idle";
+  els.coreState.textContent = normalized;
+  els.statusPill.textContent = normalized;
+  els.intelCore.dataset.state = normalized.toLowerCase();
+  core.setState(normalized.toLowerCase());
+
+  const hints = {
+    Idle: "Ready when you are",
+    Thinking: "Working through the request",
+    Researching: "Gathering relevant context",
+    Planning: "Structuring the approach",
+    Coding: "Preparing implementation detail",
+    Searching: "Looking through knowledge",
+    Learning: "Updating memory pathways",
+    Executing: "Running tools and actions",
+    Writing: "Composing the answer",
+    Finished: "Ready for the next step",
+  };
+  els.coreHint.textContent = hints[normalized] || "In progress";
+
+  els.statusList.querySelectorAll("li").forEach((li) => {
+    li.classList.toggle("is-on", li.dataset.state === normalized);
   });
-  els.body.dataset.screen = name;
+
+  if (normalized === "Idle" || normalized === "Finished") {
+    els.sysCpu.textContent = "4%";
+  } else {
+    els.sysCpu.textContent = `${18 + Math.floor(Math.random() * 22)}%`;
+  }
 }
 
-function setWakeState(wake) {
-  els.body.dataset.wake = wake;
-}
-
-function inspect(title, fields) {
-  els.inspectorBody.innerHTML = `
-    <h3>${title}</h3>
-    <dl>
-      ${fields
-        .map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`)
-        .join("")}
-    </dl>
-  `;
+function setActivity(partial = {}) {
+  const map = {
+    think: els.aThink,
+    memory: els.aMemory,
+    search: els.aSearch,
+    tools: els.aTools,
+    gen: els.aGen,
+  };
+  for (const [key, el] of Object.entries(map)) {
+    if (partial[key] !== undefined) el.textContent = partial[key];
+  }
 }
 
 function renderGoals() {
@@ -73,301 +101,198 @@ function renderGoals() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "goal";
-    btn.dataset.id = goal.id;
     btn.setAttribute("aria-pressed", "false");
     btn.innerHTML = `<span class="emoji">${goal.emoji}</span><span class="label">${goal.label}</span>`;
     btn.addEventListener("click", () => {
       if (state.goals.has(goal.id)) state.goals.delete(goal.id);
       else state.goals.add(goal.id);
       btn.setAttribute("aria-pressed", String(state.goals.has(goal.id)));
-      els.selectionCount.textContent = `${state.goals.size} selected`;
-      els.confirmGoals.disabled = state.goals.size === 0;
+      els.goalCount.textContent = `${state.goals.size} selected`;
+      els.startBtn.disabled = state.goals.size === 0;
     });
     els.goalGrid.appendChild(btn);
   }
 }
 
-function renderNav() {
-  els.railNav.innerHTML = "";
-  for (const item of NAV) {
+function renderSideNav() {
+  els.sideNav.innerHTML = "";
+  for (const label of SIDE_LINKS) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.textContent = item.label;
-    btn.dataset.view = item.id;
-    btn.addEventListener("click", () => setView(item.id));
-    els.railNav.appendChild(btn);
-  }
-}
-
-function setView(id) {
-  state.view = id;
-  const meta = NAV.find((n) => n.id === id);
-  if (meta) {
-    els.viewKicker.textContent = meta.kicker;
-    els.viewTitle.textContent = meta.title;
-  }
-  document.querySelectorAll(".rail-nav button").forEach((btn) => {
-    btn.setAttribute("aria-current", btn.dataset.view === id ? "page" : "false");
-  });
-  document.querySelectorAll(".view").forEach((view) => {
-    view.hidden = view.dataset.view !== id;
-  });
-  if (id === "world") ensureWorld();
-}
-
-function ensureWorld() {
-  const host = document.getElementById("view-world");
-  if (host.dataset.ready === "1") return;
-  host.dataset.ready = "1";
-  host.innerHTML = `
-    <div class="world-canvas-wrap">
-      <canvas id="worldCanvas"></canvas>
-      <p class="world-hint">Drag to orbit · Click a node to open it</p>
-    </div>
-  `;
-  const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById("worldCanvas"));
-  state.world = createWorld(canvas, {
-    onSelect(node) {
-      inspect(node.label, [
-        ["Type", node.group],
-        ["Node", node.id],
-        ["Action", "Opened from the living neural graph"],
-        ["Linked systems", "Projects · Agents · Memory · Tools"],
-      ]);
-      if (node.group === "agent") setView("configure");
-      if (node.id === "integrations" || node.group === "integration") setView("integrations");
-      if (node.id === "automations" || node.group === "automation") setView("automations");
-      if (node.id === "documents" || node.group === "doc") setView("knowledge");
-      if (node.id === "goals") setView("knowledge");
-    },
-  });
-}
-
-function renderConfigure() {
-  const host = document.getElementById("view-configure");
-  host.innerHTML = `<div class="card-grid"></div>`;
-  const grid = host.querySelector(".card-grid");
-  for (const agent of AGENTS) {
-    const card = document.createElement("article");
-    card.className = "card";
-    card.innerHTML = `
-      <h3>${agent.name}</h3>
-      <p>${agent.personality}</p>
-      <div class="tag-row">
-        <span class="tag">${agent.model}</span>
-        <span class="tag">Create</span>
-      </div>
-    `;
-    card.addEventListener("click", () => {
-      host.querySelectorAll(".card").forEach((c) => c.classList.remove("active"));
-      card.classList.add("active");
-      inspect(agent.name, [
-        ["Personality", agent.personality],
-        ["Model", agent.model],
-        ["Permissions", agent.permissions],
-        ["Memory", agent.memory],
-        ["Goals", agent.goals],
-        ["Tools", agent.tools],
-      ]);
+    btn.className = "side-link";
+    btn.textContent = label;
+    if (label === "Home") btn.classList.add("is-active");
+    btn.addEventListener("click", () => {
+      els.sideNav.querySelectorAll(".side-link").forEach((el) => {
+        el.classList.toggle("is-active", el.textContent === label);
+      });
+      if (label === "Chat" || label === "Home") showChatWorkspace();
+      else showPanel(label);
     });
-    grid?.appendChild(card);
+    els.sideNav.appendChild(btn);
   }
 }
 
-function renderKnowledge() {
-  const host = document.getElementById("view-knowledge");
-  host.innerHTML = `
-    <div class="knowledge-layout">
-      <div class="knowledge-nav" id="knowledgeNav"></div>
-      <div class="knowledge-body" id="knowledgeBody"></div>
-    </div>
-  `;
-  const nav = host.querySelector("#knowledgeNav");
-  const body = host.querySelector("#knowledgeBody");
+function renderStatusList() {
+  els.statusList.innerHTML = AI_STATES.map((s) => `<li data-state="${s}">${s}</li>`).join("");
+}
 
-  function paint(tab) {
-    state.knowledgeTab = tab;
-    nav?.querySelectorAll("button").forEach((btn) => {
-      btn.setAttribute("aria-current", btn.dataset.tab === tab ? "true" : "false");
-    });
-    const content = KNOWLEDGE_BODY[tab];
-    if (Array.isArray(content)) {
-      body.innerHTML = `<h3>${tab}</h3><ul>${content.map((i) => `<li>${i}</li>`).join("")}</ul>`;
-    } else {
-      body.innerHTML = `<h3>${tab}</h3><p class="muted">${content}</p>`;
-    }
-    inspect(tab, [
-      ["Layer", "Project brain"],
-      ["Updated by", "Cloudy · continuous"],
-      ["Visibility", "Workspace + portals with permission"],
-    ]);
-  }
+function renderMemory(goalsText) {
+  const items = MEMORY_SEED.map((item) =>
+    item.title === "Goals" ? { ...item, body: goalsText || item.body } : item,
+  );
+  els.memoryPanel.innerHTML = items
+    .map(
+      (item) =>
+        `<div class="memory-item"><strong>${item.title}</strong><span>${item.body}</span></div>`,
+    )
+    .join("");
+}
 
-  for (const tab of KNOWLEDGE) {
+function renderSuggestions() {
+  els.suggestions.innerHTML = "";
+  for (const text of SUGGESTIONS) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.textContent = tab;
-    btn.dataset.tab = tab;
-    btn.addEventListener("click", () => paint(tab));
-    nav?.appendChild(btn);
-  }
-  paint("Vision");
-}
-
-function renderSkills() {
-  const host = document.getElementById("view-skills");
-  host.innerHTML = `<div class="card-grid"></div>`;
-  const grid = host.querySelector(".card-grid");
-  for (const skill of SKILLS) {
-    const card = document.createElement("article");
-    card.className = "card";
-    card.innerHTML = `<h3>${skill}</h3><p>Reusable ability · attach to any agent</p><div class="tag-row"><span class="tag">Skill</span></div>`;
-    card.addEventListener("click", () => {
-      inspect(skill, [
-        ["Type", "Reusable skill"],
-        ["Attach to", "Developer · Designer · Marketing · Research"],
-        ["Output", "Artifacts + knowledge updates"],
-      ]);
+    btn.className = "suggestion";
+    btn.textContent = text;
+    btn.addEventListener("click", () => {
+      els.prompt.value = text;
+      els.prompt.focus();
     });
-    grid?.appendChild(card);
+    els.suggestions.appendChild(btn);
   }
 }
 
-function renderIntegrations() {
-  const host = document.getElementById("view-integrations");
-  host.innerHTML = `<div class="card-grid"></div>`;
-  const grid = host.querySelector(".card-grid");
-  for (const name of INTEGRATIONS) {
-    const card = document.createElement("article");
-    card.className = "card";
-    card.innerHTML = `<h3>${name}</h3><p>Connect · discover data · grant tools</p><div class="tag-row"><span class="tag">Integration</span></div>`;
-    card.addEventListener("click", () => {
-      inspect(name, [
-        ["Status", "Ready to connect"],
-        ["Discovery", "Cloudy maps entities automatically"],
-        ["Used by", "Agents · Automations · Portals"],
-      ]);
-    });
-    grid?.appendChild(card);
-  }
+function showChatWorkspace() {
+  els.panelView.hidden = true;
+  els.chatSection.hidden = els.chatStream.children.length === 0;
+  els.coreSection.hidden = els.chatStream.children.length > 0;
+  els.composer.parentElement.hidden = false;
 }
 
-function renderAutomations() {
-  const host = document.getElementById("view-automations");
-  const sample =
-    "When someone signs up, create a project, send them a welcome email, notify Slack, generate onboarding tasks, and remind me tomorrow.";
-  host.innerHTML = `
-    <div class="flow">
-      <p class="muted">Describe the workflow in plain language. Cloudy builds it visually.</p>
-      <textarea class="flow-input" id="flowInput">${sample}</textarea>
-      <button type="button" class="btn primary" id="compileFlow">Build workflow</button>
-      <div class="flow-graph" id="flowGraph"></div>
-    </div>
-  `;
-  const compile = () => {
-    const steps = [
-      "Signup trigger",
-      "Create project",
-      "Send welcome email",
-      "Notify Slack",
-      "Generate onboarding tasks",
-      "Remind tomorrow",
-    ];
-    const graph = host.querySelector("#flowGraph");
-    if (!graph) return;
-    graph.innerHTML = steps
-      .map(
-        (step, i) =>
-          `<span class="flow-node">${step}</span>${i < steps.length - 1 ? '<span class="flow-arrow">→</span>' : ""}`,
-      )
-      .join("");
-    inspect("Signup automation", [
-      ["Trigger", "New user signup"],
-      ["Steps", String(steps.length)],
-      ["Channels", "Email · Slack · Tasks · Reminder"],
-    ]);
+function showPanel(label) {
+  els.coreSection.hidden = true;
+  els.chatSection.hidden = true;
+  els.panelView.hidden = false;
+
+  const content = {
+    Projects: [
+      ["Trading SaaS", "Scaffolded workspace"],
+      ["CRM", "Awaiting first build"],
+      ["Client Portal", "Draft"],
+    ],
+    Knowledge: [
+      ["Vision", "Living project brain"],
+      ["Roadmap", "Updated as Cloudy works"],
+      ["Decisions", "Architecture choices"],
+    ],
+    Tasks: [
+      ["Define MVP slice", "Todo"],
+      ["Design data model", "In progress"],
+      ["Wire auth", "Queued"],
+    ],
+    Agents: [
+      ["CEO Agent", "Strategy · approvals"],
+      ["Developer Agent", "Implementation"],
+      ["Research Agent", "Discovery"],
+    ],
+    Automation: [
+      ["Signup → onboarding", "Ready"],
+      ["Weekly recap", "Scheduled"],
+    ],
+    Documents: [
+      ["PRD", "Knowledge"],
+      ["API outline", "Knowledge"],
+    ],
+    Code: [
+      ["apps/web", "Next.js"],
+      ["services/api", "Node"],
+    ],
+    Voice: [
+      ["Wake word", "Hey Cloudy"],
+      ["Style", "Conversational · interruptible"],
+    ],
+    Analytics: [
+      ["Latency", "Live"],
+      ["Tokens", "Session counter"],
+    ],
+    Marketplace: [
+      ["Skill packs", "Coming online"],
+      ["Agent templates", "Browse"],
+    ],
+    Settings: [
+      ["Profile", "Workspace identity"],
+      ["Wake Word", "Hey Cloudy"],
+      ["AI Models", "Claude-class routing"],
+      ["API Keys", "Secure vault"],
+      ["Memory Controls", "Retention & privacy"],
+      ["Appearance", "Graphite · glass"],
+    ],
   };
-  host.querySelector("#compileFlow")?.addEventListener("click", compile);
-  compile();
+
+  const cards = content[label] || [["Cloudy", "Premium operating workspace"]];
+  els.panelView.innerHTML = `
+    <h1 style="margin:0 0 1rem;font-size:1.4rem;font-weight:700;letter-spacing:-0.02em">${label}</h1>
+    <div class="panel-grid">
+      ${cards
+        .map(([title, desc]) => `<article class="card"><h3>${title}</h3><p>${desc}</p></article>`)
+        .join("")}
+    </div>
+  `;
 }
 
-function renderPortals() {
-  const host = document.getElementById("view-portals");
-  host.innerHTML = `<div class="card-grid"></div>`;
-  const grid = host.querySelector(".card-grid");
-  for (const portal of PORTALS) {
-    const card = document.createElement("article");
-    card.className = "card";
-    card.innerHTML = `<h3>${portal.name}</h3><p>${portal.desc}</p><div class="tag-row"><span class="tag">AI</span><span class="tag">Docs</span><span class="tag">Chat</span></div>`;
-    card.addEventListener("click", () => {
-      inspect(portal.name, [
-        ["Includes", "AI assistant · documents · chat · dashboards"],
-        ["Permissions", "Role-based shared knowledge"],
-        ["Purpose", portal.desc],
-      ]);
-    });
-    grid?.appendChild(card);
-  }
-}
-
-function renderSettings() {
-  const host = document.getElementById("view-settings");
-  host.innerHTML = `<div class="settings-grid"></div>`;
-  const grid = host.querySelector(".settings-grid");
-  for (const [title, desc] of SETTINGS) {
-    const card = document.createElement("article");
-    card.className = "setting";
-    card.innerHTML = `<h3>${title}</h3><p>${desc}</p>`;
-    card.addEventListener("click", () => {
-      inspect(title, [
-        ["Section", "Settings"],
-        ["Details", desc],
-        ["Wake word", title === "Wake Word" ? "Hey Cloudy" : "Configured globally"],
-      ]);
-    });
-    grid?.appendChild(card);
-  }
-}
-
-function enterWelcome() {
-  showScreen("welcome");
-  els.welcomeLine.hidden = true;
-}
-
-function enterOS() {
+async function enterApp() {
   const labels = [...state.goals]
     .map((id) => GOALS.find((g) => g.id === id)?.label)
     .filter(Boolean);
-  els.goalChip.textContent = labels.length ? labels.slice(0, 2).join(" · ") : "Goals ready";
-  showScreen("os");
-  setView("world");
-  inspect("Workspace ready", [
-    ["Goals", labels.join(", ") || "Custom"],
-    ["Mode", "AI operating system"],
-    ["Next", "Explore World or run an autonomous build"],
-  ]);
+  els.confirmLine.hidden = false;
+  els.startBtn.disabled = true;
+  await wait(900);
+  els.onboarding.hidden = true;
+  els.app.hidden = false;
+  renderMemory(labels.join(" · ") || "Custom workspace");
+  setAiState("Idle");
+  setActivity({ think: "—", memory: "ready", search: "—", tools: "—", gen: "—" });
+  els.currentTask.textContent = "Waiting for input";
 }
 
-async function runBuildDemo() {
-  els.buildOverlay.hidden = false;
-  els.closeBuild.hidden = true;
-  els.buildSteps.innerHTML = BUILD_STEPS.map((step) => `<li>${step}</li>`).join("");
-  const items = [...els.buildSteps.querySelectorAll("li")];
-  for (let i = 0; i < items.length; i += 1) {
-    items.forEach((el, idx) => {
-      el.classList.toggle("active", idx === i);
-      el.classList.toggle("done", idx < i);
+async function handlePrompt(prompt) {
+  const text = prompt.trim();
+  if (!text || state.busy) return;
+  state.busy = true;
+  els.sendBtn.disabled = true;
+  els.suggestions.hidden = true;
+
+  els.coreSection.hidden = true;
+  els.panelView.hidden = true;
+  els.chatSection.hidden = false;
+
+  const plan = planFor(text);
+  els.currentTask.textContent = plan.task;
+  const working = els.memoryPanel.querySelector(".memory-item span");
+  if (working) working.textContent = text;
+
+  try {
+    await runClaudeStyleTurn({
+      prompt: text,
+      plan,
+      chatStream: els.chatStream,
+      onState: setAiState,
+      onActivity: (a) => setActivity(a),
+      onTokens: (tokens, latency) => {
+        els.sysTokens.textContent = String(tokens);
+        els.sysLatency.textContent = `${latency} ms`;
+      },
     });
-    await wait(420);
-  }
-  items.forEach((el) => {
-    el.classList.add("done");
-    el.classList.remove("active");
-  });
-  els.closeBuild.hidden = false;
-  if (!state.goals.has("trading") && !state.goals.has("startup")) {
-    state.goals.add("trading");
-    state.goals.add("startup");
+    const items = els.memoryPanel.querySelectorAll(".memory-item");
+    if (items[1]) items[1].querySelector("span").textContent = plan.task;
+    if (items[2]) items[2].querySelector("span").textContent = plan.task;
+  } finally {
+    state.busy = false;
+    els.sendBtn.disabled = false;
+    els.prompt.value = "";
+    els.prompt.focus();
   }
 }
 
@@ -375,118 +300,36 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function bootFx() {
-  const canvas = els.fx;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-  const sparks = Array.from({ length: 40 }, () => ({
-    x: Math.random(),
-    y: Math.random(),
-    p: Math.random() * Math.PI * 2,
-  }));
-  function resize() {
-    canvas.width = window.innerWidth * devicePixelRatio;
-    canvas.height = window.innerHeight * devicePixelRatio;
-    canvas.style.width = `${window.innerWidth}px`;
-    canvas.style.height = `${window.innerHeight}px`;
-    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-  }
-  function frame() {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    ctx.clearRect(0, 0, w, h);
-    if (els.body.dataset.screen !== "boot") {
-      requestAnimationFrame(frame);
-      return;
-    }
-    for (const s of sparks) {
-      s.p += 0.01;
-      ctx.fillStyle = `rgba(34,211,238,${0.1 + Math.sin(s.p) * 0.08})`;
-      ctx.beginPath();
-      ctx.arc(s.x * w + Math.sin(s.p) * 6, s.y * h, 1.2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    requestAnimationFrame(frame);
-  }
-  window.addEventListener("resize", resize);
-  resize();
-  requestAnimationFrame(frame);
-}
-
-const wake = createWakeController({
-  orb: els.orb,
-  transcriptEl: els.wakeTranscript,
-  setWakeState,
-  onAwake: () => {
-    wake.stop();
-    enterWelcome();
-  },
+document.querySelectorAll(".top-link").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".top-link").forEach((el) => el.classList.remove("is-active"));
+    btn.classList.add("is-active");
+    if (btn.dataset.route === "home") showChatWorkspace();
+    else showPanel(btn.textContent?.trim() || "Workspace");
+  });
 });
 
-els.enableBtn.addEventListener("click", async () => {
-  els.gateNote.textContent = "";
-  try {
-    await wake.enable();
-    els.gate.hidden = true;
-    els.wakeStage.hidden = false;
-  } catch (error) {
-    els.gateNote.textContent =
-      error instanceof Error ? error.message : "Microphone permission is required for wake mode.";
+els.composer.addEventListener("submit", (e) => {
+  e.preventDefault();
+  void handlePrompt(els.prompt.value);
+});
+
+els.prompt.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    void handlePrompt(els.prompt.value);
   }
 });
 
-els.enterBtn.addEventListener("click", () => {
-  enterWelcome();
+els.startBtn.addEventListener("click", () => {
+  void enterApp();
 });
 
-els.confirmGoals.addEventListener("click", async () => {
-  els.welcomeLine.hidden = false;
-  els.confirmGoals.disabled = true;
-  // Soft spoken confirmation when available
-  try {
-    const utter = new SpeechSynthesisUtterance(
-      "Great. I’ll build your workspace around these goals.",
-    );
-    utter.rate = 0.95;
-    speechSynthesis.cancel();
-    speechSynthesis.speak(utter);
-  } catch {
-    /* ignore */
-  }
-  await wait(1200);
-  enterOS();
-});
-
-els.buildBtn.addEventListener("click", () => {
-  void runBuildDemo();
-});
-
-els.closeBuild.addEventListener("click", () => {
-  els.buildOverlay.hidden = true;
-  setView("world");
-  state.world?.select("trading");
-  inspect("Trading SaaS", [
-    ["Status", "Scaffolded by Cloudy"],
-    ["Team", "CEO · Developer · Marketing · Research"],
-    ["Next", "Open Knowledge and continue the roadmap"],
-  ]);
-});
-
-window.addEventListener("keydown", (e) => {
-  if (e.key === "w" && els.body.dataset.screen === "boot" && !els.wakeStage.hidden) {
-    wake.wakeManual();
-  }
-});
-
+els.app.hidden = true;
+els.onboarding.hidden = false;
 renderGoals();
-renderNav();
-renderConfigure();
-renderKnowledge();
-renderSkills();
-renderIntegrations();
-renderAutomations();
-renderPortals();
-renderSettings();
-bootFx();
-showScreen("boot");
-setWakeState("boot");
+renderSideNav();
+renderStatusList();
+renderMemory();
+renderSuggestions();
+setAiState("Idle");
