@@ -9,6 +9,7 @@
   },
   "scripts": {
     "zero": "pnpm build && tsx scripts/zero.ts",
+    "preview:web": "pnpm --filter @zero/preview start",
     "build": "pnpm -r --filter './packages/*' --filter './services/*' --filter './apps/*' run build",
     "dev": "pnpm build && tsx scripts/zero.ts --dev",
     "typecheck": "pnpm -r --filter './packages/*' --filter './services/*' --filter './apps/*' run typecheck",
