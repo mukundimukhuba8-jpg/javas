@@ -11,11 +11,9 @@ import { createIntelligenceCore } from "./js/core.js";
 import { createSoundscape } from "./js/sound.js";
 import { createVoiceSensor, drawVoiceWave, drawMiniMap, drawBrain } from "./js/voice.js";
 import {
-  createCardStack,
-  runCrmMission,
-  runWeatherExperience,
-  runSearchExperience,
-  runGeneralExperience,
+  createStatusStack,
+  createSpeechController,
+  runConversation,
 } from "./js/experiences.js";
 
 const $ = (id) => document.getElementById(id);
@@ -74,18 +72,32 @@ const state = {
   goals: new Set(),
   busy: false,
   ai: "idle",
-  lastSpeechAt: 0,
-  pendingTranscript: "",
+  history: [],
+  session: 0,
 };
 
 const bg = createBackground(els.bgCanvas);
 const weatherScene = createWeatherScene(els.weatherCanvas);
 const core = createIntelligenceCore(els.coreCanvas);
 const sound = createSoundscape();
-const stack = createCardStack(els.liveStack);
+const stack = createStatusStack(els.liveStack);
+const speech = createSpeechController();
 
 let latestTimeData = null;
 let latestEnergy = 0;
+let abortController = null;
+let bargeInHold = 0;
+let ignoreMicUntil = 0;
+
+function interruptCloudy(reason = "barge-in") {
+  if (!state.busy && !speech.speaking) return false;
+  speech.stop();
+  abortController?.abort();
+  abortController = null;
+  log(reason === "barge-in" ? "Listening to you" : reason, "ok");
+  setAiState("listening");
+  return true;
+}
 
 const voice = createVoiceSensor({
   onLevel: (energy, data) => {
@@ -106,6 +118,22 @@ const voice = createVoiceSensor({
       els.micBtn.classList.remove("live");
     }
 
+    // Barge-in: if Cloudy is speaking and the user starts talking, stop immediately
+    const now = performance.now();
+    if (
+      (speech.speaking || state.ai === "speaking") &&
+      now > ignoreMicUntil &&
+      energy > 0.12
+    ) {
+      bargeInHold += 1;
+      if (bargeInHold >= 4) {
+        bargeInHold = 0;
+        interruptCloudy("barge-in");
+      }
+    } else {
+      bargeInHold = Math.max(0, bargeInHold - 1);
+    }
+
     if (hearing && !state.busy) {
       setAiState("listening");
       bumpMeters(energy);
@@ -120,22 +148,26 @@ const voice = createVoiceSensor({
     core.burst(1.2);
     core.setLevel(Math.max(energy, 0.95));
     bg.setEnergy(1);
-    log("Clap / pulse detected", "warn");
-    if (!state.busy) setAiState("listening");
+    if (speech.speaking) interruptCloudy("barge-in");
+    else if (!state.busy) setAiState("listening");
   },
   onTranscript: (text, isFinal) => {
     if (!text) return;
     els.prompt.value = text;
-    state.pendingTranscript = text;
-    state.lastSpeechAt = performance.now();
+    // Any transcript while Cloudy is talking = user is interrupting
+    if (!isFinal && (speech.speaking || state.ai === "speaking" || state.busy)) {
+      interruptCloudy("barge-in");
+    }
     if (!isFinal && !state.busy) setAiState("listening");
   },
   onSpeechEnd: (text) => {
-    if (state.busy) return;
     const cleaned = text.trim();
     if (cleaned.length < 2) return;
-    // Avoid double-fire: small debounce via busy flag in handlePrompt
-    void handlePrompt(cleaned);
+    if (speech.speaking || state.ai === "speaking") interruptCloudy("barge-in");
+    // Small delay so abort settles, then answer
+    window.setTimeout(() => {
+      void handlePrompt(cleaned);
+    }, 60);
   },
 });
 
@@ -148,16 +180,16 @@ function setAiState(label) {
   core.setState(key);
 
   const hints = {
-    idle: "Ready",
-    listening: "Hearing you",
-    thinking: "Neural surge",
-    searching: "Scanning layers",
-    planning: "Structuring",
-    writing: "Streaming",
-    speaking: "Voicing reply",
-    weather: "Atmosphere live",
+    idle: "Ready when you are",
+    listening: "I'm listening",
+    thinking: "One moment",
+    searching: "Looking that up",
+    planning: "Putting a plan together",
+    writing: "Typing",
+    speaking: "Talking with you",
+    weather: "Checking conditions",
   };
-  els.coreHint.textContent = hints[key] || "In progress";
+  els.coreHint.textContent = hints[key] || "With you";
 }
 
 function bumpMeters(energy = 0.2) {
@@ -182,18 +214,15 @@ function setMeter(which, value) {
 }
 
 function log(message, level = "ok") {
+  // Keep the side log quiet and human — no pipeline spam
+  if (/intent|pipeline|analyzing|generating response|tool execution/i.test(message)) return;
   const item = document.createElement("div");
   item.className = `log-item ${level}`;
   const now = new Date();
   const ts = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   item.innerHTML = `<time>${ts}</time><span>${message}</span><span class="tag">${level}</span>`;
   els.activityLog.prepend(item);
-  while (els.activityLog.children.length > 24) els.activityLog.lastChild?.remove();
-}
-
-function setPipeline(label) {
-  if (!label) return;
-  log(label, "ok");
+  while (els.activityLog.children.length > 18) els.activityLog.lastChild?.remove();
 }
 
 function wait(ms) {
@@ -217,8 +246,10 @@ function renderNav() {
       els.sideNav.querySelectorAll(".nav-item").forEach((el) => el.classList.remove("active"));
       btn.classList.add("active");
       core.burst(0.4);
-      log(`Nav · ${label}`, "ok");
-      if (label === "Projects") els.prompt.value = "Build me a CRM";
+      if (label === "Projects") {
+        els.prompt.value = "Build me a CRM";
+        els.prompt.focus();
+      }
       if (label === "Voice") void toggleVoice();
     });
     els.sideNav.appendChild(btn);
@@ -236,11 +267,7 @@ function renderModes() {
     btn.addEventListener("click", () => {
       sound.click();
       core.burst(0.6);
-      setAiState("thinking");
-      log(`Mode · ${mode.title}`, "ok");
-      window.setTimeout(() => {
-        if (!state.busy) setAiState(voice.active ? "listening" : "idle");
-      }, 700);
+      if (mode.id === "pulse") els.prompt.value = SUGGESTIONS[0];
     });
     els.modeRow.appendChild(btn);
   }
@@ -271,12 +298,7 @@ function renderGoals() {
 }
 
 async function runBoot() {
-  const steps = [
-    "Initializing Core",
-    "Loading Memory",
-    "Calibrating Sensors",
-    "Connecting Intelligence Engine",
-  ];
+  const steps = ["Starting Cloudy", "Warming up voice", "Ready for you"];
   els.bootSteps.innerHTML = "";
   const rows = steps.map((label) => {
     const row = document.createElement("div");
@@ -289,13 +311,13 @@ async function runBoot() {
   await sound.humStart();
   for (const row of rows) {
     row.classList.add("on");
-    await wait(420);
+    await wait(320);
     row.classList.remove("on");
     row.classList.add("done");
     row.querySelector("b").textContent = "OK";
     sound.click();
   }
-  await wait(350);
+  await wait(250);
 }
 
 async function enableVoice() {
@@ -306,28 +328,31 @@ async function enableVoice() {
   els.voiceLive.textContent = "READY";
   sound.listen();
   setAiState("listening");
-  log("Live sensors online", "ok");
+  log("Voice is ready", "ok");
   window.setTimeout(() => {
     if (!state.busy) setAiState("idle");
-  }, 800);
+  }, 700);
 }
 
 async function toggleVoice() {
   try {
     if (voice.active) {
+      interruptCloudy("voice-off");
       voice.stop();
       sound.humStop();
       els.micBtn.setAttribute("aria-pressed", "false");
       els.micBtn.classList.remove("live");
       els.voiceLive.textContent = "STANDBY";
       setAiState("idle");
-      log("Voice offline", "warn");
       return;
     }
     await enableVoice();
     await sound.humStart();
   } catch (error) {
     log(error instanceof Error ? error.message : "Mic blocked", "err");
+    els.streamPanel.classList.add("show");
+    els.streamPanel.textContent =
+      "I couldn't access the microphone. You can still type, and we can talk that way.";
   }
 }
 
@@ -343,8 +368,14 @@ function showHud() {
     document.body.dataset.mode = "live";
     setAiState("idle");
     core.resize();
-    log("Welcome back, Mukundi", "ok");
+    greetQuietly();
   }
+}
+
+function greetQuietly() {
+  els.streamPanel.classList.add("show");
+  els.streamPanel.innerHTML = "<p>Hi Mukundi — I'm here when you need me.</p>";
+  log("Welcome back", "ok");
 }
 
 function openStage(stage) {
@@ -357,19 +388,31 @@ function openStage(stage) {
 
 async function handlePrompt(prompt) {
   const text = prompt.trim();
-  if (!text || state.busy) return;
+  if (!text) return;
+
+  // If a turn is in flight, interrupt it and take the new message
+  if (state.busy) interruptCloudy("new-message");
+
+  state.session += 1;
+  const session = state.session;
   state.busy = true;
   els.sendBtn.disabled = true;
   voice.stopSpeech();
+
+  abortController = new AbortController();
+  const { signal } = abortController;
+
+  // Avoid TTS echoing into barge-in for a brief moment after we start speaking
+  ignoreMicUntil = performance.now() + 450;
+
   els.crmBoard.classList.remove("show");
   els.crmBoard.hidden = true;
 
   const kind = detectExperience(text);
-  log(`Query · ${text.slice(0, 48)}`, "ok");
-  setPipeline("Intent Recognised");
-  setAiState("thinking");
-  core.burst(0.8);
-  bumpMeters(0.5);
+  state.history.push({ role: "user", content: text });
+  setAiState(kind === "greeting" || kind === "help" ? "writing" : "thinking");
+  core.burst(0.5);
+  bumpMeters(0.4);
 
   const hooks = {
     stack,
@@ -380,8 +423,14 @@ async function handlePrompt(prompt) {
     weatherScene,
     bg,
     prompt: text,
-    onState: setAiState,
-    onPipeline: setPipeline,
+    history: state.history,
+    signal,
+    speech,
+    onState: (s) => {
+      if (session !== state.session) return;
+      setAiState(s);
+      if (s === "speaking") ignoreMicUntil = performance.now() + 350;
+    },
     onLog: log,
     onOpenStage: openStage,
     onMeters: (m) => {
@@ -390,7 +439,7 @@ async function handlePrompt(prompt) {
       if (m.net != null) setMeter("net", m.net);
       if (m.neu != null) setMeter("neu", m.neu);
     },
-    onTokens: () => bumpMeters(0.4 + Math.random() * 0.3),
+    onTokens: () => bumpMeters(0.35 + Math.random() * 0.25),
     onSpeechLevel: (v) => {
       core.setLevel(v);
       core.setSpeech(v);
@@ -400,26 +449,37 @@ async function handlePrompt(prompt) {
   };
 
   try {
-    if (kind === "crm") await runCrmMission(hooks);
-    else if (kind === "weather") await runWeatherExperience(hooks);
-    else if (kind === "search") await runSearchExperience(hooks);
-    else await runGeneralExperience(hooks);
+    const result = await runConversation(kind, hooks);
+    if (session !== state.session) return;
+    if (!result?.aborted) {
+      const reply = els.streamPanel.innerText?.trim();
+      if (reply) state.history.push({ role: "assistant", content: reply });
+    }
   } catch (error) {
-    log(error instanceof Error ? error.message : "Response failed", "err");
+    if (error?.name === "AbortError") return;
     els.streamPanel.classList.add("show");
     els.streamPanel.textContent =
-      "Something failed while generating a response. Sensors are still live — try again.";
+      "I'm having trouble connecting to my AI engine. Let me try again — or tell me another way I can help.";
+    setAiState("speaking");
+    await speech.speak(
+      "I'm having trouble connecting to my AI engine. Let me try again, or tell me another way I can help.",
+    );
     setAiState("idle");
+    log("Recovered from a failed reply", "warn");
   } finally {
-    state.busy = false;
-    els.sendBtn.disabled = false;
-    els.prompt.value = "";
-    if (voice.active) voice.startSpeech();
-    bumpMeters(0.15);
+    if (session === state.session) {
+      state.busy = false;
+      els.sendBtn.disabled = false;
+      els.prompt.value = "";
+      if (voice.active) voice.startSpeech();
+      bumpMeters(0.12);
+      if (state.ai === "writing" || state.ai === "thinking" || state.ai === "speaking") {
+        setAiState("idle");
+      }
+    }
   }
 }
 
-// Ambient UI loops
 function uiLoop(now) {
   drawVoiceWave(els.voiceWave, latestTimeData, latestEnergy);
   drawMiniMap(els.mapCanvas, now);
@@ -462,8 +522,7 @@ els.startBtn.addEventListener("click", () => {
   document.body.dataset.mode = "live";
   sound.done();
   core.resize();
-  log("Workspace configured", "ok");
-  setAiState("idle");
+  void handlePrompt("Hi");
 });
 
 $("globalSearch")?.addEventListener("keydown", (e) => {
@@ -472,12 +531,6 @@ $("globalSearch")?.addEventListener("keydown", (e) => {
     const q = e.target.value.trim();
     if (q) void handlePrompt(q);
   }
-});
-
-// Suggestion chips via placeholder cycling / quick demos on first load
-window.addEventListener("load", () => {
-  // Prefill nothing; expose suggestions in log
-  SUGGESTIONS.forEach((s) => log(`Try · ${s}`, "ok"));
 });
 
 renderNav();
@@ -502,6 +555,19 @@ void (async () => {
   } catch {
     els.enableMic.hidden = false;
     els.bootNote.textContent =
-      "Allow the microphone so the AI Core reacts to voice, claps, and ambient sound.";
+      "Allow the microphone for voice conversation — or continue by typing.";
+    // Still enter the UI so typing works even without mic
+    window.setTimeout(() => {
+      if (!els.enableMic.hidden) {
+        els.boot.hidden = true;
+        const seen = localStorage.getItem("cloudy_onboarded") === "1";
+        if (seen) {
+          els.hud.hidden = false;
+          greetQuietly();
+        } else {
+          els.onboarding.hidden = false;
+        }
+      }
+    }, 10);
   }
 })();

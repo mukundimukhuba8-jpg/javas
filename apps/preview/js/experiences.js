@@ -1,171 +1,141 @@
+import { CRM_STAGES, answerFor } from "./data.js";
 import {
-  CRM_STAGES,
-  THINKING_STAGES,
-  WEATHER_STEPS,
-  answerFor,
-} from "./data.js";
+  createStatusStack,
+  createSpeechController,
+  streamAndSpeak,
+  generateWithModel,
+  FAILURE_LINES,
+  renderMarkdown,
+} from "./conversation.js";
 
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function escapeHtml(text) {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
-export function renderMarkdown(md) {
-  let html = escapeHtml(md);
-  html = html.replace(/```([\s\S]*?)```/g, (_, code) => `<pre><code>${code.trim()}</code></pre>`);
-  html = html.replace(/^### (.*)$/gm, "<h3>$1</h3>");
-  html = html.replace(/^## (.*)$/gm, "<h2>$1</h2>");
-  html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
-  html = html.replace(/^(?!<[hptu]|<pre)(.+)$/gm, "<p>$1</p>");
-  return html;
-}
-
-export async function streamText(el, text, onToken) {
-  el.classList.add("show");
-  const chunks = text.match(/\s+|\S+/g) || [text];
-  let out = "";
-  let tokens = 0;
-  const started = performance.now();
-  for (const chunk of chunks) {
-    out += chunk;
-    tokens += 1;
-    el.innerHTML = renderMarkdown(out);
-    onToken?.(tokens, Math.round(performance.now() - started));
-    await wait(chunk.trim().length > 10 ? 22 : 10);
-  }
-  return { tokens, latency: Math.round(performance.now() - started) };
-}
-
-export function speak(text, { onStart, onEnd, onBoundary } = {}) {
-  return new Promise((resolve) => {
-    if (!("speechSynthesis" in window)) {
-      onEnd?.();
-      resolve();
+function wait(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
       return;
     }
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.rate = 0.98;
-    utter.pitch = 1;
-    const voices = speechSynthesis.getVoices();
-    utter.voice =
-      voices.find((v) => /en(-|_)GB/i.test(v.lang)) ||
-      voices.find((v) => /^en/i.test(v.lang)) ||
-      null;
-    utter.onstart = () => onStart?.();
-    utter.onboundary = (e) => onBoundary?.(e);
-    utter.onend = () => {
-      onEnd?.();
-      resolve();
-    };
-    utter.onerror = () => {
-      onEnd?.();
-      resolve();
-    };
-    speechSynthesis.cancel();
-    speechSynthesis.speak(utter);
+    const id = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(id);
+        reject(new DOMException("Aborted", "AbortError"));
+      },
+      { once: true },
+    );
   });
 }
 
-/** Animated execution card stack */
 export function createCardStack(root) {
-  const cards = [];
-
-  function clear() {
-    root.innerHTML = "";
-    cards.length = 0;
-  }
-
-  async function push({ title, detail = "Running...", icon = "◎" }) {
-    // Shrink / slide completed cards
-    for (const prev of cards) {
-      if (prev.el.classList.contains("active")) {
-        prev.el.classList.remove("active");
-        prev.el.classList.add("done");
-        prev.el.querySelector(".status").textContent = "Complete";
-        const bar = prev.el.querySelector(".bar > i");
-        if (bar) bar.style.width = "100%";
-      }
-    }
-
-    const el = document.createElement("div");
-    el.className = "exec-card active";
-    el.innerHTML = `
-      <div class="row">
-        <div class="title">${icon} ${title}</div>
-        <div class="status">Running</div>
-      </div>
-      <div style="margin-top:4px;color:var(--muted);font-size:13px">${detail}</div>
-      <div class="bar"><i></i></div>
-    `;
-    root.prepend(el);
-    // Keep only a few visible
-    while (root.children.length > 4) root.lastElementChild?.remove();
-
-    const fill = el.querySelector(".bar > i");
-    const card = { el, fill, progress: 0 };
-    cards.push(card);
-    return card;
-  }
-
-  async function progress(card, to = 100, ms = 500) {
-    if (!card) return;
-    const from = card.progress;
-    const steps = 10;
-    for (let i = 1; i <= steps; i += 1) {
-      card.progress = from + ((to - from) * i) / steps;
-      card.fill.style.width = `${card.progress}%`;
-      await wait(ms / steps);
-    }
-  }
-
-  async function complete(card) {
-    if (!card) return;
-    await progress(card, 100, 280);
-    card.el.classList.remove("active");
-    card.el.classList.add("done");
-    card.el.querySelector(".status").textContent = "Complete";
-  }
-
-  return { clear, push, progress, complete };
+  return createStatusStack(root);
 }
 
-export async function runExecutionStages(stack, stages, { onStage, sound } = {}) {
-  for (const stage of stages) {
-    onStage?.(stage);
-    const card = await stack.push({
-      title: stage.label,
-      detail: stage.detail || "Executing...",
-      icon: stage.icon || "◎",
-    });
-    sound?.think?.();
-    await stack.progress(card, 70, stage.ms || 450);
-    await wait(120);
-    await stack.complete(card);
-    sound?.click?.();
-  }
+async function sayOpener(el, opener, { signal, speech, onState, onSpeechLevel }) {
+  if (!opener) return;
+  el.classList.add("show");
+  el.innerHTML = renderMarkdown(opener);
+  onState?.("speaking");
+  await speech.speak(opener, {
+    signal,
+    onBoundary: () => onSpeechLevel?.(0.3 + Math.random() * 0.35),
+  });
 }
 
-export async function runThinkingPipeline(stack, { onPipeline, onState, sound } = {}) {
+async function runSoftStatus(stack, messages, { signal, onState }) {
+  if (!messages?.length) return;
   onState?.("thinking");
-  for (const stage of THINKING_STAGES) {
-    onPipeline?.(stage.label);
-    const card = await stack.push({
-      title: stage.label,
-      detail: "Live execution...",
-      icon: stage.icon,
-    });
-    sound?.think?.();
-    await stack.progress(card, 100, 380);
-    await stack.complete(card);
-    sound?.click?.();
+  for (const message of messages) {
+    if (signal?.aborted) return;
+    await stack.show(message, { ms: 700, signal });
   }
+}
+
+async function deliverAnswer(hooks, answer, { withModelFallback = true } = {}) {
+  const {
+    stack,
+    streamPanel,
+    history,
+    prompt,
+    signal,
+    speech,
+    onState,
+    onSpeechLevel,
+    onTokens,
+    sound,
+  } = hooks;
+
+  stack.clear();
+  streamPanel.classList.remove("show");
+  streamPanel.innerHTML = "";
+
+  // 1) Natural opener first — conversation before chrome
+  if (answer.opener) {
+    await sayOpener(streamPanel, answer.opener, {
+      signal,
+      speech,
+      onState,
+      onSpeechLevel,
+    });
+    if (signal?.aborted) return { aborted: true };
+    await wait(180, signal);
+  }
+
+  // 2) Soft human status (never "Analyzing request...")
+  await runSoftStatus(stack, answer.status, { signal, onState });
+  if (signal?.aborted) return { aborted: true };
+
+  // 3) Prefer remote model when configured; recover gracefully
+  let body = answer.text;
+  let speakBody = answer.speak || answer.text;
+  if (withModelFallback) {
+    onState?.("thinking");
+    const remote = await generateWithModel(prompt, history || [], { signal });
+    if (remote.ok && remote.text) {
+      body = remote.text;
+      speakBody = remote.text;
+    } else if (remote.reason === "error") {
+      const note = FAILURE_LINES[0];
+      streamPanel.classList.add("show");
+      streamPanel.innerHTML = renderMarkdown(note);
+      await speech.speak(note, { signal, onBoundary: () => onSpeechLevel?.(0.3) });
+      // continue with local answer
+    }
+  }
+
+  if (signal?.aborted) return { aborted: true };
+
+  // 4) Stream + speak in parallel (keep opener on screen if present)
+  sound?.listen?.();
+  const prior = answer.opener ? `${answer.opener}\n\n` : "";
+  const result = await streamAndSpeak(streamPanel, body, {
+    signal,
+    speech,
+    speakText: speakBody,
+    onToken: onTokens,
+    onState,
+    onSpeechLevel,
+    startSpeakingAt: 4,
+    prefixMarkdown: prior,
+  });
+
+  if (!result.aborted) {
+    if (answer.opener && body === answer.text) {
+      streamPanel.innerHTML = renderMarkdown([answer.opener, body].filter(Boolean).join("\n\n"));
+    }
+    onState?.("idle");
+    sound?.done?.();
+  }
+  return result;
+}
+
+export async function runGreeting(hooks) {
+  const answer = answerFor(hooks.prompt, hooks.history);
+  return deliverAnswer(hooks, answer, { withModelFallback: false });
+}
+
+export async function runHelp(hooks) {
+  const answer = answerFor(hooks.prompt, hooks.history);
+  return deliverAnswer(hooks, answer, { withModelFallback: false });
 }
 
 export async function runCrmMission(hooks) {
@@ -175,20 +145,35 @@ export async function runCrmMission(hooks) {
     crmStages,
     streamPanel,
     onState,
-    onPipeline,
-    onLog,
     onOpenStage,
     onMeters,
     sound,
+    signal,
+    speech,
+    onSpeechLevel,
   } = hooks;
+
+  const answer = answerFor("Build me a CRM", hooks.history);
 
   stack.clear();
   streamPanel.classList.remove("show");
   streamPanel.innerHTML = "";
+
+  await sayOpener(streamPanel, answer.opener, {
+    signal,
+    speech,
+    onState,
+    onSpeechLevel,
+  });
+  if (signal?.aborted) return { aborted: true };
+
+  await runSoftStatus(stack, answer.status, { signal, onState });
+  if (signal?.aborted) return { aborted: true };
+
+  // Show project board as supporting UI — not instead of the answer
   crmBoard.hidden = false;
   crmBoard.classList.add("show");
   crmStages.innerHTML = "";
-
   const refs = [];
   for (const stage of CRM_STAGES) {
     const el = document.createElement("button");
@@ -200,46 +185,40 @@ export async function runCrmMission(hooks) {
     refs.push({ stage, el });
   }
 
-  onPipeline?.("Intent Recognised");
-  onLog?.("CRM mission accepted", "ok");
   onState?.("planning");
   sound?.think?.();
-
-  for (const { stage, el } of refs) {
+  for (const { el } of refs) {
+    if (signal?.aborted) return { aborted: true };
     el.classList.add("active");
-    onPipeline?.("Tool Execution");
-    onState?.(stage.id === "frontend" || stage.id === "backend" ? "thinking" : "planning");
-    onMeters?.({ cpu: 40 + Math.random() * 40, neu: 60 + Math.random() * 30 });
-    const card = await stack.push({
-      title: stage.name,
-      detail: "Building workspace slice...",
-      icon: "⬡",
-    });
-    await stack.progress(card, 100, 520);
-    await stack.complete(card);
+    onMeters?.({ cpu: 35 + Math.random() * 30, neu: 55 + Math.random() * 25 });
+    await wait(220, signal);
     el.classList.remove("active");
     el.classList.add("done");
-    onLog?.(`${stage.name} complete`, "ok");
-    sound?.click?.();
   }
 
-  const answer = answerFor("Build me a CRM");
-  onState?.("writing");
-  onPipeline?.("Response Generation");
-  await streamText(streamPanel, answer.text, hooks.onTokens);
-  onState?.("speaking");
-  onPipeline?.("Speaking");
-  sound?.listen?.();
-  await speak(answer.speak, {
-    onBoundary: () => {
-      onState?.("speaking");
-      hooks.onSpeechLevel?.(0.35 + Math.random() * 0.4);
-    },
+  // Keep opener visible; stream the follow-through answer beneath it
+  const prior = answer.opener ? `${answer.opener}\n\n` : "";
+  streamPanel.classList.add("show");
+  streamPanel.innerHTML = renderMarkdown(prior);
+
+  const result = await streamAndSpeak(streamPanel, answer.text, {
+    signal,
+    speech,
+    speakText: answer.speak,
+    onToken: hooks.onTokens,
+    onState,
+    onSpeechLevel,
+    prefixMarkdown: prior,
   });
-  onState?.("idle");
-  onPipeline?.(null);
-  sound?.done?.();
-  onLog?.("CRM board ready", "ok");
+
+  if (!result.aborted) {
+    streamPanel.innerHTML = renderMarkdown(
+      [answer.opener, answer.text].filter(Boolean).join("\n\n"),
+    );
+    onState?.("idle");
+    sound?.done?.();
+  }
+  return result;
 }
 
 export async function runWeatherExperience(hooks) {
@@ -250,107 +229,106 @@ export async function runWeatherExperience(hooks) {
     weatherScene,
     bg,
     onState,
-    onPipeline,
-    onLog,
-    onMeters,
     sound,
+    signal,
+    speech,
+    onSpeechLevel,
   } = hooks;
+
+  const answer = answerFor("What's the weather?", hooks.history);
 
   stack.clear();
   streamPanel.classList.remove("show");
   streamPanel.innerHTML = "";
+
+  await sayOpener(streamPanel, answer.opener, {
+    signal,
+    speech,
+    onState,
+    onSpeechLevel,
+  });
+  if (signal?.aborted) return { aborted: true };
+
   document.getElementById("weatherScene")?.classList.add("active");
   weatherScene?.start();
   bg?.setWeather?.(1);
   weatherDock.classList.add("rise");
   onState?.("weather");
-  onLog?.("Atmosphere transform", "ok");
 
-  for (const step of WEATHER_STEPS) {
-    onPipeline?.(
-      step.id === "loc" || step.id === "gps"
-        ? "Tool Execution"
-        : step.id === "forecast"
-          ? "Response Generation"
-          : "Knowledge Retrieval",
-    );
-    onState?.(step.id === "forecast" ? "thinking" : "searching");
-    onMeters?.({ net: 50 + Math.random() * 40, neu: 55 + Math.random() * 35 });
-    const card = await stack.push({
-      title: step.label,
-      detail: step.detail,
-      icon: step.icon,
-    });
-    await stack.progress(card, 100, 480);
-    await stack.complete(card);
-    onLog?.(step.label, "ok");
-    sound?.click?.();
-  }
+  await runSoftStatus(stack, answer.status, { signal, onState });
+  if (signal?.aborted) return { aborted: true };
 
-  const answer = answerFor("What's the weather?");
-  onState?.("writing");
-  onPipeline?.("Response Generation");
-  await streamText(streamPanel, answer.text, hooks.onTokens);
-  onState?.("speaking");
-  onPipeline?.("Speaking");
-  sound?.listen?.();
-  await speak(answer.speak, {
-    onBoundary: () => {
-      onState?.("speaking");
-      hooks.onSpeechLevel?.(0.4 + Math.random() * 0.45);
-    },
+  const prior = answer.opener ? `${answer.opener}\n\n` : "";
+  streamPanel.classList.add("show");
+  streamPanel.innerHTML = renderMarkdown(prior);
+
+  const result = await streamAndSpeak(streamPanel, answer.text, {
+    signal,
+    speech,
+    speakText: answer.speak,
+    onToken: hooks.onTokens,
+    onState,
+    onSpeechLevel,
+    prefixMarkdown: prior,
   });
 
-  onState?.("idle");
-  onPipeline?.(null);
-  sound?.done?.();
-  // Keep weather scene briefly then fade
-  await wait(1200);
+  if (!result.aborted) {
+    streamPanel.innerHTML = renderMarkdown(
+      [answer.opener, answer.text].filter(Boolean).join("\n\n"),
+    );
+    onState?.("idle");
+    sound?.done?.();
+  }
+
+  try {
+    await wait(900, signal);
+  } catch {
+    /* aborted */
+  }
   document.getElementById("weatherScene")?.classList.remove("active");
   weatherScene?.stop();
   bg?.setWeather?.(0);
+  return result;
 }
 
 export async function runSearchExperience(hooks) {
-  const { stack, streamPanel, onState, onPipeline, onLog, sound, prompt } = hooks;
-  stack.clear();
-  streamPanel.classList.remove("show");
-  streamPanel.innerHTML = "";
-  onState?.("thinking");
-  await runThinkingPipeline(stack, { onPipeline, onState, sound });
-  onPipeline?.("Knowledge Retrieval");
-  onLog?.("Sources validated", "ok");
-  const answer = answerFor(prompt);
-  onState?.("writing");
-  onPipeline?.("Response Generation");
-  await streamText(streamPanel, answer.text, hooks.onTokens);
-  onState?.("speaking");
-  await speak(answer.speak, {
-    onBoundary: () => hooks.onSpeechLevel?.(0.3 + Math.random() * 0.4),
-  });
-  onState?.("idle");
-  onPipeline?.(null);
-  sound?.done?.();
+  const answer = answerFor(hooks.prompt, hooks.history);
+  return deliverAnswer(hooks, answer);
 }
 
 export async function runGeneralExperience(hooks) {
-  const { stack, streamPanel, onState, onPipeline, onLog, sound, prompt } = hooks;
-  stack.clear();
-  streamPanel.classList.remove("show");
-  streamPanel.innerHTML = "";
-  onLog?.("Intent recognised", "ok");
-  await runThinkingPipeline(stack, { onPipeline, onState, sound });
-  const answer = answerFor(prompt);
-  onState?.("writing");
-  onPipeline?.("Response Generation");
-  const stats = await streamText(streamPanel, answer.text, hooks.onTokens);
-  onState?.("speaking");
-  onPipeline?.("Speaking");
-  await speak(answer.speak, {
-    onBoundary: () => hooks.onSpeechLevel?.(0.3 + Math.random() * 0.4),
-  });
-  onState?.("idle");
-  onPipeline?.(null);
-  sound?.done?.();
-  return stats;
+  const answer = answerFor(hooks.prompt, hooks.history);
+  return deliverAnswer(hooks, answer);
 }
+
+/** Unified entry used by main.js */
+export async function runConversation(kind, hooks) {
+  try {
+    if (kind === "greeting") return await runGreeting(hooks);
+    if (kind === "help") return await runHelp(hooks);
+    if (kind === "crm") return await runCrmMission(hooks);
+    if (kind === "weather") return await runWeatherExperience(hooks);
+    if (kind === "search") return await runSearchExperience(hooks);
+    return await runGeneralExperience(hooks);
+  } catch (err) {
+    if (err?.name === "AbortError") return { aborted: true };
+    const { streamPanel, speech, signal, onState, onSpeechLevel } = hooks;
+    const msg =
+      "I couldn't complete that request because my AI service is unavailable. Please try again in a moment.";
+    streamPanel.classList.add("show");
+    streamPanel.innerHTML = renderMarkdown(msg);
+    onState?.("speaking");
+    try {
+      await speech.speak(msg, {
+        signal,
+        onBoundary: () => onSpeechLevel?.(0.3),
+      });
+    } catch {
+      /* ignore */
+    }
+    onState?.("idle");
+    return { aborted: false, error: true };
+  }
+}
+
+export { createSpeechController, createStatusStack };
