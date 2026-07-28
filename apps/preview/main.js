@@ -1,13 +1,21 @@
 import {
-  AI_STATES,
   GOALS,
   MEMORY_SEED,
+  PIPELINE,
   SIDE_LINKS,
   SUGGESTIONS,
-  planFor,
+  detectExperience,
 } from "./js/data.js";
+import { createBackground } from "./js/background.js";
 import { createIntelligenceCore } from "./js/core.js";
-import { runClaudeStyleTurn } from "./js/chat.js";
+import { createSoundscape } from "./js/sound.js";
+import { createVoiceSensor } from "./js/voice.js";
+import {
+  runCrmMission,
+  runGeneralExperience,
+  runSearchExperience,
+  runWeatherExperience,
+} from "./js/experiences.js";
 
 const els = {
   onboarding: document.getElementById("onboarding"),
@@ -18,8 +26,10 @@ const els = {
   confirmLine: document.getElementById("confirmLine"),
   sideNav: document.getElementById("sideNav"),
   coreCanvas: document.getElementById("coreCanvas"),
+  bgCanvas: document.getElementById("bgCanvas"),
   coreState: document.getElementById("coreState"),
   coreHint: document.getElementById("coreHint"),
+  thinkLine: document.getElementById("thinkLine"),
   intelCore: document.getElementById("intelCore"),
   coreSection: document.getElementById("coreSection"),
   chatSection: document.getElementById("chatSection"),
@@ -31,8 +41,10 @@ const els = {
   statusPill: document.getElementById("statusPill"),
   suggestions: document.getElementById("suggestions"),
   currentTask: document.getElementById("currentTask"),
-  statusList: document.getElementById("statusList"),
+  pipeline: document.getElementById("pipeline"),
   memoryPanel: document.getElementById("memoryPanel"),
+  voiceBtn: document.getElementById("voiceBtn"),
+  micEnergy: document.getElementById("micEnergy"),
   aThink: document.getElementById("aThink"),
   aMemory: document.getElementById("aMemory"),
   aSearch: document.getElementById("aSearch"),
@@ -41,45 +53,86 @@ const els = {
   sysCpu: document.getElementById("sysCpu"),
   sysTokens: document.getElementById("sysTokens"),
   sysLatency: document.getElementById("sysLatency"),
+  stageModal: document.getElementById("stageModal"),
+  stageEyebrow: document.getElementById("stageEyebrow"),
+  stageTitle: document.getElementById("stageTitle"),
+  stageBody: document.getElementById("stageBody"),
+  closeStage: document.getElementById("closeStage"),
 };
 
 const state = {
   goals: new Set(),
   busy: false,
+  ai: "Idle",
 };
 
+const bg = createBackground(els.bgCanvas);
 const core = createIntelligenceCore(els.coreCanvas);
+const sound = createSoundscape();
+
+const voice = createVoiceSensor({
+  onLevel: (energy) => {
+    els.micEnergy.textContent = `${Math.round(energy * 100)}%`;
+    bg.setEnergy(energy);
+    if (!state.busy) {
+      if (energy > 0.05) {
+        setAiState("Listening");
+        setPipeline("Listening");
+        core.setLevel(energy);
+      } else if (state.ai === "Listening") {
+        setAiState("Idle");
+        setPipeline(null);
+        core.setLevel(0);
+      } else {
+        core.setLevel(energy * 0.4);
+      }
+    } else {
+      core.setLevel(energy);
+    }
+  },
+  onClap: () => {
+    sound.listen();
+    if (!state.busy) {
+      setAiState("Listening");
+      setPipeline("Listening");
+      els.thinkLine.textContent = "Audio spike detected";
+      core.setLevel(1);
+    }
+  },
+});
 
 function setAiState(label) {
-  const normalized = label || "Idle";
-  els.coreState.textContent = normalized;
-  els.statusPill.textContent = normalized;
-  els.intelCore.dataset.state = normalized.toLowerCase();
-  core.setState(normalized.toLowerCase());
+  state.ai = label;
+  els.coreState.textContent = label;
+  els.statusPill.textContent = label;
+  els.intelCore.dataset.state = label.toLowerCase();
+  core.setState(label.toLowerCase());
 
   const hints = {
     Idle: "Ready when you are",
+    Listening: "Hearing you in real time",
     Thinking: "Working through the request",
-    Researching: "Gathering relevant context",
+    Searching: "Scanning knowledge and tools",
     Planning: "Structuring the approach",
     Coding: "Preparing implementation detail",
-    Searching: "Looking through knowledge",
-    Learning: "Updating memory pathways",
-    Executing: "Running tools and actions",
-    Writing: "Composing the answer",
+    Writing: "Streaming the answer",
+    Speaking: "Responding out loud",
     Finished: "Ready for the next step",
   };
-  els.coreHint.textContent = hints[normalized] || "In progress";
+  els.coreHint.textContent = hints[label] || "In progress";
+  els.sysCpu.textContent =
+    label === "Idle" || label === "Finished" ? "3%" : `${16 + Math.floor(Math.random() * 24)}%`;
+}
 
-  els.statusList.querySelectorAll("li").forEach((li) => {
-    li.classList.toggle("is-on", li.dataset.state === normalized);
+function setPipeline(active) {
+  const order = PIPELINE;
+  const activeIndex = active ? order.indexOf(active) : -1;
+  els.pipeline.querySelectorAll("li").forEach((li, idx) => {
+    li.classList.remove("active", "done");
+    if (activeIndex === -1) return;
+    if (idx < activeIndex) li.classList.add("done");
+    if (idx === activeIndex) li.classList.add("active");
   });
-
-  if (normalized === "Idle" || normalized === "Finished") {
-    els.sysCpu.textContent = "4%";
-  } else {
-    els.sysCpu.textContent = `${18 + Math.floor(Math.random() * 22)}%`;
-  }
 }
 
 function setActivity(partial = {}) {
@@ -104,6 +157,7 @@ function renderGoals() {
     btn.setAttribute("aria-pressed", "false");
     btn.innerHTML = `<span class="emoji">${goal.emoji}</span><span class="label">${goal.label}</span>`;
     btn.addEventListener("click", () => {
+      sound.click();
       if (state.goals.has(goal.id)) state.goals.delete(goal.id);
       else state.goals.add(goal.id);
       btn.setAttribute("aria-pressed", String(state.goals.has(goal.id)));
@@ -123,6 +177,7 @@ function renderSideNav() {
     btn.textContent = label;
     if (label === "Home") btn.classList.add("is-active");
     btn.addEventListener("click", () => {
+      sound.click();
       els.sideNav.querySelectorAll(".side-link").forEach((el) => {
         el.classList.toggle("is-active", el.textContent === label);
       });
@@ -133,8 +188,10 @@ function renderSideNav() {
   }
 }
 
-function renderStatusList() {
-  els.statusList.innerHTML = AI_STATES.map((s) => `<li data-state="${s}">${s}</li>`).join("");
+function renderPipeline() {
+  els.pipeline.innerHTML = PIPELINE.map(
+    (step) => `<li data-step="${step}"><span class="tick">✓</span><span>${step}</span></li>`,
+  ).join("");
 }
 
 function renderMemory(goalsText) {
@@ -168,70 +225,33 @@ function showChatWorkspace() {
   els.panelView.hidden = true;
   els.chatSection.hidden = els.chatStream.children.length === 0;
   els.coreSection.hidden = els.chatStream.children.length > 0;
-  els.composer.parentElement.hidden = false;
 }
 
 function showPanel(label) {
   els.coreSection.hidden = true;
   els.chatSection.hidden = true;
   els.panelView.hidden = false;
+  const cards =
+    {
+      Projects: [
+        ["CRM Mission", "Architecture in progress"],
+        ["Trading SaaS", "Queued"],
+      ],
+      Knowledge: [
+        ["Vision", "Live project brain"],
+        ["Decisions", "Updated during missions"],
+      ],
+      Voice: [
+        ["Wake reactivity", "Mic + clap"],
+        ["Style", "Natural · interruptible"],
+      ],
+      Settings: [
+        ["Wake Word", "Hey Cloudy"],
+        ["Appearance", "Graphite glass"],
+        ["Voice", "Realtime core response"],
+      ],
+    }[label] || [["Cloudy", "Premium AI operating system"]];
 
-  const content = {
-    Projects: [
-      ["Trading SaaS", "Scaffolded workspace"],
-      ["CRM", "Awaiting first build"],
-      ["Client Portal", "Draft"],
-    ],
-    Knowledge: [
-      ["Vision", "Living project brain"],
-      ["Roadmap", "Updated as Cloudy works"],
-      ["Decisions", "Architecture choices"],
-    ],
-    Tasks: [
-      ["Define MVP slice", "Todo"],
-      ["Design data model", "In progress"],
-      ["Wire auth", "Queued"],
-    ],
-    Agents: [
-      ["CEO Agent", "Strategy · approvals"],
-      ["Developer Agent", "Implementation"],
-      ["Research Agent", "Discovery"],
-    ],
-    Automation: [
-      ["Signup → onboarding", "Ready"],
-      ["Weekly recap", "Scheduled"],
-    ],
-    Documents: [
-      ["PRD", "Knowledge"],
-      ["API outline", "Knowledge"],
-    ],
-    Code: [
-      ["apps/web", "Next.js"],
-      ["services/api", "Node"],
-    ],
-    Voice: [
-      ["Wake word", "Hey Cloudy"],
-      ["Style", "Conversational · interruptible"],
-    ],
-    Analytics: [
-      ["Latency", "Live"],
-      ["Tokens", "Session counter"],
-    ],
-    Marketplace: [
-      ["Skill packs", "Coming online"],
-      ["Agent templates", "Browse"],
-    ],
-    Settings: [
-      ["Profile", "Workspace identity"],
-      ["Wake Word", "Hey Cloudy"],
-      ["AI Models", "Claude-class routing"],
-      ["API Keys", "Secure vault"],
-      ["Memory Controls", "Retention & privacy"],
-      ["Appearance", "Graphite · glass"],
-    ],
-  };
-
-  const cards = content[label] || [["Cloudy", "Premium operating workspace"]];
   els.panelView.innerHTML = `
     <h1 style="margin:0 0 1rem;font-size:1.4rem;font-weight:700;letter-spacing:-0.02em">${label}</h1>
     <div class="panel-grid">
@@ -242,17 +262,27 @@ function showPanel(label) {
   `;
 }
 
+function openStage(stage) {
+  els.stageEyebrow.textContent = "Mission stage";
+  els.stageTitle.textContent = stage.name;
+  els.stageBody.innerHTML = `<ul>${stage.detail.map((d) => `<li>${d}</li>`).join("")}</ul>`;
+  els.stageModal.hidden = false;
+  sound.click();
+}
+
 async function enterApp() {
   const labels = [...state.goals]
     .map((id) => GOALS.find((g) => g.id === id)?.label)
     .filter(Boolean);
   els.confirmLine.hidden = false;
   els.startBtn.disabled = true;
-  await wait(900);
+  sound.startup();
+  await wait(850);
   els.onboarding.hidden = true;
   els.app.hidden = false;
   renderMemory(labels.join(" · ") || "Custom workspace");
   setAiState("Idle");
+  setPipeline(null);
   setActivity({ think: "—", memory: "ready", search: "—", tools: "—", gen: "—" });
   els.currentTask.textContent = "Waiting for input";
 }
@@ -263,42 +293,82 @@ async function handlePrompt(prompt) {
   state.busy = true;
   els.sendBtn.disabled = true;
   els.suggestions.hidden = true;
-
   els.coreSection.hidden = true;
   els.panelView.hidden = true;
   els.chatSection.hidden = false;
 
-  const plan = planFor(text);
-  els.currentTask.textContent = plan.task;
+  const kind = detectExperience(text);
+  els.currentTask.textContent =
+    kind === "crm"
+      ? "Build CRM mission"
+      : kind === "weather"
+        ? "Weather briefing"
+        : kind === "search"
+          ? "Knowledge search"
+          : "Planning response";
+
   const working = els.memoryPanel.querySelector(".memory-item span");
   if (working) working.textContent = text;
 
+  const hooks = {
+    chatStream: els.chatStream,
+    onState: setAiState,
+    onPipeline: setPipeline,
+    onActivity: setActivity,
+    onTokens: (tokens, latency) => {
+      els.sysTokens.textContent = String(tokens);
+      els.sysLatency.textContent = `${latency} ms`;
+    },
+    onLine: (line) => {
+      els.thinkLine.textContent = line;
+    },
+    onOpenStage: openStage,
+    sound,
+  };
+
   try {
-    await runClaudeStyleTurn({
-      prompt: text,
-      plan,
-      chatStream: els.chatStream,
-      onState: setAiState,
-      onActivity: (a) => setActivity(a),
-      onTokens: (tokens, latency) => {
-        els.sysTokens.textContent = String(tokens);
-        els.sysLatency.textContent = `${latency} ms`;
-      },
-    });
+    if (kind === "crm") await runCrmMission(hooks);
+    else if (kind === "weather") await runWeatherExperience(hooks);
+    else if (kind === "search") await runSearchExperience({ ...hooks, prompt: text });
+    else await runGeneralExperience({ ...hooks, prompt: text });
+
     const items = els.memoryPanel.querySelectorAll(".memory-item");
-    if (items[1]) items[1].querySelector("span").textContent = plan.task;
-    if (items[2]) items[2].querySelector("span").textContent = plan.task;
+    if (items[1]) items[1].querySelector("span").textContent = els.currentTask.textContent;
+    if (items[2]) items[2].querySelector("span").textContent = els.currentTask.textContent;
   } finally {
     state.busy = false;
     els.sendBtn.disabled = false;
     els.prompt.value = "";
     els.prompt.focus();
+    els.thinkLine.textContent = "";
   }
 }
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+els.voiceBtn.addEventListener("click", async () => {
+  try {
+    await sound.unlock();
+    if (voice.active) {
+      voice.stop();
+      els.voiceBtn.setAttribute("aria-pressed", "false");
+      setAiState("Idle");
+      setPipeline(null);
+      return;
+    }
+    await voice.start();
+    els.voiceBtn.setAttribute("aria-pressed", "true");
+    sound.listen();
+    setAiState("Listening");
+    setPipeline("Listening");
+  } catch (error) {
+    els.voiceBtn.setAttribute("aria-pressed", "false");
+    els.thinkLine.textContent =
+      error instanceof Error ? error.message : "Microphone permission required";
+  }
+});
 
 document.querySelectorAll(".top-link").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -321,15 +391,14 @@ els.prompt.addEventListener("keydown", (e) => {
   }
 });
 
-els.startBtn.addEventListener("click", () => {
-  void enterApp();
+els.startBtn.addEventListener("click", () => void enterApp());
+els.closeStage.addEventListener("click", () => {
+  els.stageModal.hidden = true;
 });
 
-els.app.hidden = true;
-els.onboarding.hidden = false;
 renderGoals();
 renderSideNav();
-renderStatusList();
+renderPipeline();
 renderMemory();
 renderSuggestions();
 setAiState("Idle");

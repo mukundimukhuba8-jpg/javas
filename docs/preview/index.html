@@ -6,7 +6,7 @@
     <title>Cloudy — Intelligent Operating System</title>
     <meta
       name="description"
-      content="Cloudy is an intelligent operating system that thinks, plans, remembers, and executes."
+      content="Cloudy is a premium AI operating system that listens, thinks, plans, builds, and speaks in real time."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -17,9 +17,10 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <!-- Onboarding -->
-    <section class="screen" id="onboarding" hidden>
-      <div class="onboard-card">
+    <canvas id="bgCanvas" aria-hidden="true"></canvas>
+
+    <section class="screen" id="onboarding">
+      <div class="onboard-card glass">
         <p class="eyebrow">Cloudy</p>
         <h1>What do you want to build today?</h1>
         <p class="sub">
@@ -36,9 +37,8 @@
       </div>
     </section>
 
-    <!-- App shell -->
-    <div class="app" id="app">
-      <header class="topbar">
+    <div class="app" id="app" hidden>
+      <header class="topbar glass-bar">
         <div class="top-left">
           <span class="logo">Cloudy</span>
           <nav class="top-nav" aria-label="Primary">
@@ -51,6 +51,10 @@
           </nav>
         </div>
         <div class="top-right">
+          <button type="button" class="btn btn-quiet" id="voiceBtn" aria-pressed="false">
+            <span class="voice-dot" id="voiceDot"></span>
+            Voice
+          </button>
           <label class="search">
             <span class="sr-only">Search everywhere</span>
             <input type="search" placeholder="Search everywhere" id="globalSearch" />
@@ -66,12 +70,13 @@
       <main class="main">
         <section class="hero-core" id="coreSection">
           <div class="core" id="intelCore" data-state="idle" aria-live="polite">
-            <canvas id="coreCanvas" width="320" height="320" aria-hidden="true"></canvas>
+            <canvas id="coreCanvas" width="360" height="360" aria-hidden="true"></canvas>
             <div class="core-label">
               <span id="coreState">Idle</span>
               <small id="coreHint">Ready when you are</small>
             </div>
           </div>
+          <p class="core-foot meta" id="thinkLine"></p>
         </section>
 
         <section class="chat" id="chatSection" hidden>
@@ -79,16 +84,16 @@
         </section>
 
         <section class="composer-wrap">
-          <form class="composer" id="composer">
+          <form class="composer glass" id="composer">
             <textarea
               id="prompt"
               rows="2"
-              placeholder="Ask Cloudy to think, plan, or build…"
+              placeholder="Ask Cloudy to think, build, search, or check the weather…"
             ></textarea>
             <div class="composer-bar">
               <div class="composer-meta">
                 <span id="statusPill" class="pill">Idle</span>
-                <span class="meta">Enter to send · Shift+Enter for line</span>
+                <span class="meta">Enter to send · Voice reacts instantly when enabled</span>
               </div>
               <button type="submit" class="btn btn-primary" id="sendBtn">Send</button>
             </div>
@@ -100,42 +105,52 @@
       </main>
 
       <aside class="rail" aria-label="Status and memory">
-        <div class="rail-block">
+        <div class="rail-block glass">
           <h2>Current task</h2>
           <p id="currentTask" class="rail-text">Waiting for input</p>
         </div>
 
-        <div class="rail-block">
-          <h2>AI status</h2>
-          <ul class="status-list" id="statusList"></ul>
+        <div class="rail-block glass">
+          <h2>System status</h2>
+          <ul class="pipeline" id="pipeline"></ul>
         </div>
 
-        <div class="rail-block">
+        <div class="rail-block glass">
           <h2>Live activity</h2>
-          <ul class="activity" id="activity">
+          <ul class="activity">
+            <li><span>Mic energy</span><b id="micEnergy">0%</b></li>
             <li><span>Thinking</span><b id="aThink">—</b></li>
-            <li><span>Using memory</span><b id="aMemory">—</b></li>
-            <li><span>Using search</span><b id="aSearch">—</b></li>
-            <li><span>Running tools</span><b id="aTools">—</b></li>
+            <li><span>Memory</span><b id="aMemory">—</b></li>
+            <li><span>Search</span><b id="aSearch">—</b></li>
+            <li><span>Tools</span><b id="aTools">—</b></li>
             <li><span>Generating</span><b id="aGen">—</b></li>
           </ul>
         </div>
 
-        <div class="rail-block">
+        <div class="rail-block glass">
           <h2>System</h2>
           <ul class="activity">
-            <li><span>CPU</span><b id="sysCpu">4%</b></li>
+            <li><span>CPU</span><b id="sysCpu">3%</b></li>
             <li><span>Tokens</span><b id="sysTokens">0</b></li>
             <li><span>Latency</span><b id="sysLatency">—</b></li>
-            <li><span>APIs</span><b id="sysApis">3 connected</b></li>
+            <li><span>APIs</span><b>Weather · Memory · Tools</b></li>
           </ul>
         </div>
 
-        <div class="rail-block grow">
+        <div class="rail-block glass grow">
           <h2>Memory</h2>
           <div class="memory" id="memoryPanel"></div>
         </div>
       </aside>
+    </div>
+
+    <div class="stage-modal" id="stageModal" hidden>
+      <div class="stage-card glass">
+        <button type="button" class="icon-close" id="closeStage" aria-label="Close">×</button>
+        <p class="eyebrow" id="stageEyebrow">Stage</p>
+        <h3 id="stageTitle">Details</h3>
+        <div id="stageBody" class="stage-body"></div>
+      </div>
     </div>
 
     <script type="module" src="./main.js"></script>
