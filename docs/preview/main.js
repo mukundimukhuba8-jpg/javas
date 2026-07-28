@@ -1,619 +1,492 @@
-/**
- * Cloudy — wake word + clap activation system (browser preview)
- * States: boot → idle → waking → listening ⇄ speaking
- */
+import {
+  AGENTS,
+  BUILD_STEPS,
+  GOALS,
+  INTEGRATIONS,
+  KNOWLEDGE,
+  KNOWLEDGE_BODY,
+  NAV,
+  PORTALS,
+  SETTINGS,
+  SKILLS,
+} from "./js/data.js";
+import { createWakeController } from "./js/wake.js";
+import { createWorld } from "./js/world.js";
 
-const WAKE_PHRASES = ["hey cloudy", "hello cloudy", "hi cloudy", "okay cloudy"];
-const WAKE_DURATION_MS = 1800;
-
-/** @typedef {'boot'|'idle'|'waking'|'listening'|'speaking'} AppState */
+const state = {
+  goals: new Set(),
+  view: "world",
+  knowledgeTab: "Vision",
+  world: null,
+};
 
 const els = {
   body: document.body,
-  gate: /** @type {HTMLElement} */ (document.getElementById("gate")),
-  gateNote: /** @type {HTMLElement} */ (document.getElementById("gateNote")),
-  enableBtn: /** @type {HTMLButtonElement} */ (document.getElementById("enableBtn")),
-  stage: /** @type {HTMLElement} */ (document.getElementById("stage")),
-  orb: /** @type {HTMLElement} */ (document.getElementById("orb")),
-  modeChip: /** @type {HTMLElement} */ (document.getElementById("modeChip")),
-  micLevelLabel: /** @type {HTMLElement} */ (document.getElementById("micLevelLabel")),
-  activityLog: /** @type {HTMLElement} */ (document.getElementById("activityLog")),
-  transcript: /** @type {HTMLElement} */ (document.getElementById("transcript")),
-  fx: /** @type {HTMLCanvasElement} */ (document.getElementById("fx")),
-  wave: /** @type {HTMLCanvasElement} */ (document.getElementById("wave")),
-  neural: /** @type {SVGSVGElement} */ (document.getElementById("neural")),
-  bloom: /** @type {HTMLElement} */ (document.getElementById("bloom")),
+  gate: document.getElementById("gate"),
+  gateNote: document.getElementById("gateNote"),
+  enableBtn: document.getElementById("enableBtn"),
+  enterBtn: document.getElementById("enterBtn"),
+  wakeStage: document.getElementById("wakeStage"),
+  orb: document.getElementById("orb"),
+  wakeTranscript: document.getElementById("wakeTranscript"),
+  goalGrid: document.getElementById("goalGrid"),
+  selectionCount: document.getElementById("selectionCount"),
+  confirmGoals: document.getElementById("confirmGoals"),
+  welcomeLine: document.getElementById("welcomeLine"),
+  railNav: document.getElementById("railNav"),
+  viewKicker: document.getElementById("viewKicker"),
+  viewTitle: document.getElementById("viewTitle"),
+  goalChip: document.getElementById("goalChip"),
+  inspectorBody: document.getElementById("inspectorBody"),
+  buildBtn: document.getElementById("buildBtn"),
+  buildOverlay: document.getElementById("buildOverlay"),
+  buildSteps: document.getElementById("buildSteps"),
+  closeBuild: document.getElementById("closeBuild"),
+  fx: document.getElementById("fx"),
 };
 
-const fxCtx = els.fx.getContext("2d");
-const waveCtx = els.wave.getContext("2d");
-
-/** @type {AppState} */
-let state = "boot";
-let audioCtx = /** @type {AudioContext | null} */ (null);
-let analyser = /** @type {AnalyserNode | null} */ (null);
-let micStream = /** @type {MediaStream | null} */ (null);
-let freqData = /** @type {Uint8Array | null} */ (null);
-let timeData = /** @type {Uint8Array | null} */ (null);
-let micLevel = 0;
-let recognition = /** @type {SpeechRecognition | null} */ (null);
-let wakeLock = false;
-let lastClapAt = 0;
-let clapCount = 0;
-let particleBurst = 0;
-let energyWave = 0;
-
-/** @type {{x:number,y:number,vx:number,vy:number,life:number,hue:number,size:number}[]} */
-let particles = [];
-/** @type {{x:number,y:number,phase:number}[]} */
-let idleSparks = [];
-
-const nodes = /** @type {{id:number,x:number,y:number,r:number,pulse:number}[]} */ ([]);
-const links = /** @type {{a:number,b:number,t:number}[]} */ ([]);
-
-function setState(next) {
-  state = next;
-  els.body.dataset.state = next;
-  const labels = {
-    boot: "BOOT",
-    idle: "SLEEP",
-    waking: "WAKE",
-    listening: "LISTEN",
-    speaking: "SPEAK",
-  };
-  els.modeChip.textContent = labels[next];
-}
-
-function logActivity(text) {
-  const li = document.createElement("li");
-  li.textContent = text;
-  els.activityLog.prepend(li);
-  while (els.activityLog.children.length > 6) {
-    els.activityLog.lastElementChild?.remove();
-  }
-}
-
-function resize() {
-  els.fx.width = window.innerWidth * devicePixelRatio;
-  els.fx.height = window.innerHeight * devicePixelRatio;
-  els.fx.style.width = `${window.innerWidth}px`;
-  els.fx.style.height = `${window.innerHeight}px`;
-  fxCtx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-}
-
-function buildNeuralGraph() {
-  nodes.length = 0;
-  links.length = 0;
-  const cx = 500;
-  const cy = 300;
-  nodes.push({ id: 0, x: cx, y: cy, r: 5, pulse: 0 });
-
-  let id = 1;
-  for (let ring = 1; ring <= 4; ring += 1) {
-    const count = 6 + ring * 4;
-    const radius = 55 + ring * 58;
-    for (let i = 0; i < count; i += 1) {
-      const angle = (i / count) * Math.PI * 2 + ring * 0.35;
-      const x = cx + Math.cos(angle) * radius * (0.85 + Math.random() * 0.3);
-      const y = cy + Math.sin(angle) * radius * 0.62 * (0.85 + Math.random() * 0.3);
-      nodes.push({ id, x, y, r: 2 + Math.random() * 2.5, pulse: Math.random() });
-      const parent = Math.max(0, id - Math.floor(count / 2) - 1);
-      links.push({ a: parent % id, b: id, t: 0 });
-      if (Math.random() > 0.55 && id > 2) {
-        links.push({ a: id - 1, b: id, t: 0 });
-      }
-      id += 1;
-    }
-  }
-
-  const ns = "http://www.w3.org/2000/svg";
-  els.neural.innerHTML = "";
-  const defs = document.createElementNS(ns, "defs");
-  defs.innerHTML = `
-    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-      <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
-      <feMerge>
-        <feMergeNode in="coloredBlur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>`;
-  els.neural.appendChild(defs);
-
-  for (const link of links) {
-    const line = document.createElementNS(ns, "path");
-    const a = nodes[link.a];
-    const b = nodes[link.b];
-    if (!a || !b) continue;
-    line.setAttribute("class", "link");
-    line.setAttribute("d", `M ${a.x} ${a.y} Q ${(a.x + b.x) / 2} ${(a.y + b.y) / 2 - 20} ${b.x} ${b.y}`);
-    line.dataset.length = String(line.getTotalLength?.() ?? 120);
-    els.neural.appendChild(line);
-  }
-  for (const node of nodes) {
-    const circle = document.createElementNS(ns, "circle");
-    circle.setAttribute("class", "node");
-    circle.setAttribute("cx", String(node.x));
-    circle.setAttribute("cy", String(node.y));
-    circle.setAttribute("r", String(node.r));
-    els.neural.appendChild(circle);
-  }
-}
-
-function animateNeural(progress, speaking) {
-  const linkEls = [...els.neural.querySelectorAll(".link")];
-  const nodeEls = [...els.neural.querySelectorAll(".node")];
-  linkEls.forEach((el, i) => {
-    const len = Number(el.getAttribute("data-length") || 140);
-    const local = Math.max(0, Math.min(1, progress * 1.4 - i * 0.01));
-    el.style.opacity = String(0.15 + local * (speaking ? 0.8 : 0.45));
-    el.style.stroke =
-      speaking && i % 3 === 0 ? "rgba(168,85,247,0.85)" : "rgba(34,211,238,0.55)";
-    el.style.strokeDasharray = `${len * local} ${len}`;
-    if (speaking) {
-      el.style.strokeWidth = String(1.2 + Math.sin(performance.now() / 180 + i) * 0.8);
-    }
+function showScreen(name) {
+  document.querySelectorAll("[data-screen-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.screenPanel !== name;
   });
-  nodeEls.forEach((el, i) => {
-    const node = nodes[i];
-    if (!node) return;
-    const local = Math.max(0, Math.min(1, progress * 1.5 - i * 0.008));
-    el.style.opacity = String(local);
-    const pulse = speaking ? 1 + Math.sin(performance.now() / 140 + node.pulse * 8) * 0.55 : 1;
-    el.setAttribute("r", String(node.r * pulse * (0.6 + local * 0.6)));
-    el.setAttribute("fill", speaking && i % 4 === 0 ? "#c084fc" : i === 0 ? "#fff" : "#22d3ee");
-  });
+  els.body.dataset.screen = name;
 }
 
-function seedIdleSparks() {
-  idleSparks = Array.from({ length: 48 }, () => ({
-    x: Math.random() * window.innerWidth,
-    y: Math.random() * window.innerHeight,
-    phase: Math.random() * Math.PI * 2,
-  }));
+function setWakeState(wake) {
+  els.body.dataset.wake = wake;
 }
 
-function spawnBurst(count = 900) {
-  const cx = window.innerWidth / 2;
-  const cy = window.innerHeight / 2;
-  for (let i = 0; i < count; i += 1) {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 0.6 + Math.random() * 7.5;
-    particles.push({
-      x: cx,
-      y: cy,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      life: 0.6 + Math.random() * 1.2,
-      hue: Math.random() > 0.5 ? 200 + Math.random() * 40 : 270 + Math.random() * 40,
-      size: 0.6 + Math.random() * 2.2,
+function inspect(title, fields) {
+  els.inspectorBody.innerHTML = `
+    <h3>${title}</h3>
+    <dl>
+      ${fields
+        .map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`)
+        .join("")}
+    </dl>
+  `;
+}
+
+function renderGoals() {
+  els.goalGrid.innerHTML = "";
+  for (const goal of GOALS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "goal";
+    btn.dataset.id = goal.id;
+    btn.setAttribute("aria-pressed", "false");
+    btn.innerHTML = `<span class="emoji">${goal.emoji}</span><span class="label">${goal.label}</span>`;
+    btn.addEventListener("click", () => {
+      if (state.goals.has(goal.id)) state.goals.delete(goal.id);
+      else state.goals.add(goal.id);
+      btn.setAttribute("aria-pressed", String(state.goals.has(goal.id)));
+      els.selectionCount.textContent = `${state.goals.size} selected`;
+      els.confirmGoals.disabled = state.goals.size === 0;
     });
+    els.goalGrid.appendChild(btn);
   }
-  particleBurst = 1;
-  energyWave = 1;
 }
 
-function playStartupSound() {
-  if (!audioCtx) return;
-  const now = audioCtx.currentTime;
-  const master = audioCtx.createGain();
-  master.gain.setValueAtTime(0.0001, now);
-  master.gain.exponentialRampToValueAtTime(0.22, now + 0.05);
-  master.gain.exponentialRampToValueAtTime(0.0001, now + 1.5);
-  master.connect(audioCtx.destination);
+function renderNav() {
+  els.railNav.innerHTML = "";
+  for (const item of NAV) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = item.label;
+    btn.dataset.view = item.id;
+    btn.addEventListener("click", () => setView(item.id));
+    els.railNav.appendChild(btn);
+  }
+}
 
-  const freqs = [180, 360, 540, 920, 1400];
-  freqs.forEach((freq, i) => {
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = i % 2 === 0 ? "sine" : "triangle";
-    osc.frequency.setValueAtTime(freq, now);
-    osc.frequency.exponentialRampToValueAtTime(freq * 1.8, now + 0.35 + i * 0.08);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.2 / (i + 1), now + 0.04 + i * 0.03);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.1 + i * 0.08);
-    osc.connect(gain);
-    gain.connect(master);
-    osc.start(now);
-    osc.stop(now + 1.6);
+function setView(id) {
+  state.view = id;
+  const meta = NAV.find((n) => n.id === id);
+  if (meta) {
+    els.viewKicker.textContent = meta.kicker;
+    els.viewTitle.textContent = meta.title;
+  }
+  document.querySelectorAll(".rail-nav button").forEach((btn) => {
+    btn.setAttribute("aria-current", btn.dataset.view === id ? "page" : "false");
   });
-
-  const noiseBuf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.35, audioCtx.sampleRate);
-  const data = noiseBuf.getChannelData(0);
-  for (let i = 0; i < data.length; i += 1) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
-  const noise = audioCtx.createBufferSource();
-  const noiseGain = audioCtx.createGain();
-  const filter = audioCtx.createBiquadFilter();
-  filter.type = "bandpass";
-  filter.frequency.value = 1800;
-  noise.buffer = noiseBuf;
-  noiseGain.gain.value = 0.08;
-  noise.connect(filter);
-  filter.connect(noiseGain);
-  noiseGain.connect(master);
-  noise.start(now + 0.05);
+  document.querySelectorAll(".view").forEach((view) => {
+    view.hidden = view.dataset.view !== id;
+  });
+  if (id === "world") ensureWorld();
 }
 
-function stopSpeechRecognition() {
-  if (!recognition) return;
-  try {
-    recognition.onend = null;
-    recognition.stop();
-  } catch {
-    /* ignore */
+function ensureWorld() {
+  const host = document.getElementById("view-world");
+  if (host.dataset.ready === "1") return;
+  host.dataset.ready = "1";
+  host.innerHTML = `
+    <div class="world-canvas-wrap">
+      <canvas id="worldCanvas"></canvas>
+      <p class="world-hint">Drag to orbit · Click a node to open it</p>
+    </div>
+  `;
+  const canvas = /** @type {HTMLCanvasElement} */ (document.getElementById("worldCanvas"));
+  state.world = createWorld(canvas, {
+    onSelect(node) {
+      inspect(node.label, [
+        ["Type", node.group],
+        ["Node", node.id],
+        ["Action", "Opened from the living neural graph"],
+        ["Linked systems", "Projects · Agents · Memory · Tools"],
+      ]);
+      if (node.group === "agent") setView("configure");
+      if (node.id === "integrations" || node.group === "integration") setView("integrations");
+      if (node.id === "automations" || node.group === "automation") setView("automations");
+      if (node.id === "documents" || node.group === "doc") setView("knowledge");
+      if (node.id === "goals") setView("knowledge");
+    },
+  });
+}
+
+function renderConfigure() {
+  const host = document.getElementById("view-configure");
+  host.innerHTML = `<div class="card-grid"></div>`;
+  const grid = host.querySelector(".card-grid");
+  for (const agent of AGENTS) {
+    const card = document.createElement("article");
+    card.className = "card";
+    card.innerHTML = `
+      <h3>${agent.name}</h3>
+      <p>${agent.personality}</p>
+      <div class="tag-row">
+        <span class="tag">${agent.model}</span>
+        <span class="tag">Create</span>
+      </div>
+    `;
+    card.addEventListener("click", () => {
+      host.querySelectorAll(".card").forEach((c) => c.classList.remove("active"));
+      card.classList.add("active");
+      inspect(agent.name, [
+        ["Personality", agent.personality],
+        ["Model", agent.model],
+        ["Permissions", agent.permissions],
+        ["Memory", agent.memory],
+        ["Goals", agent.goals],
+        ["Tools", agent.tools],
+      ]);
+    });
+    grid?.appendChild(card);
   }
 }
 
-function speakGreeting() {
-  const text = "Hello. Cloudy online. How can I help you today?";
-  els.transcript.textContent = text;
-  logActivity("Greeting · TTS");
-  setState("speaking");
-  stopSpeechRecognition();
+function renderKnowledge() {
+  const host = document.getElementById("view-knowledge");
+  host.innerHTML = `
+    <div class="knowledge-layout">
+      <div class="knowledge-nav" id="knowledgeNav"></div>
+      <div class="knowledge-body" id="knowledgeBody"></div>
+    </div>
+  `;
+  const nav = host.querySelector("#knowledgeNav");
+  const body = host.querySelector("#knowledgeBody");
 
-  const utter = new SpeechSynthesisUtterance(text);
-  utter.rate = 0.95;
-  utter.pitch = 1;
-  utter.volume = 1;
-  const voices = speechSynthesis.getVoices();
-  const preferred =
-    voices.find((v) => /en(-|_)GB/i.test(v.lang) && /female|samantha|google/i.test(v.name)) ||
-    voices.find((v) => /en(-|_)GB/i.test(v.lang)) ||
-    voices.find((v) => /^en/i.test(v.lang));
-  if (preferred) utter.voice = preferred;
-
-  utter.onend = () => {
-    setState("listening");
-    els.transcript.textContent = "Listening…";
-    startSpeechRecognition();
-  };
-  utter.onerror = () => {
-    setState("listening");
-    els.transcript.textContent = "Listening…";
-    startSpeechRecognition();
-  };
-
-  speechSynthesis.cancel();
-  speechSynthesis.speak(utter);
-}
-
-async function wake(reason) {
-  if (state !== "idle" || wakeLock) return;
-  wakeLock = true;
-  logActivity(`Wake · ${reason}`);
-  setState("waking");
-  playStartupSound();
-  spawnBurst(1200);
-  els.transcript.textContent = "";
-
-  const start = performance.now();
-  const tick = () => {
-    const t = (performance.now() - start) / WAKE_DURATION_MS;
-    animateNeural(Math.min(1, t), false);
-    if (t < 1) {
-      requestAnimationFrame(tick);
-      return;
-    }
-    wakeLock = false;
-    speakGreeting();
-  };
-  requestAnimationFrame(tick);
-}
-
-function normalizeTranscript(text) {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function containsWakePhrase(text) {
-  const n = normalizeTranscript(text);
-  return WAKE_PHRASES.some((p) => n.includes(p));
-}
-
-function startSpeechRecognition() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    logActivity("SpeechRecognition unavailable · clap still works");
-    return;
-  }
-  if (recognition) {
-    try {
-      recognition.stop();
-    } catch {
-      /* ignore */
-    }
-  }
-  recognition = new SR();
-  recognition.continuous = true;
-  recognition.interimResults = true;
-  recognition.lang = "en-US";
-
-  recognition.onresult = (event) => {
-    let interim = "";
-    let finalText = "";
-    for (let i = event.resultIndex; i < event.results.length; i += 1) {
-      const result = event.results[i];
-      if (result.isFinal) finalText += result[0]?.transcript ?? "";
-      else interim += result[0]?.transcript ?? "";
-    }
-    const heard = finalText || interim;
-    if (heard) els.transcript.textContent = heard;
-
-    if (state === "idle" && containsWakePhrase(heard)) {
-      void wake("Hey Cloudy");
-      return;
-    }
-
-    if (state === "listening" && finalText) {
-      logActivity(`Heard · ${finalText.trim()}`);
-    }
-  };
-
-  recognition.onerror = () => {
-    // Restart lightly; common on no-speech
-    if (state === "idle" || state === "listening") {
-      setTimeout(() => {
-        try {
-          recognition?.start();
-        } catch {
-          /* already started */
-        }
-      }, 400);
-    }
-  };
-
-  recognition.onend = () => {
-    if (state === "idle" || state === "listening") {
-      try {
-        recognition?.start();
-      } catch {
-        /* ignore */
-      }
-    }
-  };
-
-  try {
-    recognition.start();
-  } catch {
-    /* ignore */
-  }
-}
-
-function detectClap(energy, transient) {
-  if (state !== "idle") return;
-  const now = performance.now();
-  // Clap = sharp transient + decent broadband energy
-  if (transient > 0.42 && energy > 0.28) {
-    if (now - lastClapAt < 450) {
-      clapCount += 1;
+  function paint(tab) {
+    state.knowledgeTab = tab;
+    nav?.querySelectorAll("button").forEach((btn) => {
+      btn.setAttribute("aria-current", btn.dataset.tab === tab ? "true" : "false");
+    });
+    const content = KNOWLEDGE_BODY[tab];
+    if (Array.isArray(content)) {
+      body.innerHTML = `<h3>${tab}</h3><ul>${content.map((i) => `<li>${i}</li>`).join("")}</ul>`;
     } else {
-      clapCount = 1;
+      body.innerHTML = `<h3>${tab}</h3><p class="muted">${content}</p>`;
     }
-    lastClapAt = now;
-    if (clapCount >= 1) {
-      const kind = clapCount >= 2 ? "Double clap" : "Clap";
-      // Debounce wake a touch so double registers cleanly
-      window.setTimeout(() => {
-        if (state === "idle" && performance.now() - lastClapAt < 500) {
-          void wake(kind);
-        }
-      }, clapCount >= 2 ? 0 : 280);
-    }
+    inspect(tab, [
+      ["Layer", "Project brain"],
+      ["Updated by", "Cloudy · continuous"],
+      ["Visibility", "Workspace + portals with permission"],
+    ]);
   }
+
+  for (const tab of KNOWLEDGE) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = tab;
+    btn.dataset.tab = tab;
+    btn.addEventListener("click", () => paint(tab));
+    nav?.appendChild(btn);
+  }
+  paint("Vision");
 }
 
-async function enableAudio() {
-  els.gateNote.textContent = "";
-  try {
-    audioCtx = new AudioContext();
-    micStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      },
-      video: false,
+function renderSkills() {
+  const host = document.getElementById("view-skills");
+  host.innerHTML = `<div class="card-grid"></div>`;
+  const grid = host.querySelector(".card-grid");
+  for (const skill of SKILLS) {
+    const card = document.createElement("article");
+    card.className = "card";
+    card.innerHTML = `<h3>${skill}</h3><p>Reusable ability · attach to any agent</p><div class="tag-row"><span class="tag">Skill</span></div>`;
+    card.addEventListener("click", () => {
+      inspect(skill, [
+        ["Type", "Reusable skill"],
+        ["Attach to", "Developer · Designer · Marketing · Research"],
+        ["Output", "Artifacts + knowledge updates"],
+      ]);
     });
-    const source = audioCtx.createMediaStreamSource(micStream);
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 2048;
-    analyser.smoothingTimeConstant = 0.72;
-    source.connect(analyser);
-    freqData = new Uint8Array(analyser.frequencyBinCount);
-    timeData = new Uint8Array(analyser.fftSize);
+    grid?.appendChild(card);
+  }
+}
 
-    els.gate.hidden = true;
-    els.stage.hidden = false;
-    setState("idle");
-    seedIdleSparks();
-    buildNeuralGraph();
-    startSpeechRecognition();
-    logActivity("Idle · sensors armed");
+function renderIntegrations() {
+  const host = document.getElementById("view-integrations");
+  host.innerHTML = `<div class="card-grid"></div>`;
+  const grid = host.querySelector(".card-grid");
+  for (const name of INTEGRATIONS) {
+    const card = document.createElement("article");
+    card.className = "card";
+    card.innerHTML = `<h3>${name}</h3><p>Connect · discover data · grant tools</p><div class="tag-row"><span class="tag">Integration</span></div>`;
+    card.addEventListener("click", () => {
+      inspect(name, [
+        ["Status", "Ready to connect"],
+        ["Discovery", "Cloudy maps entities automatically"],
+        ["Used by", "Agents · Automations · Portals"],
+      ]);
+    });
+    grid?.appendChild(card);
+  }
+}
+
+function renderAutomations() {
+  const host = document.getElementById("view-automations");
+  const sample =
+    "When someone signs up, create a project, send them a welcome email, notify Slack, generate onboarding tasks, and remind me tomorrow.";
+  host.innerHTML = `
+    <div class="flow">
+      <p class="muted">Describe the workflow in plain language. Cloudy builds it visually.</p>
+      <textarea class="flow-input" id="flowInput">${sample}</textarea>
+      <button type="button" class="btn primary" id="compileFlow">Build workflow</button>
+      <div class="flow-graph" id="flowGraph"></div>
+    </div>
+  `;
+  const compile = () => {
+    const steps = [
+      "Signup trigger",
+      "Create project",
+      "Send welcome email",
+      "Notify Slack",
+      "Generate onboarding tasks",
+      "Remind tomorrow",
+    ];
+    const graph = host.querySelector("#flowGraph");
+    if (!graph) return;
+    graph.innerHTML = steps
+      .map(
+        (step, i) =>
+          `<span class="flow-node">${step}</span>${i < steps.length - 1 ? '<span class="flow-arrow">→</span>' : ""}`,
+      )
+      .join("");
+    inspect("Signup automation", [
+      ["Trigger", "New user signup"],
+      ["Steps", String(steps.length)],
+      ["Channels", "Email · Slack · Tasks · Reminder"],
+    ]);
+  };
+  host.querySelector("#compileFlow")?.addEventListener("click", compile);
+  compile();
+}
+
+function renderPortals() {
+  const host = document.getElementById("view-portals");
+  host.innerHTML = `<div class="card-grid"></div>`;
+  const grid = host.querySelector(".card-grid");
+  for (const portal of PORTALS) {
+    const card = document.createElement("article");
+    card.className = "card";
+    card.innerHTML = `<h3>${portal.name}</h3><p>${portal.desc}</p><div class="tag-row"><span class="tag">AI</span><span class="tag">Docs</span><span class="tag">Chat</span></div>`;
+    card.addEventListener("click", () => {
+      inspect(portal.name, [
+        ["Includes", "AI assistant · documents · chat · dashboards"],
+        ["Permissions", "Role-based shared knowledge"],
+        ["Purpose", portal.desc],
+      ]);
+    });
+    grid?.appendChild(card);
+  }
+}
+
+function renderSettings() {
+  const host = document.getElementById("view-settings");
+  host.innerHTML = `<div class="settings-grid"></div>`;
+  const grid = host.querySelector(".settings-grid");
+  for (const [title, desc] of SETTINGS) {
+    const card = document.createElement("article");
+    card.className = "setting";
+    card.innerHTML = `<h3>${title}</h3><p>${desc}</p>`;
+    card.addEventListener("click", () => {
+      inspect(title, [
+        ["Section", "Settings"],
+        ["Details", desc],
+        ["Wake word", title === "Wake Word" ? "Hey Cloudy" : "Configured globally"],
+      ]);
+    });
+    grid?.appendChild(card);
+  }
+}
+
+function enterWelcome() {
+  showScreen("welcome");
+  els.welcomeLine.hidden = true;
+}
+
+function enterOS() {
+  const labels = [...state.goals]
+    .map((id) => GOALS.find((g) => g.id === id)?.label)
+    .filter(Boolean);
+  els.goalChip.textContent = labels.length ? labels.slice(0, 2).join(" · ") : "Goals ready";
+  showScreen("os");
+  setView("world");
+  inspect("Workspace ready", [
+    ["Goals", labels.join(", ") || "Custom"],
+    ["Mode", "AI operating system"],
+    ["Next", "Explore World or run an autonomous build"],
+  ]);
+}
+
+async function runBuildDemo() {
+  els.buildOverlay.hidden = false;
+  els.closeBuild.hidden = true;
+  els.buildSteps.innerHTML = BUILD_STEPS.map((step) => `<li>${step}</li>`).join("");
+  const items = [...els.buildSteps.querySelectorAll("li")];
+  for (let i = 0; i < items.length; i += 1) {
+    items.forEach((el, idx) => {
+      el.classList.toggle("active", idx === i);
+      el.classList.toggle("done", idx < i);
+    });
+    await wait(420);
+  }
+  items.forEach((el) => {
+    el.classList.add("done");
+    el.classList.remove("active");
+  });
+  els.closeBuild.hidden = false;
+  if (!state.goals.has("trading") && !state.goals.has("startup")) {
+    state.goals.add("trading");
+    state.goals.add("startup");
+  }
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function bootFx() {
+  const canvas = els.fx;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const sparks = Array.from({ length: 40 }, () => ({
+    x: Math.random(),
+    y: Math.random(),
+    p: Math.random() * Math.PI * 2,
+  }));
+  function resize() {
+    canvas.width = window.innerWidth * devicePixelRatio;
+    canvas.height = window.innerHeight * devicePixelRatio;
+    canvas.style.width = `${window.innerWidth}px`;
+    canvas.style.height = `${window.innerHeight}px`;
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  }
+  function frame() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    ctx.clearRect(0, 0, w, h);
+    if (els.body.dataset.screen !== "boot") {
+      requestAnimationFrame(frame);
+      return;
+    }
+    for (const s of sparks) {
+      s.p += 0.01;
+      ctx.fillStyle = `rgba(34,211,238,${0.1 + Math.sin(s.p) * 0.08})`;
+      ctx.beginPath();
+      ctx.arc(s.x * w + Math.sin(s.p) * 6, s.y * h, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
     requestAnimationFrame(frame);
-  } catch (error) {
-    els.gateNote.textContent =
-      error instanceof Error ? error.message : "Microphone permission is required.";
   }
-}
-
-let prevEnergy = 0;
-
-function sampleMic() {
-  if (!analyser || !freqData || !timeData) return { energy: 0, transient: 0 };
-  analyser.getByteFrequencyData(freqData);
-  analyser.getByteTimeDomainData(timeData);
-
-  let sum = 0;
-  let high = 0;
-  const midStart = Math.floor(freqData.length * 0.08);
-  const midEnd = Math.floor(freqData.length * 0.45);
-  for (let i = midStart; i < midEnd; i += 1) {
-    sum += freqData[i] ?? 0;
-    if ((freqData[i] ?? 0) > 180) high += 1;
-  }
-  const energy = Math.min(1, sum / ((midEnd - midStart) * 255) * 3.2);
-  const transient = Math.max(0, energy - prevEnergy) * 8 + high / (midEnd - midStart);
-  prevEnergy = energy * 0.65 + prevEnergy * 0.35;
-  micLevel = energy;
-  return { energy, transient: Math.min(1, transient) };
-}
-
-function drawWaveform() {
-  const w = els.wave.width;
-  const h = els.wave.height;
-  waveCtx.clearRect(0, 0, w, h);
-  if (state === "idle") return;
-
-  waveCtx.beginPath();
-  const amp = state === "speaking" ? 0.55 : 0.2 + micLevel * 0.8;
-  for (let x = 0; x < w; x += 1) {
-    const y =
-      h / 2 +
-      Math.sin(x * 0.045 + performance.now() / 160) * 10 * amp +
-      Math.sin(x * 0.12 + performance.now() / 90) * 6 * amp;
-    if (x === 0) waveCtx.moveTo(x, y);
-    else waveCtx.lineTo(x, y);
-  }
-  const grad = waveCtx.createLinearGradient(0, 0, w, 0);
-  grad.addColorStop(0, "rgba(59,130,255,0.1)");
-  grad.addColorStop(0.5, "rgba(34,211,238,0.95)");
-  grad.addColorStop(1, "rgba(168,85,247,0.2)");
-  waveCtx.strokeStyle = grad;
-  waveCtx.lineWidth = 2;
-  waveCtx.stroke();
-}
-
-function drawFx() {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-  fxCtx.clearRect(0, 0, w, h);
-  const cx = w / 2;
-  const cy = h / 2;
-
-  // Soft bloom discs (post-process stand-in)
-  if (state !== "idle") {
-    const g = fxCtx.createRadialGradient(cx, cy, 20, cx, cy, Math.max(w, h) * 0.55);
-    g.addColorStop(0, `rgba(255,255,255,${0.08 + micLevel * 0.08})`);
-    g.addColorStop(0.2, `rgba(34,211,238,${0.12 + energyWave * 0.15})`);
-    g.addColorStop(0.45, `rgba(59,130,255,${0.1 + energyWave * 0.12})`);
-    g.addColorStop(0.7, `rgba(168,85,247,${0.08 + energyWave * 0.1})`);
-    g.addColorStop(1, "rgba(2,4,10,0)");
-    fxCtx.fillStyle = g;
-    fxCtx.fillRect(0, 0, w, h);
-  }
-
-  if (energyWave > 0.01) {
-    for (let i = 0; i < 4; i += 1) {
-      const r = (1 - energyWave) * 40 + i * 70 + energyWave * Math.min(w, h) * 0.45;
-      fxCtx.beginPath();
-      fxCtx.arc(cx, cy, r, 0, Math.PI * 2);
-      fxCtx.strokeStyle = `rgba(${i % 2 ? "168,85,247" : "59,130,255"},${energyWave * 0.35})`;
-      fxCtx.lineWidth = 2;
-      fxCtx.stroke();
-    }
-    energyWave *= 0.965;
-  }
-
-  if (state === "idle") {
-    for (const spark of idleSparks) {
-      spark.phase += 0.01;
-      const x = spark.x + Math.sin(spark.phase) * 8;
-      const y = spark.y + Math.cos(spark.phase * 0.8) * 6;
-      fxCtx.fillStyle = `rgba(34,211,238,${0.12 + Math.sin(spark.phase) * 0.08})`;
-      fxCtx.beginPath();
-      fxCtx.arc(x, y, 1.2, 0, Math.PI * 2);
-      fxCtx.fill();
-    }
-  }
-
-  // Attract particles toward center while listening
-  for (let i = particles.length - 1; i >= 0; i -= 1) {
-    const p = particles[i];
-    if (!p) continue;
-    if (state === "listening") {
-      p.vx += (cx - p.x) * 0.0008;
-      p.vy += (cy - p.y) * 0.0008;
-    }
-    p.x += p.vx;
-    p.y += p.vy;
-    p.vx *= 0.99;
-    p.vy *= 0.99;
-    p.life -= 0.01;
-    if (p.life <= 0) {
-      particles.splice(i, 1);
-      continue;
-    }
-    fxCtx.fillStyle = `hsla(${p.hue}, 95%, 70%, ${Math.min(1, p.life)})`;
-    fxCtx.beginPath();
-    fxCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    fxCtx.fill();
-  }
-
-  if (state === "listening" && micLevel > 0.04) {
-    // Continuous soft sparks near orb
-    if (Math.random() < micLevel) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = 40 + Math.random() * 90;
-      particles.push({
-        x: cx + Math.cos(angle) * dist,
-        y: cy + Math.sin(angle) * dist,
-        vx: Math.cos(angle + Math.PI) * (0.4 + micLevel),
-        vy: Math.sin(angle + Math.PI) * (0.4 + micLevel),
-        life: 0.5,
-        hue: 190 + Math.random() * 40,
-        size: 1,
-      });
-    }
-  }
-
-  particleBurst *= 0.98;
-}
-
-function updateOrbFromMic() {
-  if (state !== "listening") return;
-  const scale = 1.7 + micLevel * 0.9;
-  els.orb.style.transform = `scale(${scale})`;
-  els.bloom.style.opacity = String(0.75 + micLevel * 0.35);
-  els.micLevelLabel.textContent = `Mic energy · ${Math.round(micLevel * 100)}%`;
-}
-
-function frame() {
-  const { energy, transient } = sampleMic();
-  detectClap(energy, transient);
-  updateOrbFromMic();
-  drawFx();
-  drawWaveform();
-
-  if (state === "speaking") {
-    animateNeural(1, true);
-  } else if (state === "listening") {
-    animateNeural(1, false);
-  }
-
+  window.addEventListener("resize", resize);
+  resize();
   requestAnimationFrame(frame);
 }
 
-els.enableBtn.addEventListener("click", () => {
-  void enableAudio();
+const wake = createWakeController({
+  orb: els.orb,
+  transcriptEl: els.wakeTranscript,
+  setWakeState,
+  onAwake: () => {
+    wake.stop();
+    enterWelcome();
+  },
 });
 
-window.addEventListener("resize", () => {
-  resize();
-  seedIdleSparks();
+els.enableBtn.addEventListener("click", async () => {
+  els.gateNote.textContent = "";
+  try {
+    await wake.enable();
+    els.gate.hidden = true;
+    els.wakeStage.hidden = false;
+  } catch (error) {
+    els.gateNote.textContent =
+      error instanceof Error ? error.message : "Microphone permission is required for wake mode.";
+  }
 });
 
-window.addEventListener("keydown", (event) => {
-  // Dev helpers
-  if (event.key === "w" && state === "idle") void wake("Manual");
-  if (event.key === "c" && state === "idle") void wake("Clap");
+els.enterBtn.addEventListener("click", () => {
+  enterWelcome();
 });
 
-// Some browsers populate voices async
-speechSynthesis?.addEventListener?.("voiceschanged", () => {
-  /* voices ready */
+els.confirmGoals.addEventListener("click", async () => {
+  els.welcomeLine.hidden = false;
+  els.confirmGoals.disabled = true;
+  // Soft spoken confirmation when available
+  try {
+    const utter = new SpeechSynthesisUtterance(
+      "Great. I’ll build your workspace around these goals.",
+    );
+    utter.rate = 0.95;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(utter);
+  } catch {
+    /* ignore */
+  }
+  await wait(1200);
+  enterOS();
 });
 
-resize();
-setState("boot");
+els.buildBtn.addEventListener("click", () => {
+  void runBuildDemo();
+});
+
+els.closeBuild.addEventListener("click", () => {
+  els.buildOverlay.hidden = true;
+  setView("world");
+  state.world?.select("trading");
+  inspect("Trading SaaS", [
+    ["Status", "Scaffolded by Cloudy"],
+    ["Team", "CEO · Developer · Marketing · Research"],
+    ["Next", "Open Knowledge and continue the roadmap"],
+  ]);
+});
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "w" && els.body.dataset.screen === "boot" && !els.wakeStage.hidden) {
+    wake.wakeManual();
+  }
+});
+
+renderGoals();
+renderNav();
+renderConfigure();
+renderKnowledge();
+renderSkills();
+renderIntegrations();
+renderAutomations();
+renderPortals();
+renderSettings();
+bootFx();
+showScreen("boot");
+setWakeState("boot");

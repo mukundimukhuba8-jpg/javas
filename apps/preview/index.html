@@ -3,78 +3,132 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Cloudy — Wake Word & Clap Activation</title>
+    <title>Cloudy — AI Operating System</title>
     <meta
       name="description"
-      content="Cloudy stays asleep until awakened by Hey Cloudy or a clap."
+      content="Cloudy is an AI operating system that builds products with a living neural world and a team of agents."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600&family=Rajdhani:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body data-state="boot">
+  <body data-screen="boot">
     <div id="bloom" aria-hidden="true"></div>
     <canvas id="fx" aria-hidden="true"></canvas>
 
-    <div class="gate" id="gate">
-      <p class="gate-brand">Cloudy</p>
-      <p class="gate-copy">
-        Enable the microphone to idle in sleep mode.<br />
-        Wake with <strong>Hey Cloudy</strong> or a <strong>clap</strong>.
-      </p>
-      <button type="button" id="enableBtn" class="gate-btn">Enable listening</button>
-      <p class="gate-note" id="gateNote"></p>
-    </div>
-
-    <main class="stage" id="stage" hidden>
-      <div class="zoom-layer" id="zoomLayer">
-        <div class="orb-wrap" id="orbWrap">
-          <div class="orb-rings" id="orbRings" aria-hidden="true"></div>
-          <div class="orb" id="orb">
-            <div class="orb-core"></div>
-            <div class="orb-sheen"></div>
-          </div>
+    <!-- Boot / Wake -->
+    <section class="screen" id="screen-boot" data-screen-panel="boot">
+      <div class="gate" id="gate">
+        <p class="gate-brand">Cloudy</p>
+        <p class="gate-tag">AI Operating System</p>
+        <p class="gate-copy">
+          Wake with <strong>Hey Cloudy</strong> or a <strong>clap</strong> — or enter the workspace
+          directly.
+        </p>
+        <div class="gate-actions">
+          <button type="button" id="enableBtn" class="btn primary">Enable wake listening</button>
+          <button type="button" id="enterBtn" class="btn ghost">Enter Cloudy OS</button>
         </div>
-
-        <svg class="neural" id="neural" viewBox="0 0 1000 600" aria-hidden="true"></svg>
-
-        <div class="hud" id="hud">
-          <header class="hud-top">
-            <span class="hud-brand">Cloudy</span>
-            <span class="hud-chip" id="modeChip">SLEEP</span>
-          </header>
-
-          <div class="hud-panel left" id="panelLeft">
-            <p class="panel-label">Sensors</p>
-            <ul>
-              <li>Wake phrase · Hey Cloudy</li>
-              <li>Clap · single / double</li>
-              <li id="micLevelLabel">Mic energy · 0%</li>
-            </ul>
-          </div>
-
-          <div class="hud-panel right" id="panelRight">
-            <p class="panel-label">Activity</p>
-            <ul id="activityLog"></ul>
-          </div>
-
-          <div class="hud-bottom" id="panelBottom">
-            <canvas id="wave" width="640" height="56" aria-hidden="true"></canvas>
-            <p class="transcript" id="transcript"></p>
-          </div>
-        </div>
+        <p class="gate-note" id="gateNote"></p>
       </div>
 
-      <p class="sleep-status" id="sleepStatus">
-        <span class="dot"></span>
-        Sleeping · Listening for “Hey Cloudy” or Clap
-      </p>
-    </main>
+      <div class="wake-stage" id="wakeStage" hidden>
+        <div class="zoom-layer" id="zoomLayer">
+          <div class="orb-wrap">
+            <div class="orb-rings"></div>
+            <div class="orb" id="orb">
+              <div class="orb-core"></div>
+            </div>
+          </div>
+          <svg class="neural wake-neural" id="wakeNeural" viewBox="0 0 1000 600"></svg>
+        </div>
+        <p class="sleep-status" id="sleepStatus">
+          <span class="dot"></span>
+          Sleeping · Listening for “Hey Cloudy” or Clap
+        </p>
+        <p class="wake-transcript" id="wakeTranscript"></p>
+      </div>
+    </section>
 
-    <script src="./main.js" type="module"></script>
+    <!-- Welcome / Onboarding -->
+    <section class="screen" id="screen-welcome" data-screen-panel="welcome" hidden>
+      <div class="welcome">
+        <p class="eyebrow">Welcome</p>
+        <h1>What do you want to build today?</h1>
+        <p class="lede">Select everything that applies. Cloudy will shape your workspace around it.</p>
+        <div class="goal-grid" id="goalGrid"></div>
+        <div class="welcome-foot">
+          <p class="selection-count" id="selectionCount">0 selected</p>
+          <button type="button" class="btn primary" id="confirmGoals" disabled>
+            Continue with Cloudy
+          </button>
+        </div>
+        <p class="cloudy-line" id="welcomeLine" hidden>
+          Great. I’ll build your workspace around these goals.
+        </p>
+      </div>
+    </section>
+
+    <!-- Main OS -->
+    <section class="screen os" id="screen-os" data-screen-panel="os" hidden>
+      <aside class="rail">
+        <div class="rail-brand">
+          <span class="rail-orb"></span>
+          <div>
+            <strong>Cloudy</strong>
+            <small>AI OS</small>
+          </div>
+        </div>
+        <nav class="rail-nav" id="railNav"></nav>
+        <button type="button" class="btn build-btn" id="buildBtn">
+          “Cloudy, build me a trading SaaS.”
+        </button>
+      </aside>
+
+      <div class="os-main">
+        <header class="os-top">
+          <div>
+            <p class="view-kicker" id="viewKicker">World</p>
+            <h2 id="viewTitle">Living brain</h2>
+          </div>
+          <div class="os-top-right">
+            <span class="chip" id="goalChip">Goals ready</span>
+            <span class="chip live"><span class="pulse"></span> Online</span>
+          </div>
+        </header>
+
+        <div class="view" id="view-world" data-view="world"></div>
+        <div class="view" id="view-configure" data-view="configure" hidden></div>
+        <div class="view" id="view-knowledge" data-view="knowledge" hidden></div>
+        <div class="view" id="view-skills" data-view="skills" hidden></div>
+        <div class="view" id="view-integrations" data-view="integrations" hidden></div>
+        <div class="view" id="view-automations" data-view="automations" hidden></div>
+        <div class="view" id="view-portals" data-view="portals" hidden></div>
+        <div class="view" id="view-settings" data-view="settings" hidden></div>
+      </div>
+
+      <aside class="inspector" id="inspector">
+        <p class="panel-label">Inspector</p>
+        <div id="inspectorBody">
+          <p class="muted">Select a node, agent, or skill to inspect it.</p>
+        </div>
+      </aside>
+    </section>
+
+    <!-- Build overlay -->
+    <div class="build-overlay" id="buildOverlay" hidden>
+      <div class="build-card">
+        <p class="eyebrow">Autonomous build</p>
+        <h3>Cloudy, build me a trading SaaS.</h3>
+        <ol id="buildSteps"></ol>
+        <button type="button" class="btn ghost" id="closeBuild" hidden>Enter workspace</button>
+      </div>
+    </div>
+
+    <script type="module" src="./main.js"></script>
   </body>
 </html>
