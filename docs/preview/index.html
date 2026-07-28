@@ -3,169 +3,77 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Zero — Personal AI Assistant</title>
+    <title>Cloudy — Wake Word & Clap Activation</title>
     <meta
       name="description"
-      content="Zero is your always-on desktop AI butler. Voice, memory, business awareness, real actions."
+      content="Cloudy stays asleep until awakened by Hey Cloudy or a clap."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Outfit:wght@300;400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600&family=Rajdhani:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
-  <body>
-    <div class="atmosphere" aria-hidden="true"></div>
-    <div class="grain" aria-hidden="true"></div>
+  <body data-state="boot">
+    <div id="bloom" aria-hidden="true"></div>
+    <canvas id="fx" aria-hidden="true"></canvas>
 
-    <header class="topbar">
-      <div class="brand-mark" aria-hidden="true"></div>
-      <nav>
-        <a href="#hud">HUD</a>
-        <a href="#phases">Progress</a>
-        <a href="#stack">Stack</a>
-      </nav>
-      <span class="status-pill"><span class="pulse"></span> Phase 2 online</span>
-    </header>
+    <div class="gate" id="gate">
+      <p class="gate-brand">Cloudy</p>
+      <p class="gate-copy">
+        Enable the microphone to idle in sleep mode.<br />
+        Wake with <strong>Hey Cloudy</strong> or a <strong>clap</strong>.
+      </p>
+      <button type="button" id="enableBtn" class="gate-btn">Enable listening</button>
+      <p class="gate-note" id="gateNote"></p>
+    </div>
 
-    <main>
-      <section class="hero" id="top">
-        <p class="eyebrow">Always-on personal AI</p>
-        <h1 class="brand">Zero</h1>
-        <p class="lede">
-          A calm British butler for your business — voice, memory, and real actions on your
-          desktop.
-        </p>
-        <div class="cta-row">
-          <a class="cta primary" href="#hud">Preview the HUD</a>
-          <a class="cta ghost" href="#phases">See what we’ve built</a>
+    <main class="stage" id="stage" hidden>
+      <div class="zoom-layer" id="zoomLayer">
+        <div class="orb-wrap" id="orbWrap">
+          <div class="orb-rings" id="orbRings" aria-hidden="true"></div>
+          <div class="orb" id="orb">
+            <div class="orb-core"></div>
+            <div class="orb-sheen"></div>
+          </div>
         </div>
-      </section>
 
-      <section class="hud-section" id="hud" aria-label="Zero HUD preview">
-        <div class="hud">
-          <aside class="hud-rail">
-            <div class="rail-block">
-              <span class="rail-label">Microphone</span>
-              <div class="mic" data-state="idle" aria-live="polite">
-                <div class="mic-ring"></div>
-                <div class="mic-core"></div>
-              </div>
-              <span class="mic-caption">Listening for “Hey Zero”</span>
-            </div>
-            <div class="rail-block">
-              <span class="rail-label">Waveform</span>
-              <canvas id="wave" width="220" height="64" aria-hidden="true"></canvas>
-            </div>
-            <div class="rail-block">
-              <span class="rail-label">Current agent</span>
-              <p class="agent-name" id="agentName">Orchestrator</p>
-            </div>
-            <div class="rail-block">
-              <span class="rail-label">Memory</span>
-              <div class="meter"><span style="width: 38%"></span></div>
-              <p class="meter-caption">SQLite + LanceDB · Phase 4</p>
-            </div>
-          </aside>
+        <svg class="neural" id="neural" viewBox="0 0 1000 600" aria-hidden="true"></svg>
 
-          <div class="hud-main">
-            <div class="hud-chrome">
-              <span>Conversation</span>
-              <span class="chrome-right" id="clock"></span>
-            </div>
-            <div class="timeline" id="timeline" aria-live="polite"></div>
-            <div class="composer">
-              <button type="button" class="demo-btn" id="playDemo">Play evening recap demo</button>
-              <p class="composer-hint">Simulated stream · no API key required for this preview</p>
-            </div>
+        <div class="hud" id="hud">
+          <header class="hud-top">
+            <span class="hud-brand">Cloudy</span>
+            <span class="hud-chip" id="modeChip">SLEEP</span>
+          </header>
+
+          <div class="hud-panel left" id="panelLeft">
+            <p class="panel-label">Sensors</p>
+            <ul>
+              <li>Wake phrase · Hey Cloudy</li>
+              <li>Clap · single / double</li>
+              <li id="micLevelLabel">Mic energy · 0%</li>
+            </ul>
           </div>
 
-          <aside class="hud-side">
-            <span class="rail-label">Live tool activity</span>
-            <ul class="tools" id="toolFeed"></ul>
-            <span class="rail-label spaced">Tonight’s picture</span>
-            <ul class="metrics">
-              <li><strong>+3</strong> new clients</li>
-              <li><strong>+$2,600</strong> MRR</li>
-              <li><strong>5.8×</strong> Meta ROAS</li>
-              <li><strong>3</strong> meetings booked</li>
-            </ul>
-          </aside>
+          <div class="hud-panel right" id="panelRight">
+            <p class="panel-label">Activity</p>
+            <ul id="activityLog"></ul>
+          </div>
+
+          <div class="hud-bottom" id="panelBottom">
+            <canvas id="wave" width="640" height="56" aria-hidden="true"></canvas>
+            <p class="transcript" id="transcript"></p>
+          </div>
         </div>
-      </section>
+      </div>
 
-      <section class="phases" id="phases">
-        <h2>Where we are</h2>
-        <p class="section-lede">Built in phases. Only the green ones ship in the repo today.</p>
-        <ol class="phase-list">
-          <li class="done">
-            <span class="num">01</span>
-            <div>
-              <h3>Scaffold</h3>
-              <p>Monorepo, strict TypeScript, config validation, package boundaries.</p>
-            </div>
-          </li>
-          <li class="done">
-            <span class="num">02</span>
-            <div>
-              <h3>Core agent</h3>
-              <p>Claude plan → tools → reflect → retry, swarm merge, <code>pnpm zero --ask</code>.</p>
-            </div>
-          </li>
-          <li>
-            <span class="num">03</span>
-            <div>
-              <h3>Voice</h3>
-              <p>Wake word, Deepgram STT, ElevenLabs streaming TTS.</p>
-            </div>
-          </li>
-          <li>
-            <span class="num">04</span>
-            <div>
-              <h3>Memory</h3>
-              <p>SQLite long-term store + LanceDB, auto-load <code>business/daily</code>.</p>
-            </div>
-          </li>
-          <li>
-            <span class="num">05</span>
-            <div>
-              <h3>Tools</h3>
-              <p>Calendar, CRM, ads, email, browser, research — real actions.</p>
-            </div>
-          </li>
-          <li>
-            <span class="num">06</span>
-            <div>
-              <h3>Desktop HUD</h3>
-              <p>Electron tray app — this web page is the visual stand-in until then.</p>
-            </div>
-          </li>
-        </ol>
-      </section>
-
-      <section class="stack" id="stack">
-        <h2>Locked stack</h2>
-        <p class="section-lede">Decisions already made so later phases don’t thrash.</p>
-        <ul class="stack-list">
-          <li>Electron desktop shell</li>
-          <li>Claude Sonnet 5 brain</li>
-          <li>Deepgram → Whisper STT</li>
-          <li>ElevenLabs → Fish TTS</li>
-          <li>Porcupine wake word</li>
-          <li>SQLite + LanceDB memory</li>
-        </ul>
-      </section>
-    </main>
-
-    <footer>
-      <p>Zero · javas repo · butler mode engaged</p>
-      <p class="fine">
-        Run locally: <code>pnpm zero --ask "Good evening Zero."</code> · needs
-        <code>ANTHROPIC_API_KEY</code> for live replies
+      <p class="sleep-status" id="sleepStatus">
+        <span class="dot"></span>
+        Sleeping · Listening for “Hey Cloudy” or Clap
       </p>
-    </footer>
+    </main>
 
     <script src="./main.js" type="module"></script>
   </body>

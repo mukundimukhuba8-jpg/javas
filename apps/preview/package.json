@@ -5,6 +5,7 @@
   "description": "Web HUD preview for Zero — visual stand-in until Electron Phase 6",
   "scripts": {
     "start": "npx --yes serve . -p 4173",
-    "dev": "npx --yes serve . -p 4173"
+    "dev": "npx --yes serve . -p 4173",
+    "build": "node -e \"console.log('static preview — nothing to compile')\""
   }
 }
