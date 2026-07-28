@@ -2,18 +2,19 @@
 
 Personal AI desktop assistant — calm, capable, always on.
 
-Zero is designed to feel like a British butler: concise, proactive, and never robotic. This repository is a **production-oriented monorepo**. Phase 1 delivers the scaffold, package boundaries, configuration validation, and a runnable health bootstrap. Feature work lands in later phases.
+Zero is designed to feel like a British butler: concise, proactive, and never robotic. This repository is a **production-oriented monorepo**. Phase 1 delivered the scaffold; **Phase 2** wires the Claude reasoning loop, tool use, streaming, and specialist swarm merge.
 
 ## Quick start
 
 ```bash
 pnpm install          # or: npm install -g pnpm && pnpm install
-cp .env.example .env  # add keys as you enable integrations
+cp .env.example .env  # add ANTHROPIC_API_KEY for live replies
 pnpm build
-pnpm zero             # validates config, boots stubs, prints health
+pnpm zero             # health bootstrap
+pnpm zero --ask "Good evening Zero."
 ```
 
-`npm run zero` works the same once dependencies are installed (npm will run the root script).
+`npm run zero` works the same once dependencies are installed.
 
 ## Requirements
 
@@ -37,14 +38,15 @@ business/daily/       Markdown daily business context
 memory/sqlite|vectors Runtime data directories
 scripts/zero.ts       `pnpm zero` entrypoint
 docs/                 Architecture and subsystem docs
+CLAUDE.md             Production system prompt
 ```
 
 ## Phased delivery
 
 | Phase | Focus                                                    | Status      |
 | ----- | -------------------------------------------------------- | ----------- |
-| 1     | Monorepo scaffold, strict TS, lint/format, stubs, config | **Current** |
-| 2     | Core agent — Claude tool use, planner, reflection        | Next        |
+| 1     | Monorepo scaffold, strict TS, lint/format, stubs, config | Done        |
+| 2     | Core agent — Claude tool use, planner, reflection        | **Current** |
 | 3     | Voice — wake word, Deepgram, ElevenLabs streaming        | Pending     |
 | 4     | Memory — SQLite + LanceDB, daily context load            | Pending     |
 | 5     | Tool integrations                                        | Pending     |
@@ -53,20 +55,23 @@ docs/                 Architecture and subsystem docs
 
 ## Scripts
 
-| Command          | Purpose                                |
-| ---------------- | -------------------------------------- |
-| `pnpm zero`      | Build + start health bootstrap         |
-| `pnpm build`     | Compile all packages / services / apps |
-| `pnpm typecheck` | Typecheck without emit                 |
-| `pnpm lint`      | ESLint (zero warnings)                 |
-| `pnpm format`    | Prettier write                         |
-| `pnpm test`      | Vitest                                 |
+| Command                 | Purpose                                |
+| ----------------------- | -------------------------------------- |
+| `pnpm zero`             | Build + start health bootstrap         |
+| `pnpm zero --ask "..."` | One-shot streamed agent turn           |
+| `pnpm build`            | Compile all packages / services / apps |
+| `pnpm typecheck`        | Typecheck without emit                 |
+| `pnpm lint`             | ESLint (zero warnings)                 |
+| `pnpm format`           | Prettier write                         |
+| `pnpm test`             | Vitest                                 |
 
 ## Documentation
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — package boundaries and runtime flow
 - [docs/INSTALL.md](./docs/INSTALL.md) — API keys and setup
-- Further docs (`CLAUDE.md`, `VOICE.md`, …) land with their phases
+- [CLAUDE.md](./CLAUDE.md) — production system prompt
+- [docs/SYSTEM_PROMPT.md](./docs/SYSTEM_PROMPT.md) — prompt assembly
+- Further docs (`VOICE.md`, `MEMORY.md`, `TOOLS.md`) land with their phases
 
 ## License
 

@@ -1,8 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * `npm run zero` / `pnpm zero`
- * Phase 1: validate config, boot stubs, print health report.
- * Later phases: desktop + voice + memory + tools as a single always-on process.
+ * Phase 2: validate config, boot agent + stubs, optional `--ask` one-shot.
  */
 import { createLogger, isOk } from "@zero/shared";
 import { loadConfig } from "@zero/config";
@@ -13,14 +12,21 @@ import { createToolRegistry, manifest as toolsManifest } from "@zero/tools";
 import { createHudController, manifest as uiManifest } from "@zero/ui";
 import { createDesktopRuntime } from "@zero/desktop";
 
+function readFlag(name: string): string | undefined {
+  const index = process.argv.indexOf(name);
+  if (index === -1) return undefined;
+  return process.argv[index + 1];
+}
+
 const isDev = process.argv.includes("--dev");
+const ask = readFlag("--ask");
 
 async function main(): Promise<void> {
   // eslint-disable-next-line no-console
   console.log(`
 ╔══════════════════════════════════════════╗
 ║   Zero — Personal AI Assistant           ║
-║   Phase 1 scaffold · always-on ready     ║
+║   Phase 2 · core agent online            ║
 ╚══════════════════════════════════════════╝
 `);
 
@@ -40,14 +46,26 @@ async function main(): Promise<void> {
   logger.info("Starting Zero", {
     mode: isDev ? "development" : env.NODE_ENV,
     alwaysOn: env.ZERO_ALWAYS_ON,
+    model: env.ANTHROPIC_MODEL,
   });
 
-  const agent = createAgentOrchestrator();
+  const tools = createToolRegistry();
+  const agentOptions = {
+    ...(env.ANTHROPIC_API_KEY !== undefined ? { apiKey: env.ANTHROPIC_API_KEY } : {}),
+    model: env.ANTHROPIC_MODEL,
+    maxTokens: env.ANTHROPIC_MAX_TOKENS,
+    maxIterations: env.AGENT_MAX_ITERATIONS,
+    maxRetries: env.AGENT_MAX_RETRIES,
+    tools,
+    logLevel: env.ZERO_LOG_LEVEL,
+    registerBuiltins: true,
+  };
+
+  const agent = createAgentOrchestrator(agentOptions);
   const memory = createMemoryService();
   const voice = createVoiceEngine();
-  const tools = createToolRegistry();
   const hud = createHudController();
-  const desktop = createDesktopRuntime();
+  const desktop = createDesktopRuntime({ agent, tools });
 
   const packages = [agentManifest, memoryManifest, voiceManifest, toolsManifest, uiManifest];
   const health = await Promise.all([
@@ -84,12 +102,37 @@ async function main(): Promise<void> {
     console.log(`  ${mark} ${integration.id.padEnd(14)} ${detail}`);
   }
 
+  // eslint-disable-next-line no-console
+  console.log("\nBuiltin tools");
+  for (const tool of agent.getTools().list()) {
+    // eslint-disable-next-line no-console
+    console.log(`  · ${tool.name}`);
+  }
+
   await desktop.start();
+
+  if (ask) {
+    // eslint-disable-next-line no-console
+    console.log(`\nYou: ${ask}\n`);
+    process.stdout.write("Zero: ");
+    for await (const event of agent.runStream(ask)) {
+      if (event.type === "text_delta") {
+        process.stdout.write(event.text);
+      } else if (event.type === "tool_call") {
+        // eslint-disable-next-line no-console
+        console.log(`\n  ↳ tool ${event.request.name}`);
+      } else if (event.type === "phase") {
+        logger.debug("phase", { phase: event.phase, detail: event.detail });
+      }
+    }
+    process.stdout.write("\n");
+  }
 
   // eslint-disable-next-line no-console
   console.log(`
-Zero Phase 1 is online.
-Next: Phase 2 — core agent (Claude tool-use loop).
+Zero Phase 2 is online.
+Try: pnpm zero --ask "Good evening Zero."
+Next: Phase 3 — voice (wake word, Deepgram, ElevenLabs).
 `);
 }
 

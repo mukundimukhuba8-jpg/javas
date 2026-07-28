@@ -14,30 +14,34 @@ pnpm build
 pnpm zero
 ```
 
-You should see package status (`stub`), subsystem health checks, and an integrations matrix. Missing keys are expected in Phase 1.
+You should see package status, subsystem health checks, and an integrations matrix. For live agent replies, set `ANTHROPIC_API_KEY` and try `pnpm zero --ask "Good evening Zero."`.
 
 ## API keys
 
 Fill only what you need for the phase you are enabling. Never commit `.env`.
 
-| Variable                                        | Used by              | Phase                      |
-| ----------------------------------------------- | -------------------- | -------------------------- |
-| `ANTHROPIC_API_KEY`                             | Brain / agent        | 2 (required in production) |
-| `DEEPGRAM_API_KEY`                              | Streaming STT        | 3                          |
-| `WHISPER_MODEL_PATH`                            | Local STT fallback   | 3                          |
-| `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID`    | Streaming TTS        | 3                          |
-| `FISH_AUDIO_API_KEY`                            | TTS fallback         | 3                          |
-| `PORCUPINE_ACCESS_KEY`                          | Wake word            | 3                          |
-| `TELEGRAM_BOT_TOKEN`                            | Messaging            | 5                          |
-| `GOOGLE_CLIENT_ID` / `SECRET` / `REFRESH_TOKEN` | Calendar, Gmail, Ads | 5                          |
-| `META_*`                                        | Meta Ads             | 5                          |
-| `NOTION_API_KEY`                                | CRM / docs           | 5                          |
-| `AIRTABLE_API_KEY` / `AIRTABLE_BASE_ID`         | CRM                  | 5                          |
-| `RESEND_API_KEY`                                | Transactional email  | 5                          |
-| `TAVILY_API_KEY`                                | Research             | 5                          |
-| `BRAVE_SEARCH_API_KEY`                          | Research             | 5                          |
-| `CALCOM_API_KEY`                                | Scheduling           | 5                          |
-| `SQLITE_PATH` / `VECTOR_DB_*`                   | Memory               | 4                          |
+| Variable                                        | Used by                              | Phase                      |
+| ----------------------------------------------- | ------------------------------------ | -------------------------- |
+| `ANTHROPIC_API_KEY`                             | Brain / agent                        | 2 (required in production) |
+| `ANTHROPIC_MODEL`                               | Model id (default `claude-sonnet-5`) | 2                          |
+| `ANTHROPIC_MAX_TOKENS`                          | Completion budget                    | 2                          |
+| `AGENT_MAX_ITERATIONS`                          | Tool-loop cap per attempt            | 2                          |
+| `AGENT_MAX_RETRIES`                             | Reflection-driven retries            | 2                          |
+| `DEEPGRAM_API_KEY`                              | Streaming STT                        | 3                          |
+| `WHISPER_MODEL_PATH`                            | Local STT fallback                   | 3                          |
+| `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID`    | Streaming TTS                        | 3                          |
+| `FISH_AUDIO_API_KEY`                            | TTS fallback                         | 3                          |
+| `PORCUPINE_ACCESS_KEY`                          | Wake word                            | 3                          |
+| `TELEGRAM_BOT_TOKEN`                            | Messaging                            | 5                          |
+| `GOOGLE_CLIENT_ID` / `SECRET` / `REFRESH_TOKEN` | Calendar, Gmail, Ads                 | 5                          |
+| `META_*`                                        | Meta Ads                             | 5                          |
+| `NOTION_API_KEY`                                | CRM / docs                           | 5                          |
+| `AIRTABLE_API_KEY` / `AIRTABLE_BASE_ID`         | CRM                                  | 5                          |
+| `RESEND_API_KEY`                                | Transactional email                  | 5                          |
+| `TAVILY_API_KEY`                                | Research                             | 5                          |
+| `BRAVE_SEARCH_API_KEY`                          | Research                             | 5                          |
+| `CALCOM_API_KEY`                                | Scheduling                           | 5                          |
+| `SQLITE_PATH` / `VECTOR_DB_*`                   | Memory                               | 4                          |
 
 ## Daily business context
 

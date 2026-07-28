@@ -9,6 +9,10 @@ export const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 
   ANTHROPIC_API_KEY: optionalString,
+  ANTHROPIC_MODEL: z.string().default("claude-sonnet-5"),
+  ANTHROPIC_MAX_TOKENS: z.coerce.number().int().positive().default(8192),
+  AGENT_MAX_ITERATIONS: z.coerce.number().int().positive().default(12),
+  AGENT_MAX_RETRIES: z.coerce.number().int().nonnegative().default(2),
 
   DEEPGRAM_API_KEY: optionalString,
   WHISPER_MODEL_PATH: optionalString,
