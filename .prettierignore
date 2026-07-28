@@ -1,0 +1,7 @@
+dist
+node_modules
+pnpm-lock.yaml
+memory/sqlite
+memory/vectors
+coverage
+*.tsbuildinfo

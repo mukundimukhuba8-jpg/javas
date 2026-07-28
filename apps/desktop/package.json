@@ -1,0 +1,30 @@
+{
+  "name": "@zero/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/main.js",
+  "types": "./dist/main.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/main.d.ts",
+      "import": "./dist/main.js",
+      "default": "./dist/main.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@zero/shared": "workspace:*",
+    "@zero/config": "workspace:*",
+    "@zero/agent": "workspace:*",
+    "@zero/memory": "workspace:*",
+    "@zero/voice": "workspace:*",
+    "@zero/tools": "workspace:*",
+    "@zero/ui": "workspace:*"
+  }
+}

@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+*.tsbuildinfo
+out/
+release/
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Runtime data
+memory/sqlite/*
+!memory/sqlite/.gitkeep
+memory/vectors/*
+!memory/vectors/.gitkeep
+logs/
+*.log
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+Thumbs.db
+
+# Test / coverage
+coverage/
+.vitest/
+
+# Electron
+apps/desktop/dist-electron/

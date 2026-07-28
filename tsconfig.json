@@ -1,0 +1,23 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/shared" },
+    { "path": "./packages/config" },
+    { "path": "./packages/agent" },
+    { "path": "./packages/memory" },
+    { "path": "./packages/voice" },
+    { "path": "./packages/tools" },
+    { "path": "./packages/ui" },
+    { "path": "./services/calendar" },
+    { "path": "./services/telegram" },
+    { "path": "./services/gmail" },
+    { "path": "./services/meta-ads" },
+    { "path": "./services/google-ads" },
+    { "path": "./services/resend" },
+    { "path": "./services/notion" },
+    { "path": "./services/airtable" },
+    { "path": "./services/tavily" },
+    { "path": "./services/brave-search" },
+    { "path": "./apps/desktop" }
+  ]
+}
