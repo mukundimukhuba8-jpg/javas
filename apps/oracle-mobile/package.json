@@ -6,6 +6,7 @@
     "@expo/metro-runtime": "^58.0.14",
     "@expo/vector-icons": "^15.1.1",
     "expo": "~58.0.14",
+    "expo-asset": "^58.0.16",
     "expo-font": "^58.0.8",
     "expo-linear-gradient": "^58.0.3",
     "expo-status-bar": "~58.0.3",
