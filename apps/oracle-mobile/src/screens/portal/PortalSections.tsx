@@ -7,16 +7,17 @@ import {
   Text,
   TextInput,
   View,
-  type TextStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ACCENT_PRESETS, useTheme, hexToRgba } from '../../theme/ThemeContext';
+import { ACCENT_PRESETS, useTheme } from '../../theme/ThemeContext';
 import { portalFonts } from '../../theme/portalFonts';
 import type { PortalSectionId } from './portalSections';
+import { ea } from './eaTradeTheme';
 
 type Props = {
   section: PortalSectionId;
   fontsReady: boolean;
+  onNavigate: (id: PortalSectionId) => void;
 };
 
 async function copyText(value: string): Promise<boolean> {
@@ -35,93 +36,171 @@ function useFf(ready: boolean) {
   return ready ? portalFonts : null;
 }
 
-function Surface({
-  children,
-  accent,
+function Card({ children, style }: { children: ReactNode; style?: object }) {
+  return <View style={[styles.card, style]}>{children}</View>;
+}
+
+function IconTile({
+  color,
+  soft,
+  name,
 }: {
-  children: ReactNode;
-  accent?: string;
+  color: string;
+  soft: string;
+  name: keyof typeof Ionicons.glyphMap;
 }) {
   return (
-    <View
-      style={[
-        styles.surface,
-        accent ? { borderColor: hexToRgba(accent, 0.28) } : null,
-      ]}
-    >
-      {children}
+    <View style={[styles.iconTile, { backgroundColor: soft }]}>
+      <Ionicons name={name} size={18} color={color} />
     </View>
   );
 }
 
-function Field({
-  label,
+function FieldLabel({ text, fontsReady }: { text: string; fontsReady: boolean }) {
+  const f = useFf(fontsReady);
+  return <Text style={[styles.fieldLabel, f && { fontFamily: f.uiBold }]}>{text}</Text>;
+}
+
+function Input({
   value,
   onChangeText,
   placeholder,
   fontsReady,
-  keyboardType,
 }: {
-  label: string;
   value: string;
   onChangeText: (v: string) => void;
   placeholder?: string;
   fontsReady: boolean;
-  keyboardType?: 'default' | 'email-address' | 'numeric';
 }) {
-  const { colors } = useTheme();
   const f = useFf(fontsReady);
   return (
-    <View style={styles.field}>
-      <Text style={[styles.fieldLabel, f && { fontFamily: f.uiBold }]}>{label}</Text>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor="rgba(148,163,184,0.45)"
-        keyboardType={keyboardType}
-        autoCapitalize={keyboardType === 'email-address' ? 'none' : 'sentences'}
-        style={[
-          styles.input,
-          { borderColor: hexToRgba(colors.neon, 0.28) },
-          f && { fontFamily: f.uiMed },
-        ]}
-      />
-    </View>
+    <TextInput
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder}
+      placeholderTextColor={ea.textMuted}
+      style={[styles.input, f && { fontFamily: f.uiMed }]}
+    />
   );
 }
 
-function PrimaryButton({
-  label,
+function SelectRow({
+  value,
+  placeholder,
   onPress,
   fontsReady,
+}: {
+  value: string;
+  placeholder: string;
+  onPress: () => void;
+  fontsReady: boolean;
+}) {
+  const f = useFf(fontsReady);
+  return (
+    <Pressable onPress={onPress} style={styles.select}>
+      <Text
+        style={[
+          styles.selectText,
+          f && { fontFamily: f.uiMed },
+          !value && { color: ea.textMuted },
+        ]}
+      >
+        {value || placeholder}
+      </Text>
+      <Ionicons name="chevron-expand" size={16} color={ea.textSecondary} />
+    </Pressable>
+  );
+}
+
+function ConfirmBox({
+  label,
+  checked,
+  onToggle,
+  fontsReady,
+}: {
+  label: string;
+  checked: boolean;
+  onToggle: () => void;
+  fontsReady: boolean;
+}) {
+  const f = useFf(fontsReady);
+  return (
+    <Pressable
+      onPress={onToggle}
+      style={[styles.confirmBox, checked && styles.confirmBoxOn]}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+    >
+      <Text style={[styles.confirmText, f && { fontFamily: f.uiMed }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function PrimaryBtn({
+  label,
+  onPress,
   icon,
+  fontsReady,
+  color = ea.primary,
 }: {
   label: string;
   onPress: () => void;
-  fontsReady: boolean;
   icon?: keyof typeof Ionicons.glyphMap;
+  fontsReady: boolean;
+  color?: string;
 }) {
-  const { colors } = useTheme();
   const f = useFf(fontsReady);
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.primaryBtn, { backgroundColor: colors.neon }]}
+      style={[
+        styles.primaryBtn,
+        { backgroundColor: color },
+        Platform.select({
+          web: { boxShadow: `0 0 22px ${color}66` } as object,
+          default: {},
+        }),
+      ]}
       accessibilityRole="button"
     >
-      {icon ? <Ionicons name={icon} size={16} color="#061018" /> : null}
+      {icon ? <Ionicons name={icon} size={16} color="#fff" /> : null}
       <Text style={[styles.primaryBtnText, f && { fontFamily: f.uiBold }]}>{label}</Text>
     </Pressable>
   );
 }
 
-export function PortalSectionBody({ section, fontsReady }: Props) {
+function SecondaryBtn({
+  label,
+  onPress,
+  fontsReady,
+}: {
+  label: string;
+  onPress: () => void;
+  fontsReady: boolean;
+}) {
+  const f = useFf(fontsReady);
+  return (
+    <Pressable onPress={onPress} style={styles.secondaryBtn} accessibilityRole="button">
+      <Text style={[styles.secondaryBtnText, f && { fontFamily: f.uiBold }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function FooterNote({ fontsReady }: { fontsReady: boolean }) {
+  const f = useFf(fontsReady);
+  return (
+    <Text style={[styles.footerNote, f && { fontFamily: f.ui }]}>
+      Copyright © 2026 All Rights Reserved. EA Trade.
+    </Text>
+  );
+}
+
+export function PortalSectionBody({ section, fontsReady, onNavigate }: Props) {
   switch (section) {
     case 'dashboard':
-      return <DashboardSection fontsReady={fontsReady} />;
+      return <DashboardSection fontsReady={fontsReady} onNavigate={onNavigate} />;
     case 'create-keys':
-      return <CreateKeysSection fontsReady={fontsReady} />;
+      return <CreateKeysSection fontsReady={fontsReady} onNavigate={onNavigate} />;
     case 'expert-adviser':
       return <ExpertAdviserSection fontsReady={fontsReady} />;
     case 'reactivate-email':
@@ -137,199 +216,137 @@ export function PortalSectionBody({ section, fontsReady }: Props) {
     case 'reactivate-license':
       return <ReactivateLicenseSection fontsReady={fontsReady} />;
     case 'keys-analytics':
-      return <KeysAnalyticsSection fontsReady={fontsReady} />;
+      return <KeysAnalyticsSection fontsReady={fontsReady} onNavigate={onNavigate} />;
     default:
       return null;
   }
 }
 
-function DashboardSection({ fontsReady }: { fontsReady: boolean }) {
-  const { colors } = useTheme();
+function DashboardSection({
+  fontsReady,
+  onNavigate,
+}: {
+  fontsReady: boolean;
+  onNavigate: (id: PortalSectionId) => void;
+}) {
   const f = useFf(fontsReady);
   const kpis = [
-    { label: 'Users', value: '2,846', delta: '+4.2%', spark: [4, 5, 5, 7, 6, 8, 9] },
-    { label: 'Keys issued', value: '12,480', delta: '+8.1%', spark: [3, 4, 6, 5, 8, 7, 10] },
-    { label: 'Active licenses', value: '9,214', delta: '+2.6%', spark: [6, 6, 7, 7, 8, 8, 9] },
-    { label: 'Affiliates', value: '318', delta: '+12', spark: [2, 3, 3, 4, 5, 6, 7] },
-    { label: 'Revenue · 30d', value: '$84.2k', delta: '+11%', spark: [5, 6, 5, 8, 7, 9, 10] },
-    { label: 'Activations', value: '1,902', delta: '+6.4%', spark: [4, 6, 5, 7, 6, 8, 8] },
+    {
+      label: 'TOTAL LICENSES',
+      value: '154',
+      sub: 'All-time keys issued',
+      color: ea.purple,
+      soft: ea.purpleSoft,
+      icon: 'key' as const,
+      badge: '+12%',
+    },
+    {
+      label: 'ACTIVE NOW',
+      value: '153',
+      sub: 'Currently active users',
+      color: ea.teal,
+      soft: ea.tealSoft,
+      icon: 'checkmark-circle' as const,
+    },
+    {
+      label: 'EXPERT ADVISORS',
+      value: '1',
+      sub: 'EAs on your account',
+      color: ea.orange,
+      soft: ea.orangeSoft,
+      icon: 'hardware-chip' as const,
+    },
+    {
+      label: 'LICENSE CAP',
+      value: '10000',
+      sub: 'Maximum available',
+      color: ea.purple,
+      soft: ea.purpleSoft,
+      icon: 'infinite' as const,
+    },
   ];
-  const week = [
-    { label: 'Mon', v: 0.42 },
-    { label: 'Tue', v: 0.58 },
-    { label: 'Wed', v: 0.51 },
-    { label: 'Thu', v: 0.76 },
-    { label: 'Fri', v: 0.69 },
-    { label: 'Sat', v: 0.44 },
-    { label: 'Sun', v: 0.61 },
+
+  const actions: {
+    title: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    target: PortalSectionId;
+  }[] = [
+    { title: 'Generate Key', icon: 'key-outline', target: 'create-keys' },
+    { title: 'Expert Advisors', icon: 'hardware-chip-outline', target: 'expert-adviser' },
+    { title: 'Key analytics', icon: 'trending-up-outline', target: 'keys-analytics' },
+    { title: 'Affiliate program', icon: 'git-network-outline', target: 'affiliate-program' },
+    { title: 'Reactivate license', icon: 'refresh-outline', target: 'reactivate-license' },
   ];
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.stack}
-      showsVerticalScrollIndicator={false}
-    >
-      <Text style={[styles.lead, f && { fontFamily: f.ui }]}>
-        Live console snapshot across licenses, affiliates, and activation volume.
-      </Text>
+    <ScrollView contentContainerStyle={styles.stack} showsVerticalScrollIndicator={false}>
+      {kpis.map((k) => (
+        <Card key={k.label}>
+          <View style={styles.kpiTop}>
+            <IconTile color={k.color} soft={k.soft} name={k.icon} />
+            {k.badge ? (
+              <View style={styles.trendBadge}>
+                <Text style={[styles.trendText, f && { fontFamily: f.uiBold }]}>{k.badge}</Text>
+              </View>
+            ) : null}
+          </View>
+          <Text style={[styles.kpiLabel, f && { fontFamily: f.uiBold }]}>{k.label}</Text>
+          <Text style={[styles.kpiValue, f && { fontFamily: f.display }]}>{k.value}</Text>
+          <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>{k.sub}</Text>
+        </Card>
+      ))}
 
-      <View style={styles.kpiGrid}>
-        {kpis.map((k) => {
-          const max = Math.max(...k.spark, 1);
-          const up = k.delta.trim().startsWith('+');
-          return (
-            <View
-              key={k.label}
-              style={[styles.kpi, { borderColor: hexToRgba(colors.neon, 0.2) }]}
+      <Card>
+        <View style={styles.cardHeadRow}>
+          <IconTile color={ea.purple} soft={ea.purpleSoft} name="flash" />
+          <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Quick Actions</Text>
+        </View>
+        <View style={styles.actionList}>
+          {actions.map((a) => (
+            <Pressable
+              key={a.title}
+              onPress={() => onNavigate(a.target)}
+              style={styles.actionRow}
+              accessibilityRole="button"
+              accessibilityLabel={a.title}
             >
-              <View style={styles.kpiTop}>
-                <Text style={[styles.kpiLabel, f && { fontFamily: f.uiMed }]}>{k.label}</Text>
-                <Text
-                  style={[
-                    styles.kpiDelta,
-                    f && { fontFamily: f.uiBold },
-                    { color: up ? '#3DFF9A' : '#FF8A8A' },
-                  ]}
-                >
-                  {k.delta}
-                </Text>
-              </View>
-              <Text style={[styles.kpiValue, f && { fontFamily: f.display }]}>{k.value}</Text>
-              <View style={styles.sparkRow}>
-                {k.spark.map((v, i) => (
-                  <View
-                    key={`${k.label}-${i}`}
-                    style={[
-                      styles.sparkBar,
-                      {
-                        height: 5 + (v / max) * 20,
-                        backgroundColor: hexToRgba(colors.neon, 0.25 + (v / max) * 0.6),
-                      },
-                    ]}
-                  />
-                ))}
-              </View>
-            </View>
-          );
-        })}
-      </View>
-
-      <Surface accent={colors.neon}>
-        <View style={styles.cardHead}>
-          <Text style={[styles.cardTitle, f && { fontFamily: f.displaySemi }]}>
-            Activations · 7 days
-          </Text>
-          <Text style={[styles.cardHint, f && { fontFamily: f.uiMed }, { color: colors.neon }]}>
-            Live feed
-          </Text>
-        </View>
-        <View style={styles.chartRow}>
-          {week.map((b) => (
-            <View key={b.label} style={styles.chartCol}>
-              <View style={styles.chartTrack}>
-                <View
-                  style={[
-                    styles.chartBar,
-                    {
-                      height: Math.max(8, Math.round(b.v * 120)),
-                      backgroundColor: colors.neon,
-                    },
-                  ]}
-                />
-              </View>
-              <Text style={[styles.chartLabel, f && { fontFamily: f.uiMed }]}>{b.label}</Text>
-            </View>
+              <IconTile color={ea.purple} soft={ea.purpleSoft} name={a.icon} />
+              <Text style={[styles.actionTitle, f && { fontFamily: f.uiMed }]}>{a.title}</Text>
+              <Ionicons name="chevron-forward" size={16} color={ea.textMuted} />
+            </Pressable>
           ))}
         </View>
-      </Surface>
-
-      <View style={styles.split}>
-        <Surface>
-          <Text style={[styles.cardTitle, f && { fontFamily: f.displaySemi }]}>System health</Text>
-          {[
-            ['License API', 'Operational'],
-            ['Email relay', 'Operational'],
-            ['MT5 bridge', 'Degraded'],
-            ['Affiliate payouts', 'Operational'],
-          ].map(([name, status]) => (
-            <View key={name} style={styles.rowBetween}>
-              <Text style={[styles.rowLeft, f && { fontFamily: f.uiMed }]}>{name}</Text>
-              <Text
-                style={[
-                  styles.rowRight,
-                  f && { fontFamily: f.uiBold },
-                  status === 'Degraded' && styles.warn,
-                ]}
-              >
-                {status}
-              </Text>
-            </View>
-          ))}
-        </Surface>
-        <Surface>
-          <Text style={[styles.cardTitle, f && { fontFamily: f.displaySemi }]}>
-            Recent actions
-          </Text>
-          {[
-            'Created 12 Pro keys · 2m ago',
-            'Reactivated ORC-9F2A · 18m ago',
-            'Affiliate rate → 25% · 1h ago',
-            'Disabled marco@ea.io · 3h ago',
-          ].map((line) => (
-            <Text key={line} style={[styles.listLine, f && { fontFamily: f.ui }]}>
-              {line}
-            </Text>
-          ))}
-        </Surface>
-      </View>
+      </Card>
+      <FooterNote fontsReady={fontsReady} />
     </ScrollView>
   );
 }
 
-type GeneratedKey = {
-  id: string;
-  key: string;
-  plan: string;
-  days: string;
-  email: string;
-  createdAt: string;
-};
-
-function CreateKeysSection({ fontsReady }: { fontsReady: boolean }) {
-  const { colors } = useTheme();
+function CreateKeysSection({
+  fontsReady,
+  onNavigate,
+}: {
+  fontsReady: boolean;
+  onNavigate: (id: PortalSectionId) => void;
+}) {
   const f = useFf(fontsReady);
-  const [plan, setPlan] = useState('Pro');
-  const [qty, setQty] = useState('1');
-  const [days, setDays] = useState('30');
-  const [email, setEmail] = useState('');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [keys, setKeys] = useState<GeneratedKey[]>([
-    {
-      id: 'seed-1',
-      key: 'ORC-A91K-7MQ2-PL4X',
-      plan: 'Pro',
-      days: '30',
-      email: 'ava@ea.io',
-      createdAt: 'seed',
-    },
-  ]);
-  const plans = ['Trial', 'Pro', 'Elite'];
+  const [name, setName] = useState('');
+  const [eaName, setEaName] = useState('THE ORACLE');
+  const [plan, setPlan] = useState('30 days');
+  const [emailOk, setEmailOk] = useState(false);
+  const [permOk, setPermOk] = useState(false);
+  const [generated, setGenerated] = useState<string | null>(null);
+  const [eaOpen, setEaOpen] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
+
+  const eas = ['THE ORACLE', 'Oracle Scalper', 'Oracle Swing'];
+  const plans = ['7 days', '30 days', '90 days', '1 year', 'Lifetime'];
 
   const generate = () => {
-    const n = Math.max(1, Math.min(20, Number(qty) || 1));
-    const stamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const created: GeneratedKey[] = Array.from({ length: n }, (_, i) => {
-      const chunk = () => Math.random().toString(36).slice(2, 6).toUpperCase();
-      return {
-        id: `${Date.now()}-${i}`,
-        key: `ORC-${chunk()}-${chunk()}-${chunk()}`,
-        plan,
-        days,
-        email: email.trim() || 'unassigned',
-        createdAt: stamp,
-      };
-    });
-    setKeys((prev) => [...created, ...prev].slice(0, 24));
+    if (!name.trim() || !permOk) return;
+    const chunk = () => Math.random().toString(36).slice(2, 5).toUpperCase();
+    const key = `${chunk()}-${chunk()}-${chunk()}-${chunk()}`;
+    setGenerated(key);
   };
 
   return (
@@ -338,195 +355,662 @@ function CreateKeysSection({ fontsReady }: { fontsReady: boolean }) {
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
     >
-      <Text style={[styles.lead, f && { fontFamily: f.ui }]}>
-        Issue license keys for a plan, duration, and optional user email. Keys stay in local
-        session memory.
-      </Text>
+      <Card>
+        <View style={styles.cardHeadRow}>
+          <IconTile color={ea.primary} soft={ea.primarySoft} name="key" />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Generate key</Text>
+            <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+              The key is tied to your EA and the customer name you enter below.
+            </Text>
+          </View>
+        </View>
 
-      <Surface accent={colors.neon}>
-        <Text style={[styles.cardTitle, f && { fontFamily: f.displaySemi }]}>
-          Key generator
+        <FieldLabel text="CUSTOMER / USER NAME" fontsReady={fontsReady} />
+        <Input
+          value={name}
+          onChangeText={setName}
+          placeholder="Customer full name"
+          fontsReady={fontsReady}
+        />
+
+        <FieldLabel text="EXPERT ADVISOR" fontsReady={fontsReady} />
+        <SelectRow
+          value={eaName}
+          placeholder="Select an EA"
+          fontsReady={fontsReady}
+          onPress={() => {
+            setEaOpen((v) => !v);
+            setPlanOpen(false);
+          }}
+        />
+        {eaOpen
+          ? eas.map((item) => (
+              <Pressable
+                key={item}
+                onPress={() => {
+                  setEaName(item);
+                  setEaOpen(false);
+                }}
+                style={styles.optionRow}
+              >
+                <Text style={[styles.optionText, f && { fontFamily: f.uiMed }]}>{item}</Text>
+              </Pressable>
+            ))
+          : null}
+
+        <FieldLabel text="PLAN DURATION" fontsReady={fontsReady} />
+        <SelectRow
+          value={plan}
+          placeholder="Select a plan"
+          fontsReady={fontsReady}
+          onPress={() => {
+            setPlanOpen((v) => !v);
+            setEaOpen(false);
+          }}
+        />
+        {planOpen
+          ? plans.map((item) => (
+              <Pressable
+                key={item}
+                onPress={() => {
+                  setPlan(item);
+                  setPlanOpen(false);
+                }}
+                style={styles.optionRow}
+              >
+                <Text style={[styles.optionText, f && { fontFamily: f.uiMed }]}>{item}</Text>
+              </Pressable>
+            ))
+          : null}
+
+        <ConfirmBox
+          label="SEND LICENSE KEY VIA EMAIL AFTER GENERATION"
+          checked={emailOk}
+          onToggle={() => setEmailOk((v) => !v)}
+          fontsReady={fontsReady}
+        />
+        <ConfirmBox
+          label="I CONFIRM THAT I HAVE PERMISSION TO GENERATE THIS LICENCE KEY."
+          checked={permOk}
+          onToggle={() => setPermOk((v) => !v)}
+          fontsReady={fontsReady}
+        />
+
+        <PrimaryBtn
+          label="Generate key"
+          icon="sparkles"
+          onPress={generate}
+          fontsReady={fontsReady}
+        />
+        <SecondaryBtn
+          label="View all keys"
+          onPress={() => onNavigate('keys-analytics')}
+          fontsReady={fontsReady}
+        />
+
+        {generated ? (
+          <View style={styles.keyResult}>
+            <Text style={[styles.fieldLabel, f && { fontFamily: f.uiBold }]}>GENERATED KEY</Text>
+            <Text style={[styles.keyMono, f && { fontFamily: f.monoBold }]}>{generated}</Text>
+            <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
+              {name || 'Customer'} · {eaName} · {plan}
+            </Text>
+          </View>
+        ) : null}
+      </Card>
+      <FooterNote fontsReady={fontsReady} />
+    </ScrollView>
+  );
+}
+
+function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
+  const f = useFf(fontsReady);
+  const [eaName, setEaName] = useState('');
+  const [selfHost, setSelfHost] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const [list, setList] = useState([{ name: 'THE ORACLE', type: 'Standard' }]);
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.stack}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      <Card>
+        <View style={styles.cardHeadRow}>
+          <IconTile color={ea.primary} soft={ea.primarySoft} name="add" />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>
+              New expert advisor
+            </Text>
+            <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+              Each EA gets its own secret licence code for your customers.
+            </Text>
+          </View>
+        </View>
+
+        <FieldLabel text="EA NAME" fontsReady={fontsReady} />
+        <Input
+          value={eaName}
+          onChangeText={setEaName}
+          placeholder="e.g. MyEA v2.0"
+          fontsReady={fontsReady}
+        />
+        <Text style={[styles.help, f && { fontFamily: f.ui }]}>
+          Include a version label if you ship multiple builds.
         </Text>
 
-        <Text style={[styles.fieldLabel, f && { fontFamily: f.uiBold }]}>Plan</Text>
-        <View style={styles.chipRow}>
-          {plans.map((p) => {
-            const selected = plan === p;
+        <Pressable
+          onPress={() => setSelfHost((v) => !v)}
+          style={[styles.warnBox, selfHost && { backgroundColor: ea.redSoft }]}
+        >
+          <Text style={[styles.warnTitle, f && { fontFamily: f.uiBold }]}>SELF HOSTING</Text>
+          <View style={styles.warnRow}>
+            <Ionicons name="warning" size={16} color={ea.red} />
+            <Text style={[styles.warnBody, f && { fontFamily: f.uiMed }]}>
+              IF THIS IS SELECTED, YOU HAVE TO HOST YOUR OWN EA ON YOUR PC OR SERVER.
+            </Text>
+          </View>
+        </Pressable>
+
+        <ConfirmBox
+          label="I CONFIRM I AM AUTHORISED TO ADD THIS EA"
+          checked={confirm}
+          onToggle={() => setConfirm((v) => !v)}
+          fontsReady={fontsReady}
+        />
+
+        <PrimaryBtn
+          label="Add EA"
+          icon="hardware-chip"
+          fontsReady={fontsReady}
+          onPress={() => {
+            if (!eaName.trim() || !confirm) return;
+            setList((prev) => [{ name: eaName.trim(), type: selfHost ? 'Self-host' : 'Standard' }, ...prev]);
+            setEaName('');
+            setConfirm(false);
+            setSelfHost(false);
+          }}
+        />
+        <SecondaryBtn label="Cancel" onPress={() => setEaName('')} fontsReady={fontsReady} />
+      </Card>
+
+      <Card>
+        <View style={styles.cardHeadRow}>
+          <IconTile color={ea.teal} soft={ea.tealSoft} name="list" />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>
+              Your expert advisors
+            </Text>
+            <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+              Open an EA to manage symbols and copy its licence code.
+            </Text>
+          </View>
+        </View>
+        <View style={styles.tableHead}>
+          <Text style={[styles.tableLabel, f && { fontFamily: f.uiBold }]}>EXPERT ADVISOR</Text>
+          <Text style={[styles.tableLabel, f && { fontFamily: f.uiBold }]}>TYPE</Text>
+        </View>
+        {list.map((item) => (
+          <View key={item.name} style={styles.tableRow}>
+            <View style={styles.eaNameRow}>
+              <Ionicons name="hardware-chip" size={16} color={ea.primary} />
+              <Text style={[styles.eaName, f && { fontFamily: f.uiBold }]}>{item.name}</Text>
+            </View>
+            <View style={styles.typePill}>
+              <Text style={[styles.typePillText, f && { fontFamily: f.uiMed }]}>{item.type}</Text>
+            </View>
+          </View>
+        ))}
+      </Card>
+      <FooterNote fontsReady={fontsReady} />
+    </ScrollView>
+  );
+}
+
+function AffiliateProgramSection({ fontsReady }: { fontsReady: boolean }) {
+  const f = useFf(fontsReady);
+  const link = 'https://www.eatrade.io/?ref=AFFBD479C';
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <ScrollView contentContainerStyle={styles.stack} showsVerticalScrollIndicator={false}>
+      <View style={styles.greenBanner}>
+        <Ionicons name="grid-outline" size={14} color={ea.green} />
+        <Text style={[styles.greenBannerText, f && { fontFamily: f.ui }]}>
+          Opened from your mentor dashboard. Use{' '}
+          <Text style={{ color: ea.green, fontWeight: '700' }}>Mentor Dashboard</Text> in the top
+          bar to return.
+        </Text>
+      </View>
+
+      <Card>
+        <Text style={[styles.softLabel, f && { fontFamily: f.uiMed }]}>Affiliate Dashboard</Text>
+        <Text style={[styles.welcome, f && { fontFamily: f.display }]}>Welcome back, Sifiso</Text>
+        <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+          Track referrals, monitor conversions, and grow your commission earnings with EA Trade.
+        </Text>
+        <View style={styles.emailPill}>
+          <Ionicons name="mail" size={14} color={ea.primary} />
+          <Text style={[styles.emailPillText, f && { fontFamily: f.uiMed }]}>
+            sifiso@eatrade.io
+          </Text>
+        </View>
+        <View style={styles.commissionBox}>
+          <Text style={[styles.commissionValue, f && { fontFamily: f.display }]}>7.3%</Text>
+          <Text style={[styles.kpiLabel, f && { fontFamily: f.uiBold }]}>YOUR COMMISSION</Text>
+          <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>5% - 10%</Text>
+        </View>
+      </Card>
+
+      <Card style={{ borderColor: 'rgba(47,107,255,0.35)', borderWidth: 1 }}>
+        <View style={styles.cardHeadRow}>
+          <Ionicons name="link" size={18} color={ea.primary} />
+          <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Your Referral Link</Text>
+        </View>
+        <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+          Share this unique link. Full program details apply to every confirmed referral.
+        </Text>
+        <View style={styles.linkBox}>
+          <Text style={[styles.linkMono, f && { fontFamily: f.mono }]} numberOfLines={2}>
+            {link}
+          </Text>
+        </View>
+        <PrimaryBtn
+          label={copied ? 'Copied' : 'Copy Link'}
+          icon="copy-outline"
+          fontsReady={fontsReady}
+          onPress={async () => {
+            if (await copyText(link)) {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1400);
+            }
+          }}
+        />
+        {[
+          ['Share your link', 'Post on social, send to friends, or add to your bio.'],
+          ['They join EA Trade', 'They visit the site and pay for membership when ready.'],
+          ['You earn commission', 'Your current 7.3% rate applies to every confirmed referral.'],
+        ].map(([title, body], i) => (
+          <View key={title} style={styles.stepRow}>
+            <View style={styles.stepNum}>
+              <Text style={[styles.stepNumText, f && { fontFamily: f.uiBold }]}>{i + 1}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.stepTitle, f && { fontFamily: f.uiBold }]}>{title}</Text>
+              <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>{body}</Text>
+            </View>
+          </View>
+        ))}
+      </Card>
+      <FooterNote fontsReady={fontsReady} />
+    </ScrollView>
+  );
+}
+
+function AffiliatesSection({ fontsReady }: { fontsReady: boolean }) {
+  const f = useFf(fontsReady);
+  const metrics = [
+    { label: 'AVAILABLE BALANCE', value: 'R1,039.68', color: ea.primary, icon: 'wallet' as const },
+    { label: 'PENDING WITHDRAWALS', value: 'R0.00', color: ea.text, icon: 'time' as const },
+    { label: 'TOTAL PAID OUT', value: 'R39,800.00', color: ea.text, icon: 'cash' as const },
+    { label: 'LINK CLICKS', value: '205', color: ea.text, icon: 'navigate' as const },
+  ];
+
+  return (
+    <ScrollView contentContainerStyle={styles.stack} showsVerticalScrollIndicator={false}>
+      <Card>
+        <View style={styles.cardHeadRow}>
+          <IconTile color={ea.primary} soft={ea.primarySoft} name="trending-up" />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Commission tiers</Text>
+            <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+              158 / 350 confirmed sales
+            </Text>
+          </View>
+        </View>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: '45%' }]} />
+        </View>
+        <Text style={[styles.progressHint, f && { fontFamily: f.uiMed }]}>
+          ↑ 52 more confirmed sales to reach 8%
+        </Text>
+      </Card>
+
+      {metrics.map((m) => (
+        <Card key={m.label}>
+          <IconTile color={ea.primary} soft={ea.primarySoft} name={m.icon} />
+          <Text style={[styles.kpiLabel, f && { fontFamily: f.uiBold }]}>{m.label}</Text>
+          <Text style={[styles.kpiValue, f && { fontFamily: f.display }, { color: m.color }]}>
+            {m.value}
+          </Text>
+        </Card>
+      ))}
+
+      <Card>
+        <View style={styles.cardHeadRow}>
+          <Ionicons name="business" size={18} color={ea.primary} />
+          <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Payout Methods</Text>
+        </View>
+        <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+          Add where you want to receive funds. Bank payouts are in ZAR; crypto payouts supported.
+        </Text>
+        <View style={styles.payoutRow}>
+          <IconTile color={ea.primary} soft={ea.primarySoft} name="card" />
+          <View style={{ flex: 1 }}>
+            <View style={styles.payoutTitleRow}>
+              <Text style={[styles.actionTitle, f && { fontFamily: f.uiBold }]}>
+                Bank Account · Sifiso
+              </Text>
+              <View style={styles.defaultPill}>
+                <Text style={[styles.defaultPillText, f && { fontFamily: f.uiBold }]}>Default</Text>
+              </View>
+            </View>
+            <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>Discovery · · · · 5464</Text>
+          </View>
+          <Ionicons name="trash-outline" size={18} color={ea.textMuted} />
+        </View>
+        <SecondaryBtn label="+ Add Payout Method" onPress={() => undefined} fontsReady={fontsReady} />
+      </Card>
+
+      <Card>
+        <View style={styles.cardHeadRow}>
+          <Ionicons name="arrow-up-circle" size={18} color={ea.primary} />
+          <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Request Withdrawal</Text>
+        </View>
+        <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+          Pending → Processing → Paid. Withdrawals process within 1–3 business days.
+        </Text>
+        <View style={styles.divider} />
+        <FieldLabel text="PAY TO" fontsReady={fontsReady} />
+        <SelectRow
+          value="Bank Account · Sifiso — Discovery"
+          placeholder="Select payout method"
+          fontsReady={fontsReady}
+          onPress={() => undefined}
+        />
+        <PrimaryBtn label="Request withdrawal" fontsReady={fontsReady} onPress={() => undefined} />
+      </Card>
+      <FooterNote fontsReady={fontsReady} />
+    </ScrollView>
+  );
+}
+
+function KeysAnalyticsSection({
+  fontsReady,
+  onNavigate,
+}: {
+  fontsReady: boolean;
+  onNavigate: (id: PortalSectionId) => void;
+}) {
+  const f = useFf(fontsReady);
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState<'all' | 'active' | 'expired'>('all');
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const keys = [
+    {
+      id: '1',
+      key: '5AC-625-8A0-009',
+      ea: 'THE ORACLE',
+      status: 'Active' as const,
+      date: '22 Oct 2026',
+      user: 'Ava Chen',
+    },
+    {
+      id: '2',
+      key: 'ORC-91K-7MQ-PL4',
+      ea: 'THE ORACLE',
+      status: 'Active' as const,
+      date: '18 Oct 2026',
+      user: 'Noah Park',
+    },
+    {
+      id: '3',
+      key: 'ORC-B22-88K-ZQ1',
+      ea: 'THE ORACLE',
+      status: 'Expired' as const,
+      date: '02 Sep 2026',
+      user: 'Marco Diaz',
+    },
+  ];
+
+  const filtered = keys.filter((k) => {
+    if (filter === 'active' && k.status !== 'Active') return false;
+    if (filter === 'expired' && k.status !== 'Expired') return false;
+    if (!q.trim()) return true;
+    const s = q.toLowerCase();
+    return (
+      k.key.toLowerCase().includes(s) ||
+      k.ea.toLowerCase().includes(s) ||
+      k.user.toLowerCase().includes(s)
+    );
+  });
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.stack}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.pageIntro}>
+        <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>Key analytics</Text>
+        <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+          Search, copy, and manage every licence key
+        </Text>
+        <View style={styles.topActions}>
+          <View style={styles.outlinePill}>
+            <Ionicons name="key-outline" size={14} color={ea.text} />
+            <Text style={[styles.outlinePillText, f && { fontFamily: f.uiMed }]}>154 total</Text>
+          </View>
+          <Pressable
+            onPress={() => onNavigate('create-keys')}
+            style={[
+              styles.newKeyBtn,
+              Platform.select({
+                web: { boxShadow: `0 0 18px ${ea.primaryGlow}` } as object,
+                default: {},
+              }),
+            ]}
+          >
+            <Text style={[styles.newKeyBtnText, f && { fontFamily: f.uiBold }]}>+ New key</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <Card>
+        <View style={styles.cardHeadRow}>
+          <IconTile color="#fff" soft={ea.purpleSoft} name="stats-chart" />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>All licence keys</Text>
+            <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+              Filter by status or search user, key, or EA.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.searchWrap}>
+          <Ionicons name="search" size={16} color={ea.textMuted} />
+          <TextInput
+            value={q}
+            onChangeText={setQ}
+            placeholder="Search user, key, EA..."
+            placeholderTextColor={ea.textMuted}
+            style={[styles.searchInput, f && { fontFamily: f.uiMed }]}
+          />
+        </View>
+
+        <View style={styles.filterRow}>
+          {(
+            [
+              ['all', 'All 154'],
+              ['active', 'Active 153'],
+              ['expired', 'Expired 1'],
+            ] as const
+          ).map(([id, label]) => {
+            const on = filter === id;
             return (
               <Pressable
-                key={p}
-                onPress={() => setPlan(p)}
-                style={[
-                  styles.chip,
-                  {
-                    borderColor: selected ? colors.neon : 'rgba(255,255,255,0.1)',
-                    backgroundColor: selected
-                      ? hexToRgba(colors.neon, 0.14)
-                      : 'rgba(255,255,255,0.02)',
-                  },
-                ]}
+                key={id}
+                onPress={() => setFilter(id)}
+                style={[styles.filterPill, on && styles.filterPillOn]}
               >
                 <Text
                   style={[
-                    styles.chipText,
+                    styles.filterPillText,
                     f && { fontFamily: f.uiBold },
-                    selected && { color: colors.neon },
+                    on && { color: '#fff' },
                   ]}
                 >
-                  {p}
+                  {label}
                 </Text>
               </Pressable>
             );
           })}
         </View>
 
-        <Field
-          label="User email"
-          value={email}
-          onChangeText={setEmail}
-          placeholder="trader@domain.com"
-          fontsReady={fontsReady}
-          keyboardType="email-address"
-        />
-        <View style={styles.formRow}>
-          <View style={{ flex: 1 }}>
-            <Field
-              label="Duration (days)"
-              value={days}
-              onChangeText={setDays}
-              placeholder="30"
-              fontsReady={fontsReady}
-              keyboardType="numeric"
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Field
-              label="Quantity"
-              value={qty}
-              onChangeText={setQty}
-              placeholder="1"
-              fontsReady={fontsReady}
-              keyboardType="numeric"
-            />
-          </View>
-        </View>
-        <PrimaryButton
-          label="Generate keys"
-          onPress={generate}
-          fontsReady={fontsReady}
-          icon="key-outline"
-        />
-      </Surface>
-
-      <Surface>
-        <View style={styles.cardHead}>
-          <Text style={[styles.cardTitle, f && { fontFamily: f.displaySemi }]}>
-            Generated keys
-          </Text>
-          <Text style={[styles.cardHint, f && { fontFamily: f.uiMed }]}>
-            {keys.length} ready
-          </Text>
-        </View>
-        {keys.map((item) => {
-          const copied = copiedId === item.id;
-          return (
-            <View
-              key={item.id}
-              style={[styles.keyRow, { borderColor: hexToRgba(colors.neon, 0.28) }]}
-            >
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text style={[styles.keyText, f && { fontFamily: f.monoBold }]}>{item.key}</Text>
-                <Text style={[styles.keyMeta, f && { fontFamily: f.ui }]}>
-                  {item.plan} · {item.days}d · {item.email} · {item.createdAt}
+        {filtered.map((item) => (
+          <View key={item.id} style={styles.keyCard}>
+            <View style={styles.keyCardTop}>
+              <Text style={[styles.softLabel, f && { fontFamily: f.uiMed }]}>Key</Text>
+              <View
+                style={[
+                  styles.statusPill,
+                  item.status === 'Active' ? styles.statusActive : styles.statusExpired,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusPillText,
+                    f && { fontFamily: f.uiBold },
+                    { color: item.status === 'Active' ? ea.green : ea.orange },
+                  ]}
+                >
+                  {item.status}
                 </Text>
+              </View>
+            </View>
+            <View style={styles.eaNameRow}>
+              <Ionicons name="hardware-chip" size={14} color={ea.primary} />
+              <Text style={[styles.eaName, f && { fontFamily: f.uiBold }]}>{item.ea}</Text>
+            </View>
+            <View style={styles.keyCopyRow}>
+              <View style={styles.keyBox}>
+                <Text style={[styles.keyMono, f && { fontFamily: f.monoBold }]}>{item.key}</Text>
               </View>
               <Pressable
                 onPress={async () => {
                   if (await copyText(item.key)) {
-                    setCopiedId(item.id);
-                    setTimeout(
-                      () => setCopiedId((cur) => (cur === item.id ? null : cur)),
-                      1600,
-                    );
+                    setCopied(item.id);
+                    setTimeout(() => setCopied((c) => (c === item.id ? null : c)), 1400);
                   }
                 }}
-                style={[
-                  styles.copyBtn,
-                  {
-                    borderColor: colors.neon,
-                    backgroundColor: copied ? colors.neon : 'transparent',
-                  },
-                ]}
+                style={styles.copySquare}
                 accessibilityRole="button"
                 accessibilityLabel={`Copy ${item.key}`}
               >
                 <Ionicons
-                  name={copied ? 'checkmark' : 'copy-outline'}
-                  size={14}
-                  color={copied ? '#061018' : colors.neon}
+                  name={copied === item.id ? 'checkmark' : 'copy-outline'}
+                  size={16}
+                  color="#fff"
                 />
-                <Text
-                  style={[
-                    styles.copyLabel,
-                    f && { fontFamily: f.uiBold },
-                    { color: copied ? '#061018' : colors.neon },
-                  ]}
-                >
-                  {copied ? 'Copied' : 'Copy'}
-                </Text>
               </Pressable>
             </View>
-          );
-        })}
-      </Surface>
+            <View style={styles.keyMetaRow}>
+              <Ionicons name="calendar-outline" size={12} color={ea.textMuted} />
+              <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
+                {item.date} · {item.user}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </Card>
+      <FooterNote fontsReady={fontsReady} />
     </ScrollView>
   );
 }
 
-function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
-  const { colors } = useTheme();
+function ReactivateLicenseSection({ fontsReady }: { fontsReady: boolean }) {
   const f = useFf(fontsReady);
-  const [name, setName] = useState('The Oracle EA');
-  const [version, setVersion] = useState('2.4.1');
-  const [enabled, setEnabled] = useState(true);
+  const [key, setKey] = useState('');
+  const [confirm, setConfirm] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
 
   return (
-    <ScrollView contentContainerStyle={styles.stack} keyboardShouldPersistTaps="handled">
-      <Surface accent={colors.neon}>
-        <Text style={[styles.cardTitle, f && { fontFamily: f.displaySemi }]}>
-          Expert adviser
+    <ScrollView
+      contentContainerStyle={styles.stack}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.pageIntro}>
+        <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>
+          Reactivate License Key
         </Text>
-        <Field label="EA name" value={name} onChangeText={setName} fontsReady={fontsReady} />
-        <Field label="Version" value={version} onChangeText={setVersion} fontsReady={fontsReady} />
-        <Pressable
-          style={[styles.toggleRow, { borderColor: hexToRgba(colors.neon, 0.28) }]}
-          onPress={() => setEnabled((v) => !v)}
-        >
-          <Text style={[styles.rowLeft, f && { fontFamily: f.uiMed }]}>Distribution enabled</Text>
-          <Text
-            style={[
-              { color: enabled ? '#3DFF9A' : 'rgba(148,163,184,0.6)', fontWeight: '700' },
-              f && { fontFamily: f.uiBold },
-            ]}
-          >
-            {enabled ? 'ON' : 'OFF'}
-          </Text>
-        </Pressable>
-        <PrimaryButton label="Save EA settings" onPress={() => undefined} fontsReady={fontsReady} />
-      </Surface>
-      <Surface>
-        <Text style={[styles.cardTitle, f && { fontFamily: f.displaySemi }]}>Build pipeline</Text>
-        {[
-          ['oracle-ea-2.4.1.ex5', 'Published'],
-          ['oracle-ea-2.4.0.ex5', 'Archived'],
-          ['oracle-ea-2.5.0-beta.ex5', 'Staging'],
-        ].map(([file, status]) => (
-          <View key={file} style={styles.rowBetween}>
-            <Text style={[styles.rowLeft, f && { fontFamily: f.mono }]}>{file}</Text>
-            <Text style={[styles.rowRight, f && { fontFamily: f.uiBold }]}>{status}</Text>
+        <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+          Reactivate a license key to restore user access.
+        </Text>
+      </View>
+      <Card>
+        <View style={styles.cardHeadRow}>
+          <IconTile color={ea.primary} soft={ea.primarySoft} name="key" />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>
+              Reactivate License Key
+            </Text>
+            <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+              Enter the key below to restore access for the assigned user.
+            </Text>
           </View>
-        ))}
-      </Surface>
+        </View>
+        <Text style={[styles.fieldLabelWhite, f && { fontFamily: f.uiBold }]}>License Key</Text>
+        <Input
+          value={key}
+          onChangeText={setKey}
+          placeholder="XXXX-XXXX-XXXX-XXXX"
+          fontsReady={fontsReady}
+        />
+        <Text style={[styles.help, f && { fontFamily: f.ui }]}>
+          Use the full key including dashes.
+        </Text>
+        <ConfirmBox
+          label="I confirm that I have permission to reactivate this license key."
+          checked={confirm}
+          onToggle={() => setConfirm((v) => !v)}
+          fontsReady={fontsReady}
+        />
+        <View style={styles.btnRow}>
+          <View style={{ flex: 1 }}>
+            <PrimaryBtn
+              label="Reactivate Key"
+              icon="sync"
+              fontsReady={fontsReady}
+              onPress={() => {
+                if (!key.trim() || !confirm) return;
+                setDone(key.trim());
+                setKey('');
+                setConfirm(false);
+              }}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <SecondaryBtn
+              label="Cancel"
+              fontsReady={fontsReady}
+              onPress={() => {
+                setKey('');
+                setConfirm(false);
+              }}
+            />
+          </View>
+        </View>
+        {done ? (
+          <Text style={[styles.successLine, f && { fontFamily: f.uiMed }]}>
+            Reactivated {done} successfully.
+          </Text>
+        ) : null}
+      </Card>
+      <FooterNote fontsReady={fontsReady} />
     </ScrollView>
   );
 }
@@ -534,101 +1018,67 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
 function ReactivateEmailSection({ fontsReady }: { fontsReady: boolean }) {
   const f = useFf(fontsReady);
   const [email, setEmail] = useState('');
-  const [log, setLog] = useState<string[]>(['sent → alex@trade.io · delivered']);
+  const [confirm, setConfirm] = useState(false);
+  const [log, setLog] = useState<string[]>([]);
 
   return (
-    <ScrollView contentContainerStyle={styles.stack} keyboardShouldPersistTaps="handled">
-      <Surface>
-        <Text style={[styles.cardTitle, f && { fontFamily: f.displaySemi }]}>
-          Reactivate email
+    <ScrollView
+      contentContainerStyle={styles.stack}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.pageIntro}>
+        <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>Reactivate email</Text>
+        <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+          Resend the activation message for a stalled account.
         </Text>
-        <Text style={[styles.lead, f && { fontFamily: f.ui }]}>
-          Resend activation for a stalled account. Delivery is simulated locally.
-        </Text>
-        <Field
-          label="User email"
+      </View>
+      <Card>
+        <View style={styles.cardHeadRow}>
+          <IconTile color={ea.primary} soft={ea.primarySoft} name="mail" />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Send reactivation</Text>
+            <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+              Delivery is simulated locally for this demo.
+            </Text>
+          </View>
+        </View>
+        <FieldLabel text="USER EMAIL" fontsReady={fontsReady} />
+        <Input
           value={email}
           onChangeText={setEmail}
           placeholder="user@domain.com"
           fontsReady={fontsReady}
-          keyboardType="email-address"
         />
-        <PrimaryButton
-          label="Send reactivation"
+        <ConfirmBox
+          label="I CONFIRM I MAY CONTACT THIS USER"
+          checked={confirm}
+          onToggle={() => setConfirm((v) => !v)}
           fontsReady={fontsReady}
+        />
+        <PrimaryBtn
+          label="Send reactivation"
           icon="mail-outline"
+          fontsReady={fontsReady}
           onPress={() => {
-            if (!email.trim()) return;
-            setLog((prev) => [`sent → ${email.trim()} · queued`, ...prev].slice(0, 12));
+            if (!email.trim() || !confirm) return;
+            setLog((prev) => [`sent → ${email.trim()} · queued`, ...prev].slice(0, 8));
             setEmail('');
+            setConfirm(false);
           }}
         />
-      </Surface>
-      <Surface>
-        <Text style={[styles.cardTitle, f && { fontFamily: f.displaySemi }]}>Delivery log</Text>
         {log.map((line, i) => (
-          <Text key={`${line}-${i}`} style={[styles.listLine, f && { fontFamily: f.ui }]}>
+          <Text key={`${line}-${i}`} style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
             {line}
           </Text>
         ))}
-      </Surface>
-    </ScrollView>
-  );
-}
-
-function AffiliateProgramSection({ fontsReady }: { fontsReady: boolean }) {
-  const f = useFf(fontsReady);
-  const [rate, setRate] = useState('25');
-  const [cookie, setCookie] = useState('30');
-  const [copied, setCopied] = useState(false);
-  const link = 'https://oracle.app/r/SUPERADMIN';
-
-  return (
-    <ScrollView contentContainerStyle={styles.stack} keyboardShouldPersistTaps="handled">
-      <Surface>
-        <Text style={[styles.cardTitle, f && { fontFamily: f.displaySemi }]}>
-          Affiliate program
-        </Text>
-        <Field
-          label="Commission %"
-          value={rate}
-          onChangeText={setRate}
-          fontsReady={fontsReady}
-          keyboardType="numeric"
-        />
-        <Field
-          label="Cookie days"
-          value={cookie}
-          onChangeText={setCookie}
-          fontsReady={fontsReady}
-          keyboardType="numeric"
-        />
-        <Text style={[styles.fieldLabel, f && { fontFamily: f.uiBold }]}>Referral link</Text>
-        <View style={styles.linkRow}>
-          <Text style={[styles.mono, f && { fontFamily: f.mono }]} numberOfLines={1}>
-            {link}
-          </Text>
-          <Pressable
-            onPress={async () => {
-              if (await copyText(link)) {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1400);
-              }
-            }}
-          >
-            <Text style={[styles.linkCopy, f && { fontFamily: f.uiBold }]}>
-              {copied ? 'Copied' : 'Copy'}
-            </Text>
-          </Pressable>
-        </View>
-        <PrimaryButton label="Save program" onPress={() => undefined} fontsReady={fontsReady} />
-      </Surface>
+      </Card>
+      <FooterNote fontsReady={fontsReady} />
     </ScrollView>
   );
 }
 
 function ManageUsersSection({ fontsReady }: { fontsReady: boolean }) {
-  const { colors } = useTheme();
   const f = useFf(fontsReady);
   const [q, setQ] = useState('');
   const users = useMemo(
@@ -638,7 +1088,6 @@ function ManageUsersSection({ fontsReady }: { fontsReady: boolean }) {
         { name: 'Marco Diaz', email: 'marco@ea.io', role: 'Trial', status: 'Disabled' },
         { name: 'Noah Park', email: 'noah@funds.io', role: 'Elite', status: 'Active' },
         { name: 'Ivy Stone', email: 'ivy@desk.io', role: 'Affiliate', status: 'Active' },
-        { name: 'Leo Grant', email: 'leo@desk.io', role: 'Pro', status: 'Pending' },
       ].filter(
         (u) =>
           !q.trim() ||
@@ -649,87 +1098,77 @@ function ManageUsersSection({ fontsReady }: { fontsReady: boolean }) {
   );
 
   return (
-    <ScrollView contentContainerStyle={styles.stack} keyboardShouldPersistTaps="handled">
-      <Surface>
-        <Text style={[styles.cardTitle, f && { fontFamily: f.displaySemi }]}>Manage users</Text>
-        <Field
-          label="Search"
-          value={q}
-          onChangeText={setQ}
-          placeholder="Name or email"
-          fontsReady={fontsReady}
-        />
+    <ScrollView
+      contentContainerStyle={styles.stack}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.pageIntro}>
+        <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>Manage users</Text>
+        <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+          Search accounts, roles, and access status.
+        </Text>
+      </View>
+      <Card>
+        <View style={styles.searchWrap}>
+          <Ionicons name="search" size={16} color={ea.textMuted} />
+          <TextInput
+            value={q}
+            onChangeText={setQ}
+            placeholder="Name or email"
+            placeholderTextColor={ea.textMuted}
+            style={[styles.searchInput, f && { fontFamily: f.uiMed }]}
+          />
+        </View>
         {users.map((u) => (
-          <View
-            key={u.email}
-            style={[styles.userRow, { borderColor: hexToRgba(colors.neon, 0.22) }]}
-          >
+          <View key={u.email} style={styles.userRow}>
             <View style={{ flex: 1 }}>
-              <Text style={[styles.userName, f && { fontFamily: f.uiBold }]}>{u.name}</Text>
-              <Text style={[styles.userMeta, f && { fontFamily: f.ui }]}>
+              <Text style={[styles.actionTitle, f && { fontFamily: f.uiBold }]}>{u.name}</Text>
+              <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
                 {u.email} · {u.role}
               </Text>
             </View>
-            <Text
+            <View
               style={[
-                styles.badge,
-                f && { fontFamily: f.uiBold },
-                u.status !== 'Active' && styles.warn,
+                styles.statusPill,
+                u.status === 'Active' ? styles.statusActive : styles.statusExpired,
               ]}
             >
-              {u.status}
-            </Text>
-          </View>
-        ))}
-      </Surface>
-    </ScrollView>
-  );
-}
-
-function AffiliatesSection({ fontsReady }: { fontsReady: boolean }) {
-  const { colors } = useTheme();
-  const f = useFf(fontsReady);
-  const rows = [
-    { id: 'AF-104', name: 'North Desk', earned: '$2,840', rate: '25%' },
-    { id: 'AF-231', name: 'Signal Lab', earned: '$1,120', rate: '20%' },
-    { id: 'AF-088', name: 'Prime Media', earned: '$6,455', rate: '30%' },
-    { id: 'AF-412', name: 'FX Growth', earned: '$910', rate: '15%' },
-  ];
-
-  return (
-    <ScrollView contentContainerStyle={styles.stack}>
-      <Surface>
-        <Text style={[styles.cardTitle, f && { fontFamily: f.displaySemi }]}>Affiliates</Text>
-        {rows.map((r) => (
-          <View
-            key={r.id}
-            style={[styles.userRow, { borderColor: hexToRgba(colors.neon, 0.22) }]}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.userName, f && { fontFamily: f.uiBold }]}>
-                {r.name} · {r.id}
+              <Text
+                style={[
+                  styles.statusPillText,
+                  f && { fontFamily: f.uiBold },
+                  { color: u.status === 'Active' ? ea.green : ea.orange },
+                ]}
+              >
+                {u.status}
               </Text>
-              <Text style={[styles.userMeta, f && { fontFamily: f.ui }]}>Rate {r.rate}</Text>
             </View>
-            <Text style={[styles.badge, f && { fontFamily: f.uiBold }]}>{r.earned}</Text>
           </View>
         ))}
-      </Surface>
+      </Card>
+      <FooterNote fontsReady={fontsReady} />
     </ScrollView>
   );
 }
 
 function ColorChangerSection({ fontsReady }: { fontsReady: boolean }) {
-  const { accent, setAccent, colors } = useTheme();
   const f = useFf(fontsReady);
+  const { accent, setAccent } = useTheme();
 
   return (
-    <ScrollView contentContainerStyle={styles.stack}>
-      <Surface>
-        <Text style={[styles.cardTitle, f && { fontFamily: f.displaySemi }]}>Color changer</Text>
-        <Text style={[styles.lead, f && { fontFamily: f.ui }]}>
-          Update the live app accent used on borders, CTAs, and portal chrome.
+    <ScrollView contentContainerStyle={styles.stack} showsVerticalScrollIndicator={false}>
+      <View style={styles.pageIntro}>
+        <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>Color changer</Text>
+        <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+          Update the live Oracle app accent outside this portal shell.
         </Text>
+      </View>
+      <Card>
+        <View style={styles.cardHeadRow}>
+          <IconTile color={ea.purple} soft={ea.purpleSoft} name="color-palette" />
+          <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Accent presets</Text>
+        </View>
         <View style={styles.swatchGrid}>
           {ACCENT_PRESETS.map((p) => {
             const selected = accent.toLowerCase() === p.value.toLowerCase();
@@ -748,330 +1187,493 @@ function ColorChangerSection({ fontsReady }: { fontsReady: boolean }) {
             );
           })}
         </View>
-        <Text style={[styles.mono, f && { fontFamily: f.mono }, { color: colors.neon }]}>
-          Active: {accent}
-        </Text>
-      </Surface>
-    </ScrollView>
-  );
-}
-
-function ReactivateLicenseSection({ fontsReady }: { fontsReady: boolean }) {
-  const f = useFf(fontsReady);
-  const [key, setKey] = useState('');
-  const [history, setHistory] = useState(['ORC-9F2A-… · reactivated · success']);
-
-  return (
-    <ScrollView contentContainerStyle={styles.stack} keyboardShouldPersistTaps="handled">
-      <Surface>
-        <Text style={[styles.cardTitle, f && { fontFamily: f.displaySemi }]}>
-          Reactivate license key
-        </Text>
-        <Field
-          label="License key"
-          value={key}
-          onChangeText={setKey}
-          placeholder="ORC-XXXX-XXXX-XXXX"
-          fontsReady={fontsReady}
-        />
-        <PrimaryButton
-          label="Reactivate"
-          fontsReady={fontsReady}
-          icon="refresh-outline"
-          onPress={() => {
-            if (!key.trim()) return;
-            setHistory((prev) => [`${key.trim()} · reactivated · success`, ...prev].slice(0, 10));
-            setKey('');
-          }}
-        />
-      </Surface>
-      <Surface>
-        <Text style={[styles.cardTitle, f && { fontFamily: f.displaySemi }]}>History</Text>
-        {history.map((h, i) => (
-          <Text key={`${h}-${i}`} style={[styles.listLine, f && { fontFamily: f.ui }]}>
-            {h}
-          </Text>
-        ))}
-      </Surface>
-    </ScrollView>
-  );
-}
-
-function KeysAnalyticsSection({ fontsReady }: { fontsReady: boolean }) {
-  const { colors } = useTheme();
-  const f = useFf(fontsReady);
-  const bars = [
-    { label: 'Mon', v: 0.45 },
-    { label: 'Tue', v: 0.62 },
-    { label: 'Wed', v: 0.38 },
-    { label: 'Thu', v: 0.8 },
-    { label: 'Fri', v: 0.7 },
-    { label: 'Sat', v: 0.5 },
-    { label: 'Sun', v: 0.33 },
-  ];
-  const stats: { label: string; value: string; delta: string }[] = [
-    { label: 'Keys issued', value: '312', delta: '+18' },
-    { label: 'Activations', value: '267', delta: '+11%' },
-    { label: 'Revoked', value: '14', delta: '-2' },
-    { label: 'Conv. rate', value: '85%', delta: '+3%' },
-  ];
-
-  return (
-    <ScrollView contentContainerStyle={styles.stack}>
-      <View style={styles.kpiGrid}>
-        {stats.map((s) => (
-          <View
-            key={s.label}
-            style={[styles.kpi, { borderColor: hexToRgba(colors.neon, 0.2) }]}
-          >
-            <View style={styles.kpiTop}>
-              <Text style={[styles.kpiLabel, f && { fontFamily: f.uiMed }]}>{s.label}</Text>
-              <Text style={[styles.kpiDelta, f && { fontFamily: f.uiBold }, { color: '#3DFF9A' }]}>
-                {s.delta}
-              </Text>
-            </View>
-            <Text style={[styles.kpiValue, f && { fontFamily: f.display }]}>{s.value}</Text>
-          </View>
-        ))}
-      </View>
-      <Surface accent={colors.neon}>
-        <Text style={[styles.cardTitle, f && { fontFamily: f.displaySemi }]}>
-          Keys analytics · 7 days
-        </Text>
-        <View style={styles.chartRow}>
-          {bars.map((b) => (
-            <View key={b.label} style={styles.chartCol}>
-              <View style={styles.chartTrack}>
-                <View
-                  style={[
-                    styles.chartBar,
-                    {
-                      height: Math.max(8, Math.round(b.v * 120)),
-                      backgroundColor: colors.neon,
-                    },
-                  ]}
-                />
-              </View>
-              <Text style={[styles.chartLabel, f && { fontFamily: f.uiMed }]}>{b.label}</Text>
-            </View>
-          ))}
-        </View>
-      </Surface>
+        <Text style={[styles.kpiSub, f && { fontFamily: f.mono }]}>Active: {accent}</Text>
+      </Card>
+      <FooterNote fontsReady={fontsReady} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   stack: {
-    gap: 14,
-    paddingBottom: 36,
-  },
-  lead: {
-    color: 'rgba(148,163,184,0.85)',
-    fontSize: 14,
-    lineHeight: 21,
-    marginBottom: 2,
-  },
-  surface: {
-    backgroundColor: '#0E121C',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 16,
     padding: 16,
+    gap: 14,
+    paddingBottom: 40,
+  },
+  card: {
+    backgroundColor: ea.card,
+    borderRadius: ea.radius,
+    padding: 18,
     gap: 12,
-  },
-  cardHead: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-  },
-  cardTitle: {
-    color: '#F8FAFC',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.2,
-  },
-  cardHint: {
-    color: 'rgba(148,163,184,0.7)',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  field: { gap: 6 },
-  fieldLabel: {
-    color: 'rgba(148,163,184,0.75)',
-    fontSize: 11,
-    letterSpacing: 0.3,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  input: {
     borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    color: '#F8FAFC',
-    fontWeight: '600',
-    backgroundColor: '#0A0D14',
-    fontSize: 14,
+    borderColor: ea.border,
   },
-  primaryBtn: {
-    borderRadius: 12,
+  iconTile: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    paddingVertical: 14,
-    marginTop: 2,
-  },
-  primaryBtnText: {
-    color: '#061018',
-    fontWeight: '700',
-    fontSize: 14,
-    letterSpacing: 0.2,
-  },
-  kpiGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  kpi: {
-    width: '48%',
-    flexGrow: 1,
-    minWidth: 148,
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
-    backgroundColor: '#0E121C',
-    gap: 6,
   },
   kpiTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  kpiLabel: {
-    color: 'rgba(148,163,184,0.8)',
+  trendBadge: {
+    backgroundColor: ea.greenSoft,
+    borderRadius: ea.radiusPill,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  trendText: {
+    color: ea.green,
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  kpiDelta: {
+  kpiLabel: {
+    color: ea.label,
     fontSize: 11,
+    letterSpacing: 0.8,
     fontWeight: '700',
-  },
-  kpiValue: {
-    color: '#F8FAFC',
-    fontSize: 26,
-    fontWeight: '700',
-    letterSpacing: -0.6,
-  },
-  sparkRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 3,
-    height: 26,
     marginTop: 2,
   },
-  sparkBar: {
-    flex: 1,
-    borderRadius: 2,
-    minHeight: 4,
-  },
-  formRow: { flexDirection: 'row', gap: 10 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  chipText: {
-    color: 'rgba(226,232,240,0.65)',
+  kpiValue: {
+    color: ea.text,
+    fontSize: 36,
     fontWeight: '700',
-    fontSize: 12,
+    letterSpacing: -0.8,
+    marginTop: -2,
   },
-  split: { gap: 14 },
-  rowBetween: {
+  kpiSub: {
+    color: ea.textMuted,
+    fontSize: 13,
+  },
+  cardHeadRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  cardTitle: {
+    color: ea.text,
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  cardSub: {
+    color: ea.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 2,
+  },
+  actionList: { gap: 8, marginTop: 4 },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: ea.cardElevated,
+    borderRadius: 14,
+    padding: 12,
+  },
+  actionTitle: {
+    color: ea.text,
+    fontSize: 15,
+    fontWeight: '600',
+    flex: 1,
+  },
+  fieldLabel: {
+    color: ea.label,
+    fontSize: 11,
+    letterSpacing: 0.7,
+    fontWeight: '700',
+  },
+  fieldLabelWhite: {
+    color: ea.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  input: {
+    backgroundColor: ea.input,
+    borderWidth: 1,
+    borderColor: ea.borderStrong,
+    borderRadius: ea.radiusSm,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    color: ea.text,
+    fontSize: 15,
+  },
+  select: {
+    backgroundColor: ea.input,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.28)',
+    borderRadius: ea.radiusSm,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectText: {
+    color: ea.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  optionRow: {
+    backgroundColor: ea.cardElevated,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  optionText: { color: ea.text, fontSize: 14 },
+  confirmBox: {
+    borderWidth: 1.5,
+    borderColor: 'rgba(47,107,255,0.45)',
+    backgroundColor: 'rgba(47,107,255,0.08)',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  confirmBoxOn: {
+    backgroundColor: 'rgba(47,107,255,0.2)',
+    borderColor: ea.primary,
+  },
+  confirmText: {
+    color: ea.textSecondary,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  primaryBtn: {
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  primaryBtnText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  secondaryBtn: {
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: ea.cardElevated,
+    borderWidth: 1,
+    borderColor: ea.borderStrong,
+  },
+  secondaryBtnText: {
+    color: ea.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  keyResult: {
+    backgroundColor: ea.input,
+    borderRadius: 12,
+    padding: 14,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: ea.borderStrong,
+  },
+  keyMono: {
+    color: ea.cyanLink,
+    fontSize: 16,
+    letterSpacing: 0.6,
+  },
+  help: {
+    color: ea.textMuted,
+    fontSize: 12,
+    marginTop: -4,
+  },
+  warnBox: {
+    borderWidth: 1.5,
+    borderColor: ea.red,
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+    backgroundColor: 'rgba(239,68,68,0.08)',
+  },
+  warnTitle: {
+    color: ea.red,
+    fontSize: 11,
+    letterSpacing: 0.8,
+    fontWeight: '800',
+  },
+  warnRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+  warnBody: {
+    color: ea.red,
+    fontSize: 11,
+    flex: 1,
+    lineHeight: 16,
+    fontWeight: '600',
+  },
+  tableHead: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 9,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: ea.border,
+    paddingTop: 12,
   },
-  rowLeft: { color: '#E2E8F0', fontWeight: '600', fontSize: 13 },
-  rowRight: { color: '#3DFF9A', fontWeight: '700', fontSize: 12 },
-  warn: { color: '#FFC857' },
-  listLine: {
-    color: 'rgba(148,163,184,0.85)',
+  tableLabel: {
+    color: ea.label,
+    fontSize: 11,
+    letterSpacing: 0.7,
+    fontWeight: '700',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  eaNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  eaName: { color: ea.primary, fontSize: 15, fontWeight: '700' },
+  typePill: {
+    borderWidth: 1,
+    borderColor: ea.borderStrong,
+    borderRadius: ea.radiusPill,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  typePillText: { color: ea.textSecondary, fontSize: 12 },
+  greenBanner: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(34,197,94,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(34,197,94,0.35)',
+    borderRadius: 14,
+    padding: 12,
+  },
+  greenBannerText: {
+    color: ea.textSecondary,
+    fontSize: 12,
+    flex: 1,
+    lineHeight: 17,
+  },
+  softLabel: { color: ea.textSecondary, fontSize: 13 },
+  welcome: {
+    color: ea.text,
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+  },
+  emailPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: ea.input,
+    borderRadius: ea.radiusPill,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: ea.border,
+  },
+  emailPillText: { color: ea.text, fontSize: 13 },
+  commissionBox: {
+    borderWidth: 1.5,
+    borderColor: 'rgba(47,107,255,0.45)',
+    borderRadius: 14,
+    padding: 16,
+    alignItems: 'flex-start',
+    gap: 2,
+    backgroundColor: 'rgba(47,107,255,0.06)',
+  },
+  commissionValue: {
+    color: ea.primary,
+    fontSize: 40,
+    fontWeight: '700',
+    letterSpacing: -1,
+  },
+  linkBox: {
+    backgroundColor: ea.input,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: ea.border,
+  },
+  linkMono: {
+    color: ea.cyanLink,
     fontSize: 13,
-    lineHeight: 21,
+    lineHeight: 18,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  stepNum: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: ea.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepNumText: { color: ea.primary, fontWeight: '800', fontSize: 13 },
+  stepTitle: { color: ea.text, fontSize: 15, fontWeight: '700' },
+  progressTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#2A2A30',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: ea.primary,
+    borderRadius: 4,
+  },
+  progressHint: {
+    color: ea.primary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  payoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: ea.cardElevated,
+    borderRadius: 14,
+    padding: 12,
+  },
+  payoutTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  defaultPill: {
+    backgroundColor: ea.greenSoft,
+    borderRadius: ea.radiusPill,
+    paddingHorizontal: 8,
     paddingVertical: 2,
   },
-  keyRow: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    backgroundColor: '#0A0D14',
+  defaultPillText: { color: ea.green, fontSize: 11, fontWeight: '700' },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: ea.border,
+  },
+  pageIntro: { gap: 6 },
+  pageTitle: {
+    color: ea.text,
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+  },
+  topActions: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 10,
+    marginTop: 8,
   },
-  keyText: {
-    color: '#F8FAFC',
-    fontSize: 13,
-    letterSpacing: 0.4,
-  } as TextStyle,
-  keyMeta: {
-    color: 'rgba(148,163,184,0.7)',
-    fontSize: 11,
-  },
-  copyBtn: {
+  outlinePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
     borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderColor: ea.borderStrong,
+    borderRadius: ea.radiusPill,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: ea.card,
   },
-  copyLabel: {
-    fontSize: 11,
+  outlinePillText: { color: ea.text, fontSize: 13, fontWeight: '600' },
+  newKeyBtn: {
+    backgroundColor: ea.primary,
+    borderRadius: ea.radiusPill,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    justifyContent: 'center',
+  },
+  newKeyBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: ea.input,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: ea.border,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  searchInput: {
+    flex: 1,
+    color: ea.text,
+    fontSize: 14,
+    padding: 0,
+  },
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  filterPill: {
+    borderWidth: 1,
+    borderColor: ea.borderStrong,
+    borderRadius: ea.radiusPill,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: ea.input,
+  },
+  filterPillOn: {
+    backgroundColor: ea.primary,
+    borderColor: ea.primary,
+  },
+  filterPillText: {
+    color: ea.textSecondary,
+    fontSize: 12,
     fontWeight: '700',
   },
-  toggleRow: {
+  keyCard: {
+    backgroundColor: ea.cardElevated,
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
+    borderColor: ea.border,
+  },
+  keyCardTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: '#0A0D14',
+    alignItems: 'center',
   },
-  mono: {
-    color: '#F8FAFC',
-    fontSize: 12,
+  statusPill: {
+    borderRadius: ea.radiusPill,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  statusActive: { backgroundColor: ea.greenSoft },
+  statusExpired: { backgroundColor: ea.orangeSoft },
+  statusPillText: { fontSize: 11, fontWeight: '700' },
+  keyCopyRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  keyBox: {
     flex: 1,
+    backgroundColor: ea.input,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
-  linkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  linkCopy: {
-    color: '#6AA0F8',
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  userRow: {
-    borderWidth: 1,
+  copySquare: {
+    width: 44,
+    height: 44,
     borderRadius: 12,
-    padding: 12,
+    backgroundColor: ea.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  keyMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  btnRow: { flexDirection: 'row', gap: 10 },
+  successLine: { color: ea.green, fontSize: 13 },
+  userRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#0A0D14',
+    backgroundColor: ea.cardElevated,
+    borderRadius: 14,
+    padding: 12,
   },
-  userName: { color: '#F8FAFC', fontWeight: '700' },
-  userMeta: { color: 'rgba(148,163,184,0.7)', fontSize: 12, marginTop: 2 },
-  badge: { color: '#3DFF9A', fontWeight: '700', fontSize: 12 },
   swatchGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   swatch: {
     width: 48,
@@ -1081,31 +1683,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chartRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    height: 150,
-    gap: 8,
+  footerNote: {
+    color: ea.textMuted,
+    fontSize: 11,
+    textAlign: 'center',
     marginTop: 4,
-  },
-  chartCol: { flex: 1, alignItems: 'center', height: '100%' },
-  chartTrack: {
-    flex: 1,
-    width: '100%',
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  chartBar: {
-    width: '100%',
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
-  },
-  chartLabel: {
-    color: 'rgba(148,163,184,0.7)',
-    fontSize: 10,
-    marginTop: 6,
-    fontWeight: '600',
   },
 });

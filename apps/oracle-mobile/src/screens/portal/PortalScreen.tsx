@@ -11,19 +11,18 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme, hexToRgba } from '../../theme/ThemeContext';
 import { portalFonts, usePortalFonts } from '../../theme/portalFonts';
 import { PORTAL_MENU, type PortalSectionId } from './portalSections';
 import { PortalSectionBody } from './PortalSections';
+import { ea } from './eaTradeTheme';
 
 type Props = {
   onExit: () => void;
 };
 
-/** Explicit three-line ☰ — stays three lines open or closed (never an X / Ionicons menu). */
 function HamburgerIcon({ color }: { color: string }) {
   return (
-    <View style={ham.box} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <View style={ham.box} accessibilityElementsHidden>
       <View style={[ham.line, { backgroundColor: color }]} />
       <View style={[ham.line, { backgroundColor: color }]} />
       <View style={[ham.line, { backgroundColor: color }]} />
@@ -32,36 +31,42 @@ function HamburgerIcon({ color }: { color: string }) {
 }
 
 const ham = StyleSheet.create({
-  box: {
-    width: 20,
-    height: 16,
-    justifyContent: 'space-between',
-  },
-  line: {
-    height: 2,
-    width: 20,
-    borderRadius: 1,
-  },
+  box: { width: 18, height: 14, justifyContent: 'space-between' },
+  line: { height: 2, width: 18, borderRadius: 1 },
 });
+
+function EaTradeMark({ fontsReady }: { fontsReady: boolean }) {
+  const f = fontsReady ? portalFonts : null;
+  return (
+    <View style={styles.markRow}>
+      <View style={styles.logoMark}>
+        <View style={styles.logoOuter}>
+          <View style={styles.logoMid}>
+            <View style={styles.logoCore} />
+          </View>
+        </View>
+      </View>
+      <Text style={[styles.wordmark, f && { fontFamily: f.uiBold }]}>EA Trade</Text>
+    </View>
+  );
+}
 
 export function PortalScreen({ onExit }: Props) {
   const fontsReady = usePortalFonts();
+  const f = fontsReady ? portalFonts : null;
   const insets = useSafeAreaInsets();
-  const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 960;
-  const sidebarWidth = Math.min(280, Math.max(240, width * 0.72));
+  const sidebarWidth = Math.min(288, Math.max(248, width * 0.78));
 
   const [section, setSection] = useState<PortalSectionId>('dashboard');
-  // Mobile-first: closed by default. Desktop opens once; ☰ always toggles.
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [desktopBooted, setDesktopBooted] = useState(false);
-  const active = PORTAL_MENU.find((m) => m.id === section) ?? PORTAL_MENU[0];
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  const panelOpacity = useRef(new Animated.Value(1)).current;
-  const panelY = useRef(new Animated.Value(0)).current;
-  const drawerX = useRef(new Animated.Value(-280)).current;
+  const drawerX = useRef(new Animated.Value(-300)).current;
   const backdropOp = useRef(new Animated.Value(0)).current;
+  const panelOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (isDesktop && !desktopBooted) {
@@ -91,107 +96,89 @@ export function PortalScreen({ onExit }: Props) {
 
   useEffect(() => {
     panelOpacity.setValue(0);
-    panelY.setValue(8);
-    Animated.parallel([
-      Animated.timing(panelOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-      Animated.timing(panelY, { toValue: 0, duration: 220, useNativeDriver: true }),
-    ]).start();
-  }, [section, panelOpacity, panelY]);
+    Animated.timing(panelOpacity, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+  }, [section, panelOpacity]);
 
   const selectSection = (id: PortalSectionId) => {
     setSection(id);
     if (!isDesktop) setDrawerOpen(false);
   };
 
-  const f = fontsReady ? portalFonts : null;
-
   return (
     <View
       style={[
         styles.root,
         {
-          paddingTop: Math.max(insets.top, 10),
+          paddingTop: Math.max(insets.top, 8),
           paddingBottom: Math.max(insets.bottom, 8),
         },
       ]}
     >
-      {/* Top bar — ☰ always present */}
-      <View style={[styles.topBar, { borderBottomColor: 'rgba(255,255,255,0.06)' }]}>
-        <View style={styles.topLeft}>
+      {/* EA Trade header */}
+      <View style={styles.header}>
+        <Pressable
+          onPress={() => setDrawerOpen((v) => !v)}
+          style={styles.hamburgerBtn}
+          accessibilityRole="button"
+          accessibilityLabel={drawerOpen ? 'Close sidebar menu' : 'Open sidebar menu'}
+          testID="portal-hamburger"
+        >
+          <HamburgerIcon color="#F5F5F7" />
+        </Pressable>
+
+        <EaTradeMark fontsReady={fontsReady} />
+
+        <View style={styles.headerRight}>
           <Pressable
-            onPress={() => setDrawerOpen((v) => !v)}
-            style={[styles.hamburgerBtn, { borderColor: hexToRgba(colors.neon, 0.4) }]}
+            onPress={() => setMenuOpen((v) => !v)}
+            style={styles.avatarWrap}
             accessibilityRole="button"
-            accessibilityLabel={drawerOpen ? 'Close sidebar menu' : 'Open sidebar menu'}
-            testID="portal-hamburger"
+            accessibilityLabel="Account menu"
           >
-            <HamburgerIcon color="#F4F7FB" />
-          </Pressable>
-          <View>
-            <Text
-              style={[
-                styles.brandEyebrow,
-                f && { fontFamily: f.uiMed },
-                { color: colors.neon },
-              ]}
-            >
-              ORACLE SUPERADMIN
-            </Text>
-            <Text style={[styles.brandTitle, f && { fontFamily: f.display }]}>
-              Portal
-            </Text>
-          </View>
-        </View>
-        <View style={styles.topRight}>
-          <View style={[styles.statusChip, { borderColor: 'rgba(61,255,154,0.35)' }]}>
-            <View style={styles.statusDot} />
-            <Text style={[styles.statusText, f && { fontFamily: f.uiMed }]}>Live</Text>
-          </View>
-          <Pressable
-            onPress={onExit}
-            style={[styles.exitBtn, { borderColor: hexToRgba(colors.neon, 0.45) }]}
-            accessibilityRole="button"
-            accessibilityLabel="Exit portal"
-          >
-            <Ionicons name="arrow-back" size={15} color="#F4F7FB" />
-            <Text style={[styles.exitLabel, f && { fontFamily: f.uiBold }]}>EXIT</Text>
+            <View style={styles.avatar}>
+              <Ionicons name="hardware-chip" size={18} color="#93C5FD" />
+            </View>
+            <Ionicons name="chevron-down" size={14} color={ea.primary} />
           </Pressable>
         </View>
       </View>
 
+      {menuOpen ? (
+        <View style={styles.accountMenu}>
+          <Text style={[styles.accountEmail, f && { fontFamily: f.uiMed }]}>
+            superadmin@oracle.app
+          </Text>
+          <Pressable
+            onPress={() => {
+              setMenuOpen(false);
+              onExit();
+            }}
+            style={styles.accountExit}
+            accessibilityRole="button"
+            accessibilityLabel="Exit portal"
+          >
+            <Ionicons name="exit-outline" size={16} color={ea.text} />
+            <Text style={[styles.accountExitText, f && { fontFamily: f.uiBold }]}>EXIT</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       <View style={styles.workspace}>
-        {/* Main content insets when desktop drawer is open */}
         <View
           style={[
             styles.main,
-            isDesktop && drawerOpen ? { paddingLeft: sidebarWidth + 8 } : null,
+            isDesktop && drawerOpen ? { paddingLeft: sidebarWidth + 4 } : null,
           ]}
         >
-          <View style={styles.pageHead}>
-            <Text
-              style={[
-                styles.pageKicker,
-                f && { fontFamily: f.uiMed },
-                { color: colors.neon },
-              ]}
-            >
-              {active.subtitle}
-            </Text>
-            <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>
-              {active.title}
-            </Text>
-          </View>
-          <Animated.View
-            style={[
-              styles.pageBody,
-              { opacity: panelOpacity, transform: [{ translateY: panelY }] },
-            ]}
-          >
-            <PortalSectionBody section={section} fontsReady={fontsReady} />
+          <Animated.View style={[styles.pageBody, { opacity: panelOpacity }]}>
+            <PortalSectionBody
+              section={section}
+              fontsReady={fontsReady}
+              onNavigate={selectSection}
+            />
           </Animated.View>
         </View>
 
-        {/* Backdrop on mobile when drawer open */}
         <Animated.View
           pointerEvents={drawerOpen && !isDesktop ? 'auto' : 'none'}
           style={[styles.backdrop, { opacity: backdropOp }]}
@@ -199,96 +186,69 @@ export function PortalScreen({ onExit }: Props) {
           <Pressable
             style={StyleSheet.absoluteFill as object}
             onPress={() => setDrawerOpen(false)}
-            accessibilityLabel="Dismiss sidebar"
           />
         </Animated.View>
 
-        {/* Drawer sidebar — toggled only via ☰ */}
         <Animated.View
           style={[
             styles.drawer,
             {
               width: sidebarWidth,
-              borderRightColor: hexToRgba(colors.neon, 0.22),
               transform: [{ translateX: drawerX }],
               ...Platform.select({
                 web: {
-                  boxShadow: drawerOpen
-                    ? '12px 0 48px rgba(0,0,0,0.45)'
-                    : 'none',
+                  boxShadow: drawerOpen ? '10px 0 40px rgba(0,0,0,0.5)' : 'none',
                 } as object,
               }),
             },
           ]}
         >
-          <View style={styles.drawerHead}>
-            <Text style={[styles.drawerLabel, f && { fontFamily: f.uiBold }]}>
-              NAVIGATION
-            </Text>
-            <Text style={[styles.drawerHint, f && { fontFamily: f.ui }]}>
-              10 modules
-            </Text>
-          </View>
+          <Text style={[styles.drawerLabel, f && { fontFamily: f.uiBold }]}>MENU</Text>
           <ScrollView
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.navScroll}
           >
-            {PORTAL_MENU.map((item, index) => {
+            {PORTAL_MENU.map((item) => {
               const selected = item.id === section;
               return (
                 <Pressable
                   key={item.id}
                   onPress={() => selectSection(item.id)}
-                  style={[
-                    styles.navItem,
-                    selected && {
-                      backgroundColor: hexToRgba(colors.neon, 0.1),
-                    },
-                  ]}
+                  style={[styles.navItem, selected && styles.navItemSelected]}
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
                   accessibilityLabel={item.title}
                 >
+                  <Ionicons
+                    name={item.icon}
+                    size={18}
+                    color={selected ? ea.primary : ea.textSecondary}
+                  />
                   <Text
                     style={[
-                      styles.navIndex,
-                      f && { fontFamily: f.mono },
-                      selected && { color: colors.neon },
+                      styles.navTitle,
+                      f && { fontFamily: f.uiMed },
+                      selected && { color: ea.text },
                     ]}
+                    numberOfLines={1}
                   >
-                    {String(index + 1).padStart(2, '0')}
+                    {item.title}
                   </Text>
-                  <View style={styles.navCopy}>
-                    <Text
-                      style={[
-                        styles.navTitle,
-                        f && { fontFamily: f.uiMed },
-                        selected && { color: '#F8FAFC' },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {item.title}
-                    </Text>
-                    <Text
-                      style={[styles.navSub, f && { fontFamily: f.ui }]}
-                      numberOfLines={1}
-                    >
-                      {item.subtitle}
-                    </Text>
-                  </View>
-                  {selected ? (
-                    <View style={[styles.navPip, { backgroundColor: colors.neon }]} />
-                  ) : null}
                 </Pressable>
               );
             })}
           </ScrollView>
-          <View style={[styles.drawerFoot, { borderTopColor: 'rgba(255,255,255,0.06)' }]}>
-            <Text style={[styles.footLabel, f && { fontFamily: f.uiBold }]}>SESSION</Text>
-            <Text style={[styles.footValue, f && { fontFamily: f.uiMed }]}>
-              superadmin · console
+          <Pressable
+            onPress={onExit}
+            style={styles.drawerExit}
+            accessibilityRole="button"
+            accessibilityLabel="Exit portal"
+          >
+            <Ionicons name="arrow-back" size={16} color={ea.text} />
+            <Text style={[styles.drawerExitText, f && { fontFamily: f.uiBold }]}>
+              Exit portal
             </Text>
-          </View>
+          </Pressable>
         </Animated.View>
       </View>
     </View>
@@ -298,113 +258,135 @@ export function PortalScreen({ onExit }: Props) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#07090F',
+    backgroundColor: ea.bg,
   },
-  topBar: {
+  header: {
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    backgroundColor: '#0A0D14',
+    paddingHorizontal: 14,
+    backgroundColor: ea.header,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: ea.border,
     zIndex: 40,
   },
-  topLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flexShrink: 1,
-  },
   hamburgerBtn: {
-    width: 42,
-    height: 42,
+    width: 40,
+    height: 40,
     borderRadius: 12,
     borderWidth: 1,
+    borderColor: ea.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#111522',
+    backgroundColor: ea.card,
   },
-  brandEyebrow: {
-    fontSize: 10,
-    letterSpacing: 1.4,
-    fontWeight: '600',
-    marginBottom: 1,
-  },
-  brandTitle: {
-    color: '#F8FAFC',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.3,
-  },
-  topRight: {
+  markRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  statusChip: {
-    flexDirection: 'row',
+  logoMark: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#151820',
     alignItems: 'center',
-    gap: 6,
+    justifyContent: 'center',
     borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(12, 28, 22, 0.7)',
+    borderColor: 'rgba(47,107,255,0.35)',
   },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#3DFF9A',
-  },
-  statusText: {
-    color: '#3DFF9A',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  exitBtn: {
-    flexDirection: 'row',
+  logoOuter: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#93C5FD',
     alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#121526',
+    justifyContent: 'center',
   },
-  exitLabel: {
-    color: '#F4F7FB',
-    fontSize: 11,
+  logoMid: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 1.2,
+    borderColor: '#60A5FA',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoCore: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: ea.primary,
+  },
+  wordmark: {
+    color: ea.text,
+    fontSize: 17,
     fontWeight: '700',
-    letterSpacing: 0.8,
+    letterSpacing: -0.2,
+  },
+  headerRight: {
+    minWidth: 40,
+    alignItems: 'flex-end',
+  },
+  avatarWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  avatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#1E293B',
+    borderWidth: 1.5,
+    borderColor: 'rgba(47,107,255,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountMenu: {
+    position: 'absolute',
+    top: 64,
+    right: 14,
+    zIndex: 50,
+    backgroundColor: ea.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: ea.borderStrong,
+    padding: 12,
+    gap: 10,
+    minWidth: 200,
+    ...Platform.select({
+      web: { boxShadow: '0 12px 32px rgba(0,0,0,0.45)' } as object,
+    }),
+  },
+  accountEmail: {
+    color: ea.textSecondary,
+    fontSize: 12,
+  },
+  accountExit: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: ea.cardElevated,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  accountExitText: {
+    color: ea.text,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.6,
   },
   workspace: {
     flex: 1,
-    flexDirection: 'row',
     position: 'relative',
   },
   main: {
     flex: 1,
-    paddingHorizontal: 18,
-    paddingTop: 18,
     zIndex: 1,
-  },
-  pageHead: {
-    marginBottom: 16,
-    gap: 4,
-  },
-  pageKicker: {
-    fontSize: 11,
-    letterSpacing: 0.4,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  pageTitle: {
-    color: '#F8FAFC',
-    fontSize: 28,
-    fontWeight: '700',
-    letterSpacing: -0.6,
   },
   pageBody: {
     flex: 1,
@@ -415,7 +397,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: 'rgba(2,4,10,0.62)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     zIndex: 20,
   },
   drawer: {
@@ -423,76 +405,54 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: '#0B0E16',
+    backgroundColor: '#121214',
     borderRightWidth: 1,
+    borderRightColor: ea.border,
     zIndex: 30,
-    paddingTop: 8,
-  },
-  drawerHead: {
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    gap: 2,
+    paddingTop: 16,
   },
   drawerLabel: {
-    color: 'rgba(148,163,184,0.9)',
-    fontSize: 10,
-    letterSpacing: 1.6,
+    color: ea.label,
+    fontSize: 11,
+    letterSpacing: 1.4,
     fontWeight: '700',
-  },
-  drawerHint: {
-    color: 'rgba(148,163,184,0.55)',
-    fontSize: 12,
+    marginLeft: 18,
+    marginBottom: 10,
   },
   navScroll: {
     paddingHorizontal: 10,
-    paddingBottom: 16,
-    gap: 2,
+    gap: 4,
+    paddingBottom: 20,
   },
   navItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 11,
-    paddingHorizontal: 10,
-    borderRadius: 10,
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
   },
-  navIndex: {
-    color: 'rgba(148,163,184,0.45)',
-    fontSize: 11,
-    width: 22,
-  },
-  navCopy: {
-    flex: 1,
-    gap: 1,
+  navItemSelected: {
+    backgroundColor: ea.primarySoft,
   },
   navTitle: {
-    color: 'rgba(226,232,240,0.78)',
-    fontSize: 13.5,
+    color: ea.textSecondary,
+    fontSize: 14,
     fontWeight: '600',
+    flex: 1,
   },
-  navSub: {
-    color: 'rgba(148,163,184,0.5)',
-    fontSize: 11,
-  },
-  navPip: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  drawerFoot: {
+  drawerExit: {
+    margin: 14,
     borderTopWidth: 1,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
+    borderTopColor: ea.border,
+    paddingTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  footLabel: {
-    color: 'rgba(148,163,184,0.55)',
-    fontSize: 9,
-    letterSpacing: 1.3,
+  drawerExitText: {
+    color: ea.text,
+    fontSize: 14,
     fontWeight: '700',
-  },
-  footValue: {
-    color: '#E2E8F0',
-    fontSize: 12,
-    marginTop: 3,
   },
 });
