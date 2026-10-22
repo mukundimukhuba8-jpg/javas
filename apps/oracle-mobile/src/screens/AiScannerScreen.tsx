@@ -1,10 +1,23 @@
 import { useState } from 'react';
-import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomNav, type TabKey } from '../components/BottomNav';
+import { CameraCaptureModal } from '../components/CameraCaptureModal';
 import { NeonBorder } from '../components/NeonBorder';
-import { colors, radii, spacing } from '../theme';
+import { ScanResultsCard } from '../components/ScanResultsCard';
+import { analyzeChartImage } from '../scanner/analyzeChart';
+import { pickChartFromLibrary, pickChartFromNativeCamera } from '../scanner/pickChart';
+import type { ChartSignal } from '../scanner/types';
+import { colors, spacing } from '../theme';
 
 type Props = {
   activeTab: TabKey;
@@ -13,26 +26,61 @@ type Props = {
 
 export function AiScannerScreen({ activeTab, onTabChange }: Props) {
   const insets = useSafeAreaInsets();
-  const [pickedLabel, setPickedLabel] = useState<string | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [signal, setSignal] = useState<ChartSignal | null>(null);
+  const [symbolDraft, setSymbolDraft] = useState('');
 
-  const stubUpload = () => {
-    setPickedLabel('Chart ready for analysis (stub)');
-    if (Platform.OS === 'web') {
-      // Keep UX light on web — no native picker required.
-      return;
+  const runAnalysis = async (uri: string) => {
+    setCameraOpen(false);
+    setScanning(true);
+    setError(null);
+    setSignal(null);
+    setProgress('Preparing chart…');
+    try {
+      const result = await analyzeChartImage(uri, setProgress);
+      setSignal(result);
+      setSymbolDraft(result.symbol);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Scan failed';
+      setError(msg);
+    } finally {
+      setScanning(false);
+      setProgress('');
     }
-    Alert.alert('Upload chart', 'Image picker stub — wire expo-image-picker when ready.');
   };
 
-  const stubCamera = () => {
-    setPickedLabel('Photo capture stub');
-    if (Platform.OS === 'web') return;
-    Alert.alert('Take photo', 'Camera stub — wire expo-image-picker / camera when ready.');
+  const onUpload = async () => {
+    setError(null);
+    const uri = await pickChartFromLibrary();
+    if (uri) await runAnalysis(uri);
+  };
+
+  const onTakePhoto = async () => {
+    setError(null);
+    if (Platform.OS === 'web') {
+      setCameraOpen(true);
+      return;
+    }
+    const uri = await pickChartFromNativeCamera();
+    if (uri) await runAnalysis(uri);
+  };
+
+  const reset = () => {
+    setSignal(null);
+    setSymbolDraft('');
+    setError(null);
   };
 
   return (
     <View style={[styles.root, { paddingTop: Math.max(insets.top, 10) }]}>
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.headerRow}>
           <Pressable
             style={styles.backBtn}
@@ -48,36 +96,70 @@ export function AiScannerScreen({ activeTab, onTabChange }: Props) {
           </View>
         </View>
 
-        <Pressable onPress={stubUpload} accessibilityRole="button" accessibilityLabel="Upload chart">
-          <NeonBorder radius={22} fill={colors.cardFill} style={styles.uploadBox}>
-            <Ionicons name="cloud-upload-outline" size={36} color={colors.neon} />
-            <Text style={styles.uploadTitle}>Tap to upload chart</Text>
-            <Text style={styles.uploadHint}>
-              Charts only — MetaTrader, TradingView, or similar
-            </Text>
-            {pickedLabel ? <Text style={styles.picked}>{pickedLabel}</Text> : null}
+        {scanning ? (
+          <NeonBorder radius={22} fill={colors.cardFill} style={styles.loadingBox}>
+            <ActivityIndicator size="large" color={colors.neon} />
+            <Text style={styles.loadingTitle}>Scanning chart…</Text>
+            <Text style={styles.loadingHint}>{progress || 'OCR + signal engine running'}</Text>
           </NeonBorder>
-        </Pressable>
+        ) : null}
 
-        <Pressable
-          style={styles.photoBtn}
-          onPress={stubCamera}
-          accessibilityRole="button"
-          accessibilityLabel="Take photo of chart"
-        >
-          <MaterialCommunityIcons name="line-scan" size={22} color={colors.neon} />
-          <Text style={styles.photoLabel}>Take photo of chart</Text>
-        </Pressable>
+        {!scanning && signal ? (
+          <ScanResultsCard
+            signal={{ ...signal, symbol: symbolDraft || signal.symbol }}
+            symbolDraft={symbolDraft}
+            onChangeSymbol={setSymbolDraft}
+            onRescan={reset}
+          />
+        ) : null}
+
+        {!scanning && !signal ? (
+          <>
+            <Pressable
+              onPress={onUpload}
+              accessibilityRole="button"
+              accessibilityLabel="Upload chart"
+            >
+              <NeonBorder radius={22} fill={colors.cardFill} style={styles.uploadBox}>
+                <Ionicons name="cloud-upload-outline" size={36} color={colors.neon} />
+                <Text style={styles.uploadTitle}>Tap to upload chart</Text>
+                <Text style={styles.uploadHint}>
+                  Charts only — MetaTrader, TradingView, or similar
+                </Text>
+              </NeonBorder>
+            </Pressable>
+
+            <Pressable
+              style={styles.photoBtn}
+              onPress={onTakePhoto}
+              accessibilityRole="button"
+              accessibilityLabel="Take photo of chart"
+            >
+              <MaterialCommunityIcons name="line-scan" size={22} color={colors.neon} />
+              <Text style={styles.photoLabel}>Take photo of chart</Text>
+            </Pressable>
+          </>
+        ) : null}
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <Text style={styles.disclaimer}>
           AI analysis is for educational purposes only. Not financial advice. Always do your own
           research.
         </Text>
-      </View>
+      </ScrollView>
 
       <View style={[styles.navWrap, { paddingBottom: Math.max(insets.bottom, spacing.navBottom) }]}>
         <BottomNav active={activeTab} onChange={onTabChange} />
       </View>
+
+      <CameraCaptureModal
+        visible={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={(uri) => {
+          void runAnalysis(uri);
+        }}
+      />
     </View>
   );
 }
@@ -87,9 +169,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
+  scroll: {
     flex: 1,
+  },
+  content: {
     paddingHorizontal: spacing.screenH,
+    paddingBottom: 16,
   },
   headerRow: {
     flexDirection: 'row',
@@ -143,12 +228,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
-  picked: {
-    marginTop: 6,
-    color: '#3DFF9A',
-    fontSize: 12,
-    fontWeight: '700',
-  },
   photoBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -164,12 +243,37 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  loadingBox: {
+    minHeight: 190,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 16,
+    padding: 24,
+  },
+  loadingTitle: {
+    color: colors.textPrimary,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  loadingHint: {
+    color: colors.textMuted,
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  error: {
+    color: '#FF8A8A',
+    textAlign: 'center',
+    marginBottom: 12,
+    fontSize: 13,
+  },
   disclaimer: {
     color: colors.textMuted,
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 18,
     paddingHorizontal: 12,
+    marginTop: 8,
   },
   navWrap: {
     paddingHorizontal: spacing.screenH,

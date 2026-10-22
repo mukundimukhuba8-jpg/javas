@@ -29,6 +29,9 @@
       "favicon": "./assets/favicon.png",
       "bundler": "metro",
       "backgroundColor": "#000000"
-    }
+    },
+    "plugins": [
+      "expo-image-picker"
+    ]
   }
 }
