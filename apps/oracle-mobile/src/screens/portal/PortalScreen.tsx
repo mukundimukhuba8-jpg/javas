@@ -10,10 +10,9 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, hexToRgba } from '../../theme/ThemeContext';
-import { colors as base, spacing } from '../../theme';
+import { portalFonts, usePortalFonts } from '../../theme/portalFonts';
 import { PORTAL_MENU, type PortalSectionId } from './portalSections';
 import { PortalSectionBody } from './PortalSections';
 
@@ -21,251 +20,293 @@ type Props = {
   onExit: () => void;
 };
 
+/** Explicit three-line hamburger — never an Ionicons menu glyph. */
+function HamburgerIcon({ open, color }: { open: boolean; color: string }) {
+  return (
+    <View style={ham.box} accessibilityElementsHidden>
+      <View
+        style={[
+          ham.line,
+          { backgroundColor: color },
+          open && { transform: [{ rotate: '45deg' }, { translateY: 7 }] },
+        ]}
+      />
+      <View
+        style={[
+          ham.line,
+          { backgroundColor: color, opacity: open ? 0 : 1 },
+        ]}
+      />
+      <View
+        style={[
+          ham.line,
+          { backgroundColor: color },
+          open && { transform: [{ rotate: '-45deg' }, { translateY: -7 }] },
+        ]}
+      />
+    </View>
+  );
+}
+
+const ham = StyleSheet.create({
+  box: {
+    width: 20,
+    height: 16,
+    justifyContent: 'space-between',
+  },
+  line: {
+    height: 2,
+    width: 20,
+    borderRadius: 1,
+  },
+});
+
 export function PortalScreen({ onExit }: Props) {
+  const fontsReady = usePortalFonts();
   const insets = useSafeAreaInsets();
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
+  const isDesktop = width >= 960;
+  const sidebarWidth = Math.min(280, Math.max(240, width * 0.72));
+
   const [section, setSection] = useState<PortalSectionId>('dashboard');
+  // Mobile-first: closed by default. Desktop opens once; ☰ always toggles.
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [desktopBooted, setDesktopBooted] = useState(false);
   const active = PORTAL_MENU.find((m) => m.id === section) ?? PORTAL_MENU[0];
-  const narrow = width < 720;
-  const sidebarWidth = narrow ? Math.min(260, width * 0.78) : width < 900 ? 200 : 228;
 
   const panelOpacity = useRef(new Animated.Value(1)).current;
-  const panelSlide = useRef(new Animated.Value(0)).current;
-  const drawerX = useRef(new Animated.Value(-sidebarWidth)).current;
-  const backdrop = useRef(new Animated.Value(0)).current;
+  const panelY = useRef(new Animated.Value(0)).current;
+  const drawerX = useRef(new Animated.Value(-280)).current;
+  const backdropOp = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    panelOpacity.setValue(0);
-    panelSlide.setValue(10);
-    Animated.parallel([
-      Animated.timing(panelOpacity, {
-        toValue: 1,
-        duration: 220,
-        useNativeDriver: true,
-      }),
-      Animated.timing(panelSlide, {
-        toValue: 0,
-        duration: 240,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [section, panelOpacity, panelSlide]);
+    if (isDesktop && !desktopBooted) {
+      setDrawerOpen(true);
+      setDesktopBooted(true);
+    }
+    if (!isDesktop) {
+      setDesktopBooted(false);
+      setDrawerOpen(false);
+    }
+  }, [isDesktop, desktopBooted]);
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(drawerX, {
         toValue: drawerOpen ? 0 : -sidebarWidth,
-        duration: 240,
+        duration: 260,
         useNativeDriver: true,
       }),
-      Animated.timing(backdrop, {
-        toValue: drawerOpen ? 1 : 0,
+      Animated.timing(backdropOp, {
+        toValue: drawerOpen && !isDesktop ? 1 : 0,
         duration: 220,
         useNativeDriver: true,
       }),
     ]).start();
-  }, [drawerOpen, sidebarWidth, drawerX, backdrop]);
+  }, [drawerOpen, sidebarWidth, isDesktop, drawerX, backdropOp]);
+
+  useEffect(() => {
+    panelOpacity.setValue(0);
+    panelY.setValue(8);
+    Animated.parallel([
+      Animated.timing(panelOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.timing(panelY, { toValue: 0, duration: 220, useNativeDriver: true }),
+    ]).start();
+  }, [section, panelOpacity, panelY]);
 
   const selectSection = (id: PortalSectionId) => {
     setSection(id);
-    if (narrow) setDrawerOpen(false);
+    if (!isDesktop) setDrawerOpen(false);
   };
 
-  const sidebar = (
-    <View style={[styles.sidebarInner, { width: sidebarWidth }]}>
-      <Text style={styles.sidebarLabel}>MODULES</Text>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.sidebarScroll}
-      >
-        {PORTAL_MENU.map((item) => {
-          const selected = item.id === section;
-          return (
-            <Pressable
-              key={item.id}
-              onPress={() => selectSection(item.id)}
-              style={[
-                styles.navItem,
-                selected && {
-                  backgroundColor: hexToRgba(colors.neon, 0.12),
-                  borderColor: hexToRgba(colors.neon, 0.55),
-                },
-              ]}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              accessibilityLabel={item.title}
-            >
-              {selected ? (
-                <View style={[styles.navAccent, { backgroundColor: colors.neon }]} />
-              ) : null}
-              <View
-                style={[
-                  styles.navIconWrap,
-                  selected && { backgroundColor: hexToRgba(colors.neon, 0.18) },
-                ]}
-              >
-                <Ionicons
-                  name={item.icon}
-                  size={16}
-                  color={selected ? colors.neon : base.textMuted}
-                />
-              </View>
-              <View style={styles.navCopy}>
-                <Text
-                  style={[styles.navText, selected && { color: base.textPrimary }]}
-                  numberOfLines={2}
-                >
-                  {item.title}
-                </Text>
-                {!narrow || drawerOpen ? (
-                  <Text style={styles.navSub} numberOfLines={1}>
-                    {item.subtitle}
-                  </Text>
-                ) : null}
-              </View>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-      <View style={[styles.sidebarFoot, { borderTopColor: hexToRgba(colors.neon, 0.2) }]}>
-        <Text style={styles.sidebarFootLabel}>SESSION</Text>
-        <Text style={styles.sidebarFootValue}>superadmin · console</Text>
-      </View>
-    </View>
-  );
+  const f = fontsReady ? portalFonts : null;
 
   return (
     <View
       style={[
         styles.root,
         {
-          paddingTop: Math.max(insets.top, 8),
+          paddingTop: Math.max(insets.top, 10),
           paddingBottom: Math.max(insets.bottom, 8),
         },
       ]}
     >
-      <LinearGradient
-        colors={['#08111F', '#03060C']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.topBar, { borderBottomColor: hexToRgba(colors.neon, 0.28) }]}
-      >
-        <View style={styles.brandBlock}>
-          {narrow ? (
-            <Pressable
-              onPress={() => setDrawerOpen((v) => !v)}
-              style={[styles.menuBtn, { borderColor: hexToRgba(colors.neon, 0.45) }]}
-              accessibilityRole="button"
-              accessibilityLabel={drawerOpen ? 'Close menu' : 'Open menu'}
+      {/* Top bar — ☰ always present */}
+      <View style={[styles.topBar, { borderBottomColor: 'rgba(255,255,255,0.06)' }]}>
+        <View style={styles.topLeft}>
+          <Pressable
+            onPress={() => setDrawerOpen((v) => !v)}
+            style={[styles.hamburgerBtn, { borderColor: hexToRgba(colors.neon, 0.4) }]}
+            accessibilityRole="button"
+            accessibilityLabel={drawerOpen ? 'Close sidebar menu' : 'Open sidebar menu'}
+            testID="portal-hamburger"
+          >
+            <HamburgerIcon open={drawerOpen} color="#F4F7FB" />
+          </Pressable>
+          <View>
+            <Text
+              style={[
+                styles.brandEyebrow,
+                f && { fontFamily: f.uiMed },
+                { color: colors.neon },
+              ]}
             >
-              <Ionicons
-                name={drawerOpen ? 'close' : 'menu'}
-                size={20}
-                color={base.textPrimary}
-              />
-            </Pressable>
-          ) : null}
-          <View style={[styles.brandMark, { borderColor: colors.neon }]}>
-            <View style={[styles.brandCore, { backgroundColor: colors.neon }]} />
-          </View>
-          <View style={{ flexShrink: 1 }}>
-            <Text style={styles.brandKicker}>ORACLE // SUPERADMIN</Text>
-            <Text style={styles.brandTitle}>CONTROL PORTAL</Text>
+              ORACLE SUPERADMIN
+            </Text>
+            <Text style={[styles.brandTitle, f && { fontFamily: f.display }]}>
+              Portal
+            </Text>
           </View>
         </View>
         <View style={styles.topRight}>
-          <View style={[styles.livePill, { borderColor: hexToRgba(colors.neon, 0.5) }]}>
-            <View style={styles.liveDot} />
-            <Text style={[styles.liveText, { color: colors.neon }]}>LIVE</Text>
+          <View style={[styles.statusChip, { borderColor: 'rgba(61,255,154,0.35)' }]}>
+            <View style={styles.statusDot} />
+            <Text style={[styles.statusText, f && { fontFamily: f.uiMed }]}>Live</Text>
           </View>
           <Pressable
             onPress={onExit}
-            style={[styles.exitBtn, { borderColor: hexToRgba(colors.neon, 0.55) }]}
+            style={[styles.exitBtn, { borderColor: hexToRgba(colors.neon, 0.45) }]}
             accessibilityRole="button"
             accessibilityLabel="Exit portal"
           >
-            <Ionicons name="arrow-back" size={16} color={base.textPrimary} />
-            <Text style={styles.exitLabel}>EXIT</Text>
+            <Ionicons name="arrow-back" size={15} color="#F4F7FB" />
+            <Text style={[styles.exitLabel, f && { fontFamily: f.uiBold }]}>EXIT</Text>
           </Pressable>
         </View>
-      </LinearGradient>
+      </View>
 
-      <View style={styles.body}>
-        {!narrow ? (
-          <View
-            style={[
-              styles.sidebarDock,
-              {
-                width: sidebarWidth,
-                borderRightColor: hexToRgba(colors.neon, 0.28),
-                ...Platform.select({
-                  web: {
-                    boxShadow: `6px 0 32px ${hexToRgba(colors.neon, 0.06)}`,
-                  } as object,
-                }),
-              },
-            ]}
-          >
-            {sidebar}
-          </View>
-        ) : null}
-
-        <View style={styles.content}>
-          <View style={styles.contentHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.contentKicker, { color: colors.neon }]}>
-                {active.subtitle.toUpperCase()}
-              </Text>
-              <Text style={styles.contentTitle}>{active.title}</Text>
-            </View>
+      <View style={styles.workspace}>
+        {/* Main content insets when desktop drawer is open */}
+        <View
+          style={[
+            styles.main,
+            isDesktop && drawerOpen ? { paddingLeft: sidebarWidth + 8 } : null,
+          ]}
+        >
+          <View style={styles.pageHead}>
+            <Text
+              style={[
+                styles.pageKicker,
+                f && { fontFamily: f.uiMed },
+                { color: colors.neon },
+              ]}
+            >
+              {active.subtitle}
+            </Text>
+            <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>
+              {active.title}
+            </Text>
           </View>
           <Animated.View
             style={[
-              styles.contentBody,
-              {
-                opacity: panelOpacity,
-                transform: [{ translateY: panelSlide }],
-              },
+              styles.pageBody,
+              { opacity: panelOpacity, transform: [{ translateY: panelY }] },
             ]}
           >
-            <PortalSectionBody section={section} />
+            <PortalSectionBody section={section} fontsReady={fontsReady} />
           </Animated.View>
         </View>
 
-        {narrow ? (
-          <>
-            <Animated.View
-              pointerEvents={drawerOpen ? 'auto' : 'none'}
-              style={[
-                styles.backdrop,
-                {
-                  opacity: backdrop,
-                },
-              ]}
-            >
-              <Pressable style={StyleSheet.absoluteFill as object} onPress={() => setDrawerOpen(false)} />
-            </Animated.View>
-            <Animated.View
-              style={[
-                styles.drawer,
-                {
-                  width: sidebarWidth,
-                  borderRightColor: hexToRgba(colors.neon, 0.35),
-                  transform: [{ translateX: drawerX }],
-                  ...Platform.select({
-                    web: {
-                      boxShadow: `8px 0 40px rgba(0,0,0,0.55)`,
-                    } as object,
-                  }),
-                },
-              ]}
-            >
-              {sidebar}
-            </Animated.View>
-          </>
-        ) : null}
+        {/* Backdrop on mobile when drawer open */}
+        <Animated.View
+          pointerEvents={drawerOpen && !isDesktop ? 'auto' : 'none'}
+          style={[styles.backdrop, { opacity: backdropOp }]}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill as object}
+            onPress={() => setDrawerOpen(false)}
+            accessibilityLabel="Dismiss sidebar"
+          />
+        </Animated.View>
+
+        {/* Drawer sidebar — toggled only via ☰ */}
+        <Animated.View
+          style={[
+            styles.drawer,
+            {
+              width: sidebarWidth,
+              borderRightColor: hexToRgba(colors.neon, 0.22),
+              transform: [{ translateX: drawerX }],
+              ...Platform.select({
+                web: {
+                  boxShadow: drawerOpen
+                    ? '12px 0 48px rgba(0,0,0,0.45)'
+                    : 'none',
+                } as object,
+              }),
+            },
+          ]}
+        >
+          <View style={styles.drawerHead}>
+            <Text style={[styles.drawerLabel, f && { fontFamily: f.uiBold }]}>
+              NAVIGATION
+            </Text>
+            <Text style={[styles.drawerHint, f && { fontFamily: f.ui }]}>
+              10 modules
+            </Text>
+          </View>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.navScroll}
+          >
+            {PORTAL_MENU.map((item, index) => {
+              const selected = item.id === section;
+              return (
+                <Pressable
+                  key={item.id}
+                  onPress={() => selectSection(item.id)}
+                  style={[
+                    styles.navItem,
+                    selected && {
+                      backgroundColor: hexToRgba(colors.neon, 0.1),
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={item.title}
+                >
+                  <Text
+                    style={[
+                      styles.navIndex,
+                      f && { fontFamily: f.mono },
+                      selected && { color: colors.neon },
+                    ]}
+                  >
+                    {String(index + 1).padStart(2, '0')}
+                  </Text>
+                  <View style={styles.navCopy}>
+                    <Text
+                      style={[
+                        styles.navTitle,
+                        f && { fontFamily: f.uiMed },
+                        selected && { color: '#F8FAFC' },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item.title}
+                    </Text>
+                    <Text
+                      style={[styles.navSub, f && { fontFamily: f.ui }]}
+                      numberOfLines={1}
+                    >
+                      {item.subtitle}
+                    </Text>
+                  </View>
+                  {selected ? (
+                    <View style={[styles.navPip, { backgroundColor: colors.neon }]} />
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          <View style={[styles.drawerFoot, { borderTopColor: 'rgba(255,255,255,0.06)' }]}>
+            <Text style={[styles.footLabel, f && { fontFamily: f.uiBold }]}>SESSION</Text>
+            <Text style={[styles.footValue, f && { fontFamily: f.uiMed }]}>
+              superadmin · console
+            </Text>
+          </View>
+        </Animated.View>
       </View>
     </View>
   );
@@ -274,62 +315,51 @@ export function PortalScreen({ onExit }: Props) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#02040A',
+    backgroundColor: '#07090F',
   },
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.screenH,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
+    backgroundColor: '#0A0D14',
+    zIndex: 40,
   },
-  brandBlock: {
+  topLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     flexShrink: 1,
   },
-  menuBtn: {
-    width: 38,
-    height: 38,
+  hamburgerBtn: {
+    width: 42,
+    height: 42,
     borderRadius: 12,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(8,16,28,0.9)',
+    backgroundColor: '#111522',
   },
-  brandMark: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  brandCore: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  brandKicker: {
-    color: base.textMuted,
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1.3,
+  brandEyebrow: {
+    fontSize: 10,
+    letterSpacing: 1.4,
+    fontWeight: '600',
+    marginBottom: 1,
   },
   brandTitle: {
-    color: base.textPrimary,
-    fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: 1.1,
+    color: '#F8FAFC',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
   topRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  livePill: {
+  statusChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -337,18 +367,18 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: 'rgba(8,24,18,0.75)',
+    backgroundColor: 'rgba(12, 28, 22, 0.7)',
   },
-  liveDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: '#3DFF9A',
   },
-  liveText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
+  statusText: {
+    color: '#3DFF9A',
+    fontSize: 11,
+    fontWeight: '600',
   },
   exitBtn: {
     flexDirection: 'row',
@@ -358,126 +388,42 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: base.iconFrame,
+    backgroundColor: '#121526',
   },
   exitLabel: {
-    color: base.textPrimary,
+    color: '#F4F7FB',
     fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
+    fontWeight: '700',
+    letterSpacing: 0.8,
   },
-  body: {
+  workspace: {
     flex: 1,
     flexDirection: 'row',
     position: 'relative',
   },
-  sidebarDock: {
-    borderRightWidth: 1,
-    backgroundColor: '#050910',
-  },
-  sidebarInner: {
+  main: {
     flex: 1,
-    paddingTop: 16,
-    paddingHorizontal: 10,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    zIndex: 1,
   },
-  sidebarLabel: {
-    color: base.textMuted,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.6,
-    marginBottom: 12,
-    marginLeft: 8,
+  pageHead: {
+    marginBottom: 16,
+    gap: 4,
   },
-  sidebarScroll: {
-    paddingBottom: 16,
-    gap: 6,
-  },
-  navItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 11,
-    paddingHorizontal: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    overflow: 'hidden',
-  },
-  navAccent: {
-    position: 'absolute',
-    left: 0,
-    top: 10,
-    bottom: 10,
-    width: 3,
-    borderRadius: 2,
-  },
-  navIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  navCopy: {
-    flex: 1,
-    gap: 1,
-  },
-  navText: {
-    color: base.textMuted,
-    fontSize: 12,
-    fontWeight: '700',
-    lineHeight: 15,
-  },
-  navSub: {
-    color: 'rgba(148,163,184,0.65)',
-    fontSize: 10,
-    fontWeight: '500',
-  },
-  sidebarFoot: {
-    borderTopWidth: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    marginTop: 4,
-  },
-  sidebarFootLabel: {
-    color: base.textMuted,
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1.2,
-  },
-  sidebarFootValue: {
-    color: base.textPrimary,
+  pageKicker: {
     fontSize: 11,
+    letterSpacing: 0.4,
     fontWeight: '600',
-    marginTop: 3,
+    textTransform: 'uppercase',
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 16,
+  pageTitle: {
+    color: '#F8FAFC',
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: -0.6,
   },
-  contentHeader: {
-    marginBottom: 14,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
-  contentKicker: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1.4,
-    marginBottom: 4,
-  },
-  contentTitle: {
-    color: base.textPrimary,
-    fontSize: 24,
-    fontWeight: '900',
-    letterSpacing: 0.3,
-  },
-  contentBody: {
+  pageBody: {
     flex: 1,
   },
   backdrop: {
@@ -486,7 +432,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(2,4,10,0.62)',
     zIndex: 20,
   },
   drawer: {
@@ -494,8 +440,76 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     left: 0,
-    backgroundColor: '#050910',
+    backgroundColor: '#0B0E16',
     borderRightWidth: 1,
     zIndex: 30,
+    paddingTop: 8,
+  },
+  drawerHead: {
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    gap: 2,
+  },
+  drawerLabel: {
+    color: 'rgba(148,163,184,0.9)',
+    fontSize: 10,
+    letterSpacing: 1.6,
+    fontWeight: '700',
+  },
+  drawerHint: {
+    color: 'rgba(148,163,184,0.55)',
+    fontSize: 12,
+  },
+  navScroll: {
+    paddingHorizontal: 10,
+    paddingBottom: 16,
+    gap: 2,
+  },
+  navItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+  navIndex: {
+    color: 'rgba(148,163,184,0.45)',
+    fontSize: 11,
+    width: 22,
+  },
+  navCopy: {
+    flex: 1,
+    gap: 1,
+  },
+  navTitle: {
+    color: 'rgba(226,232,240,0.78)',
+    fontSize: 13.5,
+    fontWeight: '600',
+  },
+  navSub: {
+    color: 'rgba(148,163,184,0.5)',
+    fontSize: 11,
+  },
+  navPip: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  drawerFoot: {
+    borderTopWidth: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  footLabel: {
+    color: 'rgba(148,163,184,0.55)',
+    fontSize: 9,
+    letterSpacing: 1.3,
+    fontWeight: '700',
+  },
+  footValue: {
+    color: '#E2E8F0',
+    fontSize: 12,
+    marginTop: 3,
   },
 });
