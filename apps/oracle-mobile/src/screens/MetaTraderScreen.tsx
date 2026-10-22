@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
+  FlatList,
   Pressable,
   StyleSheet,
   Text,
@@ -11,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomNav, type TabKey } from '../components/BottomNav';
 import { NeonBorder } from '../components/NeonBorder';
+import { MT5_BROKERS } from '../data/brokers';
 import { colors, radii, spacing } from '../theme';
 
 type Props = {
@@ -20,11 +22,33 @@ type Props = {
 
 export function MetaTraderScreen({ activeTab, onTabChange }: Props) {
   const insets = useSafeAreaInsets();
-  const [account, setAccount] = useState('4089631');
-  const [password, setPassword] = useState('demo-secret');
+  const [account, setAccount] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [broker, setBroker] = useState(''); // Critical: blank by default
+  const [broker, setBroker] = useState('');
+  const [brokerFocused, setBrokerFocused] = useState(false);
   const [connected, setConnected] = useState(false);
+
+  const brokerMatches = useMemo(() => {
+    const q = broker.trim().toLowerCase();
+    if (!q) {
+      // Show a short starter list while focused with empty query
+      return brokerFocused ? MT5_BROKERS.slice(0, 8) : [];
+    }
+    return MT5_BROKERS.filter((name) => name.toLowerCase().includes(q)).slice(0, 12);
+  }, [broker, brokerFocused]);
+
+  const showBrokerList = brokerFocused && brokerMatches.length > 0;
+
+  const selectBroker = (name: string) => {
+    setBroker(name);
+    setBrokerFocused(false);
+  };
+
+  const clearBroker = () => {
+    setBroker('');
+    setBrokerFocused(true);
+  };
 
   return (
     <View style={[styles.root, { paddingTop: Math.max(insets.top, 10) }]}>
@@ -35,18 +59,18 @@ export function MetaTraderScreen({ activeTab, onTabChange }: Props) {
           </NeonBorder>
 
           <View style={styles.statusRow}>
-            <View style={styles.greenDot} />
+            <View style={[styles.statusDot, connected ? styles.statusDotOn : styles.statusDotOff]} />
             <Text style={styles.mt5Label}>MT5</Text>
           </View>
 
           <View style={styles.metricsRow}>
             <Text style={styles.metric}>
               <Text style={styles.metricLabel}>Equity </Text>
-              <Text style={styles.metricValue}>47002.70</Text>
+              <Text style={styles.metricValue}>—</Text>
             </Text>
             <Text style={styles.metric}>
               <Text style={styles.metricLabel}>Balance </Text>
-              <Text style={styles.metricValue}>47227.74</Text>
+              <Text style={styles.metricValue}>—</Text>
             </Text>
           </View>
 
@@ -69,6 +93,7 @@ export function MetaTraderScreen({ activeTab, onTabChange }: Props) {
             keyboardType="number-pad"
             style={styles.input}
             accessibilityLabel="Account number"
+            autoCorrect={false}
           />
 
           <View style={styles.row}>
@@ -80,6 +105,8 @@ export function MetaTraderScreen({ activeTab, onTabChange }: Props) {
               secureTextEntry={!showPassword}
               style={[styles.input, styles.inputFlex]}
               accessibilityLabel="Password"
+              autoCorrect={false}
+              autoCapitalize="none"
             />
             <Pressable
               style={styles.sideBtn}
@@ -95,30 +122,65 @@ export function MetaTraderScreen({ activeTab, onTabChange }: Props) {
             </Pressable>
           </View>
 
-          <View style={styles.row}>
-            <View style={[styles.input, styles.inputFlex, styles.brokerField]}>
-              <MaterialCommunityIcons
-                name="database-outline"
-                size={18}
-                color={broker ? colors.textPrimary : colors.textMuted}
-              />
-              <TextInput
-                value={broker}
-                onChangeText={setBroker}
-                placeholder="Broker"
-                placeholderTextColor={colors.textMuted}
-                style={styles.brokerInput}
-                accessibilityLabel="Broker"
-              />
+          <View style={styles.brokerBlock}>
+            <View style={styles.row}>
+              <View style={[styles.input, styles.inputFlex, styles.brokerField]}>
+                <MaterialCommunityIcons
+                  name="database-outline"
+                  size={18}
+                  color={broker ? colors.textPrimary : colors.textMuted}
+                />
+                <TextInput
+                  value={broker}
+                  onChangeText={(text) => {
+                    setBroker(text);
+                    setBrokerFocused(true);
+                  }}
+                  onFocus={() => setBrokerFocused(true)}
+                  placeholder="Search broker"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.brokerInput}
+                  accessibilityLabel="Broker"
+                  autoCorrect={false}
+                  autoCapitalize="none"
+                />
+              </View>
+              <Pressable
+                style={styles.sideBtn}
+                onPress={clearBroker}
+                accessibilityRole="button"
+                accessibilityLabel="Clear broker"
+              >
+                <Ionicons name="close" size={20} color={colors.textPrimary} />
+              </Pressable>
             </View>
-            <Pressable
-              style={styles.sideBtn}
-              onPress={() => setBroker('')}
-              accessibilityRole="button"
-              accessibilityLabel="Clear broker"
-            >
-              <Ionicons name="close" size={20} color={colors.textPrimary} />
-            </Pressable>
+
+            {showBrokerList ? (
+              <View style={styles.dropdown} accessibilityRole="list">
+                <FlatList
+                  data={brokerMatches}
+                  keyExtractor={(item) => item}
+                  keyboardShouldPersistTaps="handled"
+                  style={styles.dropdownList}
+                  renderItem={({ item }) => (
+                    <Pressable
+                      style={styles.dropdownRow}
+                      onPress={() => selectBroker(item)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Select broker ${item}`}
+                    >
+                      <MaterialCommunityIcons
+                        name="server"
+                        size={16}
+                        color={colors.neon}
+                        style={{ marginRight: 10 }}
+                      />
+                      <Text style={styles.dropdownText}>{item}</Text>
+                    </Pressable>
+                  )}
+                />
+              </View>
+            ) : null}
           </View>
 
           <Pressable
@@ -177,11 +239,16 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 10,
   },
-  greenDot: {
+  statusDot: {
     width: 9,
     height: 9,
     borderRadius: 5,
+  },
+  statusDotOn: {
     backgroundColor: '#3DFF9A',
+  },
+  statusDotOff: {
+    backgroundColor: colors.textMuted,
   },
   mt5Label: {
     color: '#8FB7FF',
@@ -246,6 +313,7 @@ const styles = StyleSheet.create({
   formCard: {
     padding: 16,
     gap: 12,
+    overflow: 'visible',
   },
   input: {
     backgroundColor: '#0A0E1C',
@@ -276,6 +344,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  brokerBlock: {
+    zIndex: 5,
+  },
   brokerField: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -289,6 +360,31 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     paddingVertical: 14,
     paddingHorizontal: 0,
+  },
+  dropdown: {
+    marginTop: 8,
+    borderWidth: 1.5,
+    borderColor: colors.neon,
+    borderRadius: 14,
+    backgroundColor: '#0A0E1C',
+    maxHeight: 200,
+    overflow: 'hidden',
+  },
+  dropdownList: {
+    maxHeight: 200,
+  },
+  dropdownRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(106, 160, 248, 0.25)',
+  },
+  dropdownText: {
+    color: colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
   },
   connectWrap: {
     marginTop: 4,
