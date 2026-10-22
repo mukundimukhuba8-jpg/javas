@@ -11,18 +11,39 @@ type Action = {
   label: string;
   icon: ReactNode;
   onPress?: () => void;
+  active?: boolean;
 };
 
-export function OracleCard() {
+type Props = {
+  running: boolean;
+  onToggleStart: () => void;
+  onOpenQuotes: () => void;
+  selectedCount?: number;
+};
+
+export function OracleCard({
+  running,
+  onToggleStart,
+  onOpenQuotes,
+  selectedCount = 0,
+}: Props) {
   const actions: Action[] = [
     {
       key: 'start',
-      label: 'START',
-      icon: <Ionicons name="play" size={22} color={colors.textPrimary} style={{ marginLeft: 2 }} />,
+      label: running ? 'RUNNING' : 'START',
+      active: running,
+      onPress: onToggleStart,
+      icon: running ? (
+        <Ionicons name="pause" size={22} color={colors.textPrimary} />
+      ) : (
+        <Ionicons name="play" size={22} color={colors.textPrimary} style={{ marginLeft: 2 }} />
+      ),
     },
     {
       key: 'quotes',
       label: 'QUOTES',
+      active: selectedCount > 0,
+      onPress: onOpenQuotes,
       icon: <MaterialCommunityIcons name="pulse" size={24} color={colors.textPrimary} />,
     },
     {
@@ -48,17 +69,32 @@ export function OracleCard() {
         />
         <View style={styles.titleRow}>
           <Text style={styles.title}>THE ORACLE</Text>
-          <View style={styles.redDot} />
+          <View style={[styles.statusDot, running ? styles.statusDotRunning : styles.statusDotIdle]} />
         </View>
+        {running ? (
+          <View style={styles.runningBadge} accessibilityLabel="EA running">
+            <View style={styles.runningPulse} />
+            <Text style={styles.runningBadgeText}>EA LIVE</Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.actionRow}>
         {actions.map((action, index) => (
           <View key={action.key} style={styles.actionCell}>
             {index > 0 ? <View style={styles.divider} /> : null}
-            <Pressable style={styles.actionBtn} onPress={action.onPress} accessibilityRole="button">
-              <View style={styles.iconFrame}>{action.icon}</View>
-              <Text style={styles.actionLabel}>{action.label}</Text>
+            <Pressable
+              style={styles.actionBtn}
+              onPress={action.onPress}
+              accessibilityRole="button"
+              accessibilityState={{ selected: !!action.active }}
+            >
+              <View style={[styles.iconFrame, action.active && styles.iconFrameActive]}>
+                {action.icon}
+              </View>
+              <Text style={[styles.actionLabel, action.active && styles.actionLabelActive]}>
+                {action.label}
+              </Text>
             </Pressable>
           </View>
         ))}
@@ -102,12 +138,44 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
   },
-  redDot: {
+  statusDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: colors.redDot,
     marginTop: 4,
+  },
+  statusDotIdle: {
+    backgroundColor: colors.redDot,
+  },
+  statusDotRunning: {
+    backgroundColor: '#3DFF9A',
+  },
+  runningBadge: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    zIndex: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: '#3DFF9A',
+    backgroundColor: 'rgba(8, 40, 24, 0.85)',
+  },
+  runningPulse: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#3DFF9A',
+  },
+  runningBadgeText: {
+    color: '#3DFF9A',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
   },
   actionRow: {
     flexDirection: 'row',
@@ -144,10 +212,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  iconFrameActive: {
+    borderColor: '#3DFF9A',
+    backgroundColor: 'rgba(61, 255, 154, 0.12)',
+  },
   actionLabel: {
     color: colors.textPrimary,
     fontSize: 12,
     fontWeight: '700',
     letterSpacing: 1.4,
+  },
+  actionLabelActive: {
+    color: '#3DFF9A',
   },
 });
