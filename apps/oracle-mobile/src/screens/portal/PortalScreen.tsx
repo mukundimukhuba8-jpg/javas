@@ -20,30 +20,13 @@ type Props = {
   onExit: () => void;
 };
 
-/** Explicit three-line hamburger — never an Ionicons menu glyph. */
-function HamburgerIcon({ open, color }: { open: boolean; color: string }) {
+/** Explicit three-line ☰ — stays three lines open or closed (never an X / Ionicons menu). */
+function HamburgerIcon({ color }: { color: string }) {
   return (
-    <View style={ham.box} accessibilityElementsHidden>
-      <View
-        style={[
-          ham.line,
-          { backgroundColor: color },
-          open && { transform: [{ rotate: '45deg' }, { translateY: 7 }] },
-        ]}
-      />
-      <View
-        style={[
-          ham.line,
-          { backgroundColor: color, opacity: open ? 0 : 1 },
-        ]}
-      />
-      <View
-        style={[
-          ham.line,
-          { backgroundColor: color },
-          open && { transform: [{ rotate: '-45deg' }, { translateY: -7 }] },
-        ]}
-      />
+    <View style={ham.box} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View style={[ham.line, { backgroundColor: color }]} />
+      <View style={[ham.line, { backgroundColor: color }]} />
+      <View style={[ham.line, { backgroundColor: color }]} />
     </View>
   );
 }
@@ -142,7 +125,7 @@ export function PortalScreen({ onExit }: Props) {
             accessibilityLabel={drawerOpen ? 'Close sidebar menu' : 'Open sidebar menu'}
             testID="portal-hamburger"
           >
-            <HamburgerIcon open={drawerOpen} color="#F4F7FB" />
+            <HamburgerIcon color="#F4F7FB" />
           </Pressable>
           <View>
             <Text
