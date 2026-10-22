@@ -18,9 +18,10 @@ import { colors, radii, spacing } from '../theme';
 type Props = {
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
+  onOpenPortal?: () => void;
 };
 
-export function MetaTraderScreen({ activeTab, onTabChange }: Props) {
+export function MetaTraderScreen({ activeTab, onTabChange, onOpenPortal }: Props) {
   const insets = useSafeAreaInsets();
   const [account, setAccount] = useState('');
   const [password, setPassword] = useState('');
@@ -202,7 +203,7 @@ export function MetaTraderScreen({ activeTab, onTabChange }: Props) {
       </View>
 
       <View style={[styles.navWrap, { paddingBottom: Math.max(insets.bottom, spacing.navBottom) }]}>
-        <BottomNav active={activeTab} onChange={onTabChange} />
+        <BottomNav active={activeTab} onChange={onTabChange} onOpenPortal={onOpenPortal} />
       </View>
     </View>
   );

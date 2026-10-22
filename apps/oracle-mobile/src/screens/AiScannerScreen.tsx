@@ -22,9 +22,10 @@ import { colors, spacing } from '../theme';
 type Props = {
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
+  onOpenPortal?: () => void;
 };
 
-export function AiScannerScreen({ activeTab, onTabChange }: Props) {
+export function AiScannerScreen({ activeTab, onTabChange, onOpenPortal }: Props) {
   const insets = useSafeAreaInsets();
   const [cameraOpen, setCameraOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -150,7 +151,7 @@ export function AiScannerScreen({ activeTab, onTabChange }: Props) {
       </ScrollView>
 
       <View style={[styles.navWrap, { paddingBottom: Math.max(insets.bottom, spacing.navBottom) }]}>
-        <BottomNav active={activeTab} onChange={onTabChange} />
+        <BottomNav active={activeTab} onChange={onTabChange} onOpenPortal={onOpenPortal} />
       </View>
 
       <CameraCaptureModal

@@ -14,6 +14,7 @@ type Props = {
   onChangeSelectedSymbols: (ids: string[]) => void;
   eaRunning: boolean;
   onToggleEa: () => void;
+  onOpenPortal?: () => void;
 };
 
 export function HomeScreen({
@@ -23,6 +24,7 @@ export function HomeScreen({
   onChangeSelectedSymbols,
   eaRunning,
   onToggleEa,
+  onOpenPortal,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [quotesOpen, setQuotesOpen] = useState(false);
@@ -46,7 +48,7 @@ export function HomeScreen({
       </ScrollView>
 
       <View style={[styles.navWrap, { paddingBottom: Math.max(insets.bottom, spacing.navBottom) }]}>
-        <BottomNav active={activeTab} onChange={onTabChange} />
+        <BottomNav active={activeTab} onChange={onTabChange} onOpenPortal={onOpenPortal} />
       </View>
 
       <QuotesModal

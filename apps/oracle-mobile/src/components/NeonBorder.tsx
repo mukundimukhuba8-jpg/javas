@@ -1,6 +1,7 @@
-import { ReactNode } from 'react';
-import { Platform, StyleSheet, View, ViewStyle } from 'react-native';
-import { colors } from '../theme';
+import type { ReactNode } from 'react';
+import { Platform, StyleSheet, View, type ViewStyle } from 'react-native';
+import { colors as fallback } from '../theme';
+import { hexToRgba, useTheme } from '../theme/ThemeContext';
 
 type Props = {
   children: ReactNode;
@@ -9,26 +10,30 @@ type Props = {
   fill?: string;
 };
 
-/** Thin neon cyan/electric-blue border with a soft outer glow. */
-export function NeonBorder({ children, style, radius, fill = colors.cardFill }: Props) {
+/** Thin neon border with a soft outer glow (uses live accent from ThemeProvider). */
+export function NeonBorder({ children, style, radius, fill }: Props) {
+  const { colors } = useTheme();
+  const neon = colors.neon || fallback.neon;
+  const bg = fill ?? colors.cardFill;
+
   return (
     <View
       style={[
         styles.outer,
         {
           borderRadius: radius,
-          borderColor: colors.neon,
-          backgroundColor: fill,
+          borderColor: neon,
+          backgroundColor: bg,
           ...Platform.select({
             ios: {
-              shadowColor: colors.neon,
+              shadowColor: neon,
               shadowOpacity: 0.55,
               shadowRadius: 8,
               shadowOffset: { width: 0, height: 0 },
             },
             android: { elevation: 6 },
             web: {
-              boxShadow: `0 0 10px rgba(106, 160, 248, 0.45), 0 0 2px rgba(106, 160, 248, 0.8)`,
+              boxShadow: `0 0 10px ${hexToRgba(neon, 0.45)}, 0 0 2px ${hexToRgba(neon, 0.8)}`,
             } as ViewStyle,
           }),
         },
