@@ -63,14 +63,14 @@ export function BottomNav({ active, onChange }: Props) {
             >
               <View style={[styles.tabInner, isActive && styles.tabActive]}>
                 {tab.renderIcon(isActive)}
-                <Text style={[styles.label, isActive ? styles.labelActive : styles.labelInactive]}>
-                  {tab.label}
-                </Text>
                 {isActive ? (
                   <View style={styles.activeUnderline} />
                 ) : (
                   <View style={styles.underlineSpacer} />
                 )}
+                <Text style={[styles.label, isActive ? styles.labelActive : styles.labelInactive]}>
+                  {tab.label}
+                </Text>
               </View>
             </Pressable>
           );
@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: radii.homeActive,
     minWidth: 86,
-    gap: 4,
+    gap: 3,
   },
   tabActive: {
     backgroundColor: colors.homeActiveBg,
@@ -118,14 +118,12 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   activeUnderline: {
-    marginTop: 2,
     width: 18,
-    height: 2,
-    borderRadius: 1,
+    height: 3,
+    borderRadius: 2,
     backgroundColor: colors.neon,
   },
   underlineSpacer: {
-    marginTop: 2,
-    height: 2,
+    height: 3,
   },
 });

@@ -1,0 +1,312 @@
+import { useState } from 'react';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BottomNav, type TabKey } from '../components/BottomNav';
+import { NeonBorder } from '../components/NeonBorder';
+import { colors, radii, spacing } from '../theme';
+
+type Props = {
+  activeTab: TabKey;
+  onTabChange: (tab: TabKey) => void;
+};
+
+export function MetaTraderScreen({ activeTab, onTabChange }: Props) {
+  const insets = useSafeAreaInsets();
+  const [account, setAccount] = useState('4089631');
+  const [password, setPassword] = useState('demo-secret');
+  const [showPassword, setShowPassword] = useState(false);
+  const [broker, setBroker] = useState(''); // Critical: blank by default
+  const [connected, setConnected] = useState(false);
+
+  return (
+    <View style={[styles.root, { paddingTop: Math.max(insets.top, 10) }]}>
+      <View style={styles.content}>
+        <View style={styles.headerBlock}>
+          <NeonBorder radius={radii.pill} fill={colors.navFill} style={styles.accountPill}>
+            <Text style={styles.accountPillText}>MT5 ACCOUNT</Text>
+          </NeonBorder>
+
+          <View style={styles.statusRow}>
+            <View style={styles.greenDot} />
+            <Text style={styles.mt5Label}>MT5</Text>
+          </View>
+
+          <View style={styles.metricsRow}>
+            <Text style={styles.metric}>
+              <Text style={styles.metricLabel}>Equity </Text>
+              <Text style={styles.metricValue}>47002.70</Text>
+            </Text>
+            <Text style={styles.metric}>
+              <Text style={styles.metricLabel}>Balance </Text>
+              <Text style={styles.metricValue}>47227.74</Text>
+            </Text>
+          </View>
+
+          <View style={styles.logoMark} accessibilityLabel="eatrade">
+            <View style={styles.logoBullseye}>
+              <View style={styles.logoRingOuter} />
+              <View style={styles.logoRingMid} />
+              <View style={styles.logoCore} />
+            </View>
+            <Text style={styles.logoText}>eatrade</Text>
+          </View>
+        </View>
+
+        <NeonBorder radius={radii.card} fill={colors.cardFill} style={styles.formCard}>
+          <TextInput
+            value={account}
+            onChangeText={setAccount}
+            placeholder="Account number"
+            placeholderTextColor={colors.textMuted}
+            keyboardType="number-pad"
+            style={styles.input}
+            accessibilityLabel="Account number"
+          />
+
+          <View style={styles.row}>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Password"
+              placeholderTextColor={colors.textMuted}
+              secureTextEntry={!showPassword}
+              style={[styles.input, styles.inputFlex]}
+              accessibilityLabel="Password"
+            />
+            <Pressable
+              style={styles.sideBtn}
+              onPress={() => setShowPassword((v) => !v)}
+              accessibilityRole="button"
+              accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+            >
+              <Ionicons
+                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                size={20}
+                color={colors.textPrimary}
+              />
+            </Pressable>
+          </View>
+
+          <View style={styles.row}>
+            <View style={[styles.input, styles.inputFlex, styles.brokerField]}>
+              <MaterialCommunityIcons
+                name="database-outline"
+                size={18}
+                color={broker ? colors.textPrimary : colors.textMuted}
+              />
+              <TextInput
+                value={broker}
+                onChangeText={setBroker}
+                placeholder="Broker"
+                placeholderTextColor={colors.textMuted}
+                style={styles.brokerInput}
+                accessibilityLabel="Broker"
+              />
+            </View>
+            <Pressable
+              style={styles.sideBtn}
+              onPress={() => setBroker('')}
+              accessibilityRole="button"
+              accessibilityLabel="Clear broker"
+            >
+              <Ionicons name="close" size={20} color={colors.textPrimary} />
+            </Pressable>
+          </View>
+
+          <Pressable
+            onPress={() => setConnected((v) => !v)}
+            accessibilityRole="button"
+            accessibilityLabel="Connect"
+            style={styles.connectWrap}
+          >
+            <LinearGradient
+              colors={connected ? ['#1F6B4A', '#2FA86E'] : ['#1A4FBF', '#3D8BFF', '#5AD0FF']}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={styles.connectBtn}
+            >
+              <Text style={styles.connectLabel}>{connected ? 'CONNECTED' : 'CONNECT'}</Text>
+            </LinearGradient>
+          </Pressable>
+        </NeonBorder>
+      </View>
+
+      <View style={[styles.navWrap, { paddingBottom: Math.max(insets.bottom, spacing.navBottom) }]}>
+        <BottomNav active={activeTab} onChange={onTabChange} />
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: spacing.screenH,
+  },
+  headerBlock: {
+    alignItems: 'center',
+    paddingTop: 8,
+    marginBottom: 28,
+  },
+  accountPill: {
+    paddingHorizontal: 22,
+    paddingVertical: 10,
+    marginBottom: 14,
+  },
+  accountPillText: {
+    color: colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  greenDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: '#3DFF9A',
+  },
+  mt5Label: {
+    color: '#8FB7FF',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+  },
+  metricsRow: {
+    flexDirection: 'row',
+    gap: 22,
+    marginBottom: 16,
+  },
+  metric: {
+    fontSize: 14,
+  },
+  metricLabel: {
+    color: colors.textMuted,
+    fontWeight: '600',
+  },
+  metricValue: {
+    color: colors.textPrimary,
+    fontWeight: '800',
+  },
+  logoMark: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  logoBullseye: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoRingOuter: {
+    position: 'absolute',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
+    borderColor: colors.textPrimary,
+  },
+  logoRingMid: {
+    position: 'absolute',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: colors.textPrimary,
+  },
+  logoCore: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.textPrimary,
+  },
+  logoText: {
+    color: colors.textPrimary,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+  formCard: {
+    padding: 16,
+    gap: 12,
+  },
+  input: {
+    backgroundColor: '#0A0E1C',
+    borderWidth: 1,
+    borderColor: 'rgba(106, 160, 248, 0.35)',
+    borderRadius: 14,
+    color: colors.textPrimary,
+    fontSize: 17,
+    fontWeight: '700',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  inputFlex: {
+    flex: 1,
+  },
+  sideBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.neon,
+    backgroundColor: colors.iconFrame,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brokerField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 0,
+  },
+  brokerInput: {
+    flex: 1,
+    color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: '700',
+    paddingVertical: 14,
+    paddingHorizontal: 0,
+  },
+  connectWrap: {
+    marginTop: 4,
+  },
+  connectBtn: {
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+  },
+  connectLabel: {
+    color: colors.textPrimary,
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 1.6,
+  },
+  navWrap: {
+    paddingHorizontal: spacing.screenH,
+    paddingTop: spacing.gapAddToNav,
+  },
+});

@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { HomeScreen } from './src/screens/HomeScreen';
-import { PlaceholderScreen } from './src/screens/PlaceholderScreen';
+import { AiScannerScreen } from './src/screens/AiScannerScreen';
+import { MetaTraderScreen } from './src/screens/MetaTraderScreen';
 import type { TabKey } from './src/components/BottomNav';
 
 export default function App() {
@@ -27,9 +28,9 @@ export default function App() {
           onToggleEa={() => setEaRunning((v) => !v)}
         />
       ) : tab === 'scanner' ? (
-        <PlaceholderScreen title="AI SCANNER" activeTab={tab} onTabChange={setTab} />
+        <AiScannerScreen activeTab={tab} onTabChange={setTab} />
       ) : (
-        <PlaceholderScreen title="METATRADER" activeTab={tab} onTabChange={setTab} />
+        <MetaTraderScreen activeTab={tab} onTabChange={setTab} />
       )}
     </SafeAreaProvider>
   );
