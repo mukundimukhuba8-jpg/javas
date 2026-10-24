@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
+import * as Font from 'expo-font';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { AiScannerScreen } from './src/screens/AiScannerScreen';
@@ -8,7 +9,20 @@ import { PortalScreen } from './src/screens/portal/PortalScreen';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import type { TabKey } from './src/components/BottomNav';
 
+/** Preload vector icon fonts in background — home UI uses OracleIcons (no wait). */
+function useIconFonts() {
+  useEffect(() => {
+    void Font.loadAsync({
+      ionicons: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf'),
+      materialcommunityicons: require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf'),
+    }).catch(() => {
+      /* portal still works with fallbacks; home icons are geometric */
+    });
+  }, []);
+}
+
 export default function App() {
+  useIconFonts();
   const [tab, setTab] = useState<TabKey>('home');
   const [portalOpen, setPortalOpen] = useState(false);
   const [eaRunning, setEaRunning] = useState(false);

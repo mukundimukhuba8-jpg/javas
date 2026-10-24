@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { NeonBorder } from './NeonBorder';
+import { IconPause, IconPlay, IconPulse, IconTrash } from './OracleIcons';
 import { assets } from '../assets';
 import { colors, radii } from '../theme';
 
@@ -34,9 +34,9 @@ export function OracleCard({
       active: running,
       onPress: onToggleStart,
       icon: running ? (
-        <Ionicons name="pause" size={22} color={colors.textPrimary} />
+        <IconPause color={colors.textPrimary} size={22} />
       ) : (
-        <Ionicons name="play" size={22} color={colors.textPrimary} style={{ marginLeft: 2 }} />
+        <IconPlay color={colors.textPrimary} size={22} />
       ),
     },
     {
@@ -44,12 +44,12 @@ export function OracleCard({
       label: 'QUOTES',
       active: selectedCount > 0,
       onPress: onOpenQuotes,
-      icon: <MaterialCommunityIcons name="pulse" size={24} color={colors.textPrimary} />,
+      icon: <IconPulse color={colors.textPrimary} size={24} />,
     },
     {
       key: 'remove',
       label: 'REMOVE',
-      icon: <Ionicons name="trash-outline" size={22} color={colors.textPrimary} />,
+      icon: <IconTrash color={colors.textPrimary} size={22} />,
     },
   ];
 

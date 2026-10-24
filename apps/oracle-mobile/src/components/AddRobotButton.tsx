@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { NeonBorder } from './NeonBorder';
+import { IconChevronRight, IconPlus } from './OracleIcons';
 import { colors, radii } from '../theme';
 
 type Props = {
@@ -13,7 +13,7 @@ export function AddRobotButton({ onPress }: Props) {
       <NeonBorder radius={radii.pill} fill={colors.addRobotFill} style={styles.pill}>
         <View style={styles.row}>
           <View style={styles.plusCircle}>
-            <Ionicons name="add" size={26} color={colors.textPrimary} />
+            <IconPlus color={colors.textPrimary} size={26} />
           </View>
 
           <View style={styles.copy}>
@@ -21,7 +21,7 @@ export function AddRobotButton({ onPress }: Props) {
             <Text style={styles.subtitle}>HOST ROBOT KEY</Text>
           </View>
 
-          <Ionicons name="chevron-forward" size={22} color={colors.textPrimary} />
+          <IconChevronRight color={colors.textPrimary} size={22} />
         </View>
       </NeonBorder>
     </Pressable>

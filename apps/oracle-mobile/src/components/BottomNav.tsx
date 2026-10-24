@@ -1,7 +1,7 @@
 import { useRef, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { NeonBorder } from './NeonBorder';
+import { IconHome, IconScan, IconWallet } from './OracleIcons';
 import { colors as base, radii } from '../theme';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -26,21 +26,21 @@ const tabs: {
     key: 'home',
     label: 'Home',
     renderIcon: (active, muted, primary) => (
-      <Ionicons name="home" size={22} color={active ? primary : muted} />
+      <IconHome color={active ? primary : muted} size={22} />
     ),
   },
   {
     key: 'scanner',
     label: 'AI Scanner',
     renderIcon: (active, muted, primary) => (
-      <MaterialCommunityIcons name="line-scan" size={22} color={active ? primary : muted} />
+      <IconScan color={active ? primary : muted} size={22} />
     ),
   },
   {
     key: 'metatrader',
     label: 'MetaTrader',
     renderIcon: (active, muted, primary) => (
-      <Ionicons name="wallet-outline" size={22} color={active ? primary : muted} />
+      <IconWallet color={active ? primary : muted} size={22} />
     ),
   },
 ];
