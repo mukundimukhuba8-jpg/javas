@@ -18,15 +18,24 @@ type Props = {
   running: boolean;
   onToggleStart: () => void;
   onOpenQuotes: () => void;
+  onRemove?: () => void;
   selectedCount?: number;
+  title?: string;
+  /** Custom EA image (data URL / URI). Falls back to built-in Oracle hero. */
+  imageUri?: string | null;
 };
 
 export function OracleCard({
   running,
   onToggleStart,
   onOpenQuotes,
+  onRemove,
   selectedCount = 0,
+  title = 'THE ORACLE',
+  imageUri = null,
 }: Props) {
+  const heroSource = imageUri ? { uri: imageUri } : assets.oracleHero;
+
   const actions: Action[] = [
     {
       key: 'start',
@@ -49,6 +58,7 @@ export function OracleCard({
     {
       key: 'remove',
       label: 'REMOVE',
+      onPress: onRemove,
       icon: <IconTrash color={colors.textPrimary} size={22} />,
     },
   ];
@@ -57,10 +67,10 @@ export function OracleCard({
     <NeonBorder radius={radii.card} fill={colors.actionRow} style={styles.card}>
       <View style={styles.heroWrap}>
         <Image
-          source={assets.oracleHero}
+          source={heroSource}
           style={styles.hero}
           resizeMode="cover"
-          accessibilityLabel="The Oracle"
+          accessibilityLabel={title}
         />
         <LinearGradient
           colors={['transparent', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.72)']}
@@ -68,7 +78,9 @@ export function OracleCard({
           style={styles.heroFade}
         />
         <View style={styles.titleRow}>
-          <Text style={styles.title}>THE ORACLE</Text>
+          <Text style={styles.title} numberOfLines={1}>
+            {title}
+          </Text>
           <View style={[styles.statusDot, running ? styles.statusDotRunning : styles.statusDotIdle]} />
         </View>
         {running ? (

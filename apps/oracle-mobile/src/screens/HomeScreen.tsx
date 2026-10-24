@@ -5,6 +5,9 @@ import { OracleCard } from '../components/OracleCard';
 import { AddRobotButton } from '../components/AddRobotButton';
 import { BottomNav, type TabKey } from '../components/BottomNav';
 import { QuotesModal } from '../components/QuotesModal';
+import { RobotPickerModal } from '../components/RobotPickerModal';
+import { useEas } from '../ea/EaStore';
+import { DEFAULT_ORACLE_ID } from '../ea/types';
 import { colors, spacing } from '../theme';
 
 type Props = {
@@ -15,6 +18,7 @@ type Props = {
   eaRunning: boolean;
   onToggleEa: () => void;
   onOpenPortal?: () => void;
+  onCreateEa?: () => void;
 };
 
 export function HomeScreen({
@@ -25,9 +29,17 @@ export function HomeScreen({
   eaRunning,
   onToggleEa,
   onOpenPortal,
+  onCreateEa,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [quotesOpen, setQuotesOpen] = useState(false);
+  const [robotsOpen, setRobotsOpen] = useState(false);
+  const { eas, selected, selectedId, selectEa, removeEa } = useEas();
+
+  const onRemove = () => {
+    if (selected.id === DEFAULT_ORACLE_ID) return;
+    removeEa(selected.id);
+  };
 
   return (
     <View style={[styles.root, { paddingTop: Math.max(insets.top, 8) }]}>
@@ -41,10 +53,13 @@ export function HomeScreen({
           running={eaRunning}
           onToggleStart={onToggleEa}
           onOpenQuotes={() => setQuotesOpen(true)}
+          onRemove={onRemove}
           selectedCount={selectedSymbolIds.length}
+          title={selected.name}
+          imageUri={selected.imageUri}
         />
         <View style={styles.gap} />
-        <AddRobotButton />
+        <AddRobotButton onPress={() => setRobotsOpen(true)} />
       </ScrollView>
 
       <View style={[styles.navWrap, { paddingBottom: Math.max(insets.bottom, spacing.navBottom) }]}>
@@ -56,6 +71,15 @@ export function HomeScreen({
         selectedIds={selectedSymbolIds}
         onChangeSelected={onChangeSelectedSymbols}
         onClose={() => setQuotesOpen(false)}
+      />
+
+      <RobotPickerModal
+        visible={robotsOpen}
+        eas={eas}
+        selectedId={selectedId}
+        onSelect={selectEa}
+        onClose={() => setRobotsOpen(false)}
+        onOpenPortal={onCreateEa ?? onOpenPortal}
       />
     </View>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -11,6 +12,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { ACCENT_PRESETS, useTheme } from '../../theme/ThemeContext';
 import { portalFonts } from '../../theme/portalFonts';
+import { useEas } from '../../ea/EaStore';
+import { pickEaImageAsDataUrl } from '../../ea/pickEaImage';
+import { assets } from '../../assets';
 import type { PortalSectionId } from './portalSections';
 import { ea } from './eaTradeTheme';
 
@@ -230,6 +234,8 @@ function DashboardSection({
   onNavigate: (id: PortalSectionId) => void;
 }) {
   const f = useFf(fontsReady);
+  const { eas } = useEas();
+  const userEaCount = eas.filter((e) => !e.isDefault).length;
   const kpis = [
     {
       label: 'TOTAL LICENSES',
@@ -249,7 +255,7 @@ function DashboardSection({
     },
     {
       label: 'EXPERT ADVISORS',
-      value: '1',
+      value: String(userEaCount),
       sub: 'EAs on your account',
       color: ea.orange,
       soft: ea.orangeSoft,
@@ -333,7 +339,8 @@ function CreateKeysSection({
   const [eaOpen, setEaOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
 
-  const eas = ['THE ORACLE'];
+  const { eas: storedEas } = useEas();
+  const eas = storedEas.map((e) => e.name);
   const plans = ['7 days', '30 days', '90 days', '1 year', 'Lifetime'];
 
   const generate = () => {
@@ -472,10 +479,29 @@ function CreateKeysSection({
 
 function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
   const f = useFf(fontsReady);
+  const { eas, addEa, removeEa, selectEa } = useEas();
   const [eaName, setEaName] = useState('');
   const [selfHost, setSelfHost] = useState(false);
   const [confirm, setConfirm] = useState(false);
-  const [list, setList] = useState([{ name: 'THE ORACLE', type: 'Standard' }]);
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
+
+  const onPickImage = async () => {
+    setPicking(true);
+    try {
+      const dataUrl = await pickEaImageAsDataUrl();
+      if (dataUrl) setImageUri(dataUrl);
+    } finally {
+      setPicking(false);
+    }
+  };
+
+  const resetForm = () => {
+    setEaName('');
+    setConfirm(false);
+    setSelfHost(false);
+    setImageUri(null);
+  };
 
   return (
     <ScrollView
@@ -491,7 +517,7 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
               New expert advisor
             </Text>
             <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
-              Each EA gets its own secret licence code for your customers.
+              Each EA gets its own image on Home and a secret licence code for customers.
             </Text>
           </View>
         </View>
@@ -506,6 +532,30 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
         <Text style={[styles.help, f && { fontFamily: f.ui }]}>
           Include a version label if you ship multiple builds.
         </Text>
+
+        <FieldLabel text="EA IMAGE" fontsReady={fontsReady} />
+        <Pressable
+          onPress={onPickImage}
+          style={styles.imagePicker}
+          accessibilityRole="button"
+          accessibilityLabel="Upload EA image"
+        >
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Ionicons name="camera-outline" size={28} color={ea.primary} />
+              <Text style={[styles.imagePlaceholderText, f && { fontFamily: f.uiMed }]}>
+                {picking ? 'Opening…' : 'Tap to upload or take a photo'}
+              </Text>
+            </View>
+          )}
+        </Pressable>
+        {imageUri ? (
+          <Pressable onPress={() => setImageUri(null)} accessibilityRole="button">
+            <Text style={[styles.clearImage, f && { fontFamily: f.uiMed }]}>Remove image</Text>
+          </Pressable>
+        ) : null}
 
         <Pressable
           onPress={() => setSelfHost((v) => !v)}
@@ -533,13 +583,15 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
           fontsReady={fontsReady}
           onPress={() => {
             if (!eaName.trim() || !confirm) return;
-            setList((prev) => [{ name: eaName.trim(), type: selfHost ? 'Self-host' : 'Standard' }, ...prev]);
-            setEaName('');
-            setConfirm(false);
-            setSelfHost(false);
+            addEa({
+              name: eaName.trim(),
+              imageUri,
+              type: selfHost ? 'Self-host' : 'Standard',
+            });
+            resetForm();
           }}
         />
-        <SecondaryBtn label="Cancel" onPress={() => setEaName('')} fontsReady={fontsReady} />
+        <SecondaryBtn label="Cancel" onPress={resetForm} fontsReady={fontsReady} />
       </Card>
 
       <Card>
@@ -550,7 +602,7 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
               Your expert advisors
             </Text>
             <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
-              Open an EA to manage symbols and copy its licence code.
+              Saved EAs sync to Home. Tap to select; use trash to delete.
             </Text>
           </View>
         </View>
@@ -558,17 +610,38 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
           <Text style={[styles.tableLabel, f && { fontFamily: f.uiBold }]}>EXPERT ADVISOR</Text>
           <Text style={[styles.tableLabel, f && { fontFamily: f.uiBold }]}>TYPE</Text>
         </View>
-        {list.map((item) => (
-          <View key={item.name} style={styles.tableRow}>
-            <View style={styles.eaNameRow}>
-              <Ionicons name="hardware-chip" size={16} color={ea.primary} />
-              <Text style={[styles.eaName, f && { fontFamily: f.uiBold }]}>{item.name}</Text>
-            </View>
-            <View style={styles.typePill}>
-              <Text style={[styles.typePillText, f && { fontFamily: f.uiMed }]}>{item.type}</Text>
-            </View>
-          </View>
-        ))}
+        {eas.map((item) => {
+          const thumb = item.imageUri ? { uri: item.imageUri } : assets.oracleHero;
+          return (
+            <Pressable
+              key={item.id}
+              style={styles.tableRow}
+              onPress={() => selectEa(item.id)}
+              accessibilityRole="button"
+            >
+              <Image source={thumb} style={styles.eaThumb} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.eaName, f && { fontFamily: f.uiBold }]}>{item.name}</Text>
+                <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
+                  {item.isDefault ? 'Default hero' : 'Custom image'}
+                </Text>
+              </View>
+              <View style={styles.typePill}>
+                <Text style={[styles.typePillText, f && { fontFamily: f.uiMed }]}>{item.type}</Text>
+              </View>
+              {!item.isDefault ? (
+                <Pressable
+                  onPress={() => removeEa(item.id)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Delete ${item.name}`}
+                >
+                  <Ionicons name="trash-outline" size={18} color={ea.textMuted} />
+                </Pressable>
+              ) : null}
+            </Pressable>
+          );
+        })}
       </Card>
       <FooterNote fontsReady={fontsReady} />
     </ScrollView>
@@ -1678,5 +1751,41 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     paddingVertical: 18,
+  },
+  imagePicker: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(47,107,255,0.4)',
+    backgroundColor: ea.input,
+    minHeight: 160,
+  },
+  imagePreview: {
+    width: '100%',
+    height: 180,
+  },
+  imagePlaceholder: {
+    minHeight: 160,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    padding: 16,
+  },
+  imagePlaceholderText: {
+    color: ea.textSecondary,
+    fontSize: 13,
+    textAlign: 'center',
+  },
+  clearImage: {
+    color: ea.primary,
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  eaThumb: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#111',
   },
 });

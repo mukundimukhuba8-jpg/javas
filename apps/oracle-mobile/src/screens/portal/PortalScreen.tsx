@@ -18,6 +18,7 @@ import { ea } from './eaTradeTheme';
 
 type Props = {
   onExit: () => void;
+  initialSection?: PortalSectionId;
 };
 
 function HamburgerIcon({ color }: { color: string }) {
@@ -51,7 +52,7 @@ function EaTradeMark({ fontsReady }: { fontsReady: boolean }) {
   );
 }
 
-export function PortalScreen({ onExit }: Props) {
+export function PortalScreen({ onExit, initialSection = 'dashboard' }: Props) {
   const fontsReady = usePortalFonts();
   const f = fontsReady ? portalFonts : null;
   const insets = useSafeAreaInsets();
@@ -59,7 +60,7 @@ export function PortalScreen({ onExit }: Props) {
   const isDesktop = width >= 960;
   const sidebarWidth = Math.min(288, Math.max(248, width * 0.78));
 
-  const [section, setSection] = useState<PortalSectionId>('dashboard');
+  const [section, setSection] = useState<PortalSectionId>(initialSection);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [desktopBooted, setDesktopBooted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
