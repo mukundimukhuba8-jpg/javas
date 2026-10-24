@@ -26,6 +26,7 @@ type EaContextValue = {
     imageUri: string | null;
     type: 'Standard' | 'Self-host';
   }) => ExpertAdvisor;
+  updateEaImage: (id: string, imageUri: string | null) => void;
   removeEa: (id: string) => void;
   selectEa: (id: string) => void;
 };
@@ -111,6 +112,21 @@ export function EaProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const updateEaImage = useCallback((id: string, imageUri: string | null) => {
+    setUserEas((prev) => {
+      const idx = prev.findIndex((e) => e.id === id);
+      if (idx >= 0) {
+        return prev.map((e) => (e.id === id ? { ...e, imageUri } : e));
+      }
+      // Persist image on ephemeral default THE ORACLE (or any missing id from visible list)
+      if (id === DEFAULT_ORACLE_ID) {
+        return [{ ...createDefaultOracle(), imageUri }, ...prev];
+      }
+      return prev;
+    });
+    setSelectedId(id);
+  }, []);
+
   const removeEa = useCallback((id: string) => {
     if (id === DEFAULT_ORACLE_ID) return;
     setUserEas((prev) => {
@@ -126,8 +142,8 @@ export function EaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ eas, selectedId, selected, addEa, removeEa, selectEa }),
-    [eas, selectedId, selected, addEa, removeEa, selectEa],
+    () => ({ eas, selectedId, selected, addEa, updateEaImage, removeEa, selectEa }),
+    [eas, selectedId, selected, addEa, updateEaImage, removeEa, selectEa],
   );
 
   return <EaContext.Provider value={value}>{children}</EaContext.Provider>;

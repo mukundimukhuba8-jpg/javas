@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ACCENT_PRESETS, useTheme } from '../../theme/ThemeContext';
 import { portalFonts } from '../../theme/portalFonts';
 import { useEas } from '../../ea/EaStore';
+import { useAccess } from '../../access/AccessStore';
 import { pickEaImageAsDataUrl } from '../../ea/pickEaImage';
 import { assets } from '../../assets';
 import type { PortalSectionId } from './portalSections';
@@ -479,12 +480,13 @@ function CreateKeysSection({
 
 function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
   const f = useFf(fontsReady);
-  const { eas, addEa, removeEa, selectEa } = useEas();
+  const { eas, addEa, updateEaImage, removeEa, selectEa } = useEas();
   const [eaName, setEaName] = useState('');
   const [selfHost, setSelfHost] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const onPickImage = async () => {
     setPicking(true);
@@ -493,6 +495,16 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
       if (dataUrl) setImageUri(dataUrl);
     } finally {
       setPicking(false);
+    }
+  };
+
+  const onEditRowImage = async (id: string) => {
+    setEditingId(id);
+    try {
+      const dataUrl = await pickEaImageAsDataUrl();
+      if (dataUrl) updateEaImage(id, dataUrl);
+    } finally {
+      setEditingId(null);
     }
   };
 
@@ -602,7 +614,8 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
               Your expert advisors
             </Text>
             <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
-              Saved EAs sync to Home. Tap to select; use trash to delete.
+              Saved EAs sync to Home. Tap a row to select; tap the photo or Edit image to replace
+              the thumbnail.
             </Text>
           </View>
         </View>
@@ -612,6 +625,7 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
         </View>
         {eas.map((item) => {
           const thumb = item.imageUri ? { uri: item.imageUri } : assets.oracleHero;
+          const busy = editingId === item.id;
           return (
             <Pressable
               key={item.id}
@@ -619,12 +633,32 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
               onPress={() => selectEa(item.id)}
               accessibilityRole="button"
             >
-              <Image source={thumb} style={styles.eaThumb} />
+              <Pressable
+                onPress={() => onEditRowImage(item.id)}
+                style={styles.eaThumbWrap}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit image for ${item.name}`}
+              >
+                <Image source={thumb} style={styles.eaThumb} />
+                <View style={styles.eaThumbBadge}>
+                  <Ionicons name="camera" size={12} color="#fff" />
+                </View>
+              </Pressable>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.eaName, f && { fontFamily: f.uiBold }]}>{item.name}</Text>
                 <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
-                  {item.isDefault ? 'Default hero' : 'Custom image'}
+                  {item.imageUri ? 'Custom image' : 'Default hero'}
                 </Text>
+                <Pressable
+                  onPress={() => onEditRowImage(item.id)}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit image for ${item.name}`}
+                >
+                  <Text style={[styles.editImageLink, f && { fontFamily: f.uiMed }]}>
+                    {busy ? 'Opening…' : 'Edit image'}
+                  </Text>
+                </Pressable>
               </View>
               <View style={styles.typePill}>
                 <Text style={[styles.typePillText, f && { fontFamily: f.uiMed }]}>{item.type}</Text>
@@ -1078,9 +1112,26 @@ function ReactivateLicenseSection({ fontsReady }: { fontsReady: boolean }) {
 
 function ReactivateEmailSection({ fontsReady }: { fontsReady: boolean }) {
   const f = useFf(fontsReady);
+  const { reactivated, reactivate, removeReactivated } = useAccess();
   const [email, setEmail] = useState('');
-  const [confirm, setConfirm] = useState(false);
-  const [log, setLog] = useState<string[]>([]);
+  const [paid, setPaid] = useState(true);
+  const [confirmMsg, setConfirmMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const onReactivate = () => {
+    const trimmed = email.trim();
+    if (!trimmed || !trimmed.includes('@')) {
+      setError('Enter a valid email address.');
+      setConfirmMsg(null);
+      return;
+    }
+    const entry = reactivate(trimmed, paid);
+    setConfirmMsg(
+      `${entry.email} reactivated · ${entry.paid ? 'paid' : 'not paid'} · status active`,
+    );
+    setError(null);
+    setEmail('');
+  };
 
   return (
     <ScrollView
@@ -1091,48 +1142,102 @@ function ReactivateEmailSection({ fontsReady }: { fontsReady: boolean }) {
       <View style={styles.pageIntro}>
         <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>Reactivate email</Text>
         <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
-          Resend the activation message for a stalled account.
+          Grant app access for an email. Reactivated addresses can pass the access check.
         </Text>
       </View>
       <Card>
         <View style={styles.cardHeadRow}>
           <IconTile color={ea.primary} soft={ea.primarySoft} name="mail" />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Send reactivation</Text>
+            <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Reactivate access</Text>
             <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
-              Delivery is simulated locally for this demo.
+              Mark paid or not paid, then reactivate. Stored locally for this demo.
             </Text>
           </View>
         </View>
         <FieldLabel text="USER EMAIL" fontsReady={fontsReady} />
         <Input
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(v) => {
+            setEmail(v);
+            setError(null);
+          }}
           placeholder="user@domain.com"
           fontsReady={fontsReady}
         />
-        <ConfirmBox
-          label="I CONFIRM I MAY CONTACT THIS USER"
-          checked={confirm}
-          onToggle={() => setConfirm((v) => !v)}
-          fontsReady={fontsReady}
-        />
+        <FieldLabel text="PAYMENT STATUS" fontsReady={fontsReady} />
+        <View style={styles.btnRow}>
+          <Pressable
+            onPress={() => setPaid(true)}
+            style={[styles.confirmBox, { flex: 1 }, paid && styles.confirmBoxOn]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: paid }}
+          >
+            <Text style={[styles.confirmText, f && { fontFamily: f.uiMed }]}>Paid</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setPaid(false)}
+            style={[styles.confirmBox, { flex: 1 }, !paid && styles.confirmBoxOn]}
+            accessibilityRole="button"
+            accessibilityState={{ selected: !paid }}
+          >
+            <Text style={[styles.confirmText, f && { fontFamily: f.uiMed }]}>Not paid</Text>
+          </Pressable>
+        </View>
         <PrimaryBtn
-          label="Send reactivation"
-          icon="mail-outline"
+          label="Reactivate"
+          icon="checkmark-circle-outline"
           fontsReady={fontsReady}
-          onPress={() => {
-            if (!email.trim() || !confirm) return;
-            setLog((prev) => [`sent → ${email.trim()} · queued`, ...prev].slice(0, 8));
-            setEmail('');
-            setConfirm(false);
-          }}
+          onPress={onReactivate}
         />
-        {log.map((line, i) => (
-          <Text key={`${line}-${i}`} style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
-            {line}
+        {error ? (
+          <Text style={[{ color: ea.red, fontSize: 13 }, f && { fontFamily: f.ui }]}>{error}</Text>
+        ) : null}
+        {confirmMsg ? (
+          <Text style={[styles.successLine, f && { fontFamily: f.uiMed }]}>{confirmMsg}</Text>
+        ) : null}
+      </Card>
+
+      <Card>
+        <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Reactivated emails</Text>
+        <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+          Active list used by the access gate. Empty until you reactivate someone.
+        </Text>
+        {reactivated.length === 0 ? (
+          <Text style={[styles.emptyState, f && { fontFamily: f.uiMed }]}>
+            No reactivated emails yet
           </Text>
-        ))}
+        ) : (
+          reactivated.map((entry) => (
+            <View key={entry.email} style={styles.userRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.actionTitle, f && { fontFamily: f.uiBold }]}>
+                  {entry.email}
+                </Text>
+                <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
+                  {entry.paid ? 'Paid' : 'Not paid'} · {entry.status} ·{' '}
+                  {new Date(entry.reactivatedAt).toLocaleString()}
+                </Text>
+              </View>
+              <View style={[styles.statusPill, styles.statusActive]}>
+                <Text
+                  style={[
+                    styles.statusPillText,
+                    f && { fontFamily: f.uiBold },
+                    { color: ea.green },
+                  ]}
+                >
+                  Active
+                </Text>
+              </View>
+              <SecondaryBtn
+                label="Remove"
+                fontsReady={fontsReady}
+                onPress={() => removeReactivated(entry.email)}
+              />
+            </View>
+          ))
+        )}
       </Card>
       <FooterNote fontsReady={fontsReady} />
     </ScrollView>
@@ -1782,10 +1887,34 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
+  eaThumbWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 11,
+    overflow: 'hidden',
+    position: 'relative',
+  },
   eaThumb: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 11,
     backgroundColor: '#111',
+  },
+  eaThumbBadge: {
+    position: 'absolute',
+    right: 2,
+    bottom: 2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(47,107,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editImageLink: {
+    color: ea.primary,
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
   },
 });
