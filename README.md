@@ -25,6 +25,8 @@ pnpm zero --ask "Good evening Zero."
 
 ```
 apps/desktop          Electron HUD host (stub → Phase 6)
+apps/oracle-mobile    Expo Oracle home UI (React Native)
+apps/preview          Web HUD preview
 packages/
   shared              Result types, logger, domain types
   config              Zod env schema + startup validation
@@ -64,6 +66,16 @@ CLAUDE.md             Production system prompt
 | `pnpm lint`             | ESLint (zero warnings)                 |
 | `pnpm format`           | Prettier write                         |
 | `pnpm test`             | Vitest                                 |
+
+## Oracle mobile app
+
+```bash
+cd apps/oracle-mobile
+npm install
+npx expo start
+```
+
+See [apps/oracle-mobile/README.md](./apps/oracle-mobile/README.md).
 
 ## Documentation
 
