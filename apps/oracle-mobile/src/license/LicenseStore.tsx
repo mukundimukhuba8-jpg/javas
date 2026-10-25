@@ -14,6 +14,7 @@ import {
   normalizeLicenseKey,
   type KeyActivation,
   type LicenseKey,
+  type UnlockedRobot,
 } from './types';
 
 const KEYS_STORAGE = 'oracle.license.keys.v1';
@@ -22,13 +23,20 @@ const ACT_STORAGE = 'oracle.license.activations.v1';
 type LicenseContextValue = {
   keys: LicenseKey[];
   activations: KeyActivation[];
-  createKey: (input: { user: string; ea: string; plan: string }) => LicenseKey;
+  createKey: (input: {
+    user: string;
+    plan: string;
+    eaId: string;
+    eaName: string;
+    eaImageUri: string | null;
+  }) => LicenseKey;
   activateKey: (
     email: string,
     rawKey: string,
   ) => { ok: boolean; reason?: string; key?: LicenseKey };
   hasActivatedKey: (email: string) => boolean;
   activationForEmail: (email: string) => KeyActivation | null;
+  unlockedRobotsForEmail: (email: string) => UnlockedRobot[];
 };
 
 const LicenseContext = createContext<LicenseContextValue | null>(null);
@@ -44,7 +52,15 @@ function loadKeys(): LicenseKey[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as LicenseKey[];
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((k) => k && typeof k.key === 'string' && typeof k.id === 'string');
+    return parsed
+      .filter((k) => k && typeof k.key === 'string' && typeof k.id === 'string')
+      .map((k) => ({
+        ...k,
+        eaId: typeof k.eaId === 'string' ? k.eaId : '',
+        eaName: typeof k.eaName === 'string' ? k.eaName : typeof k.ea === 'string' ? k.ea : '',
+        eaImageUri: k.eaImageUri ?? null,
+        ea: typeof k.ea === 'string' ? k.ea : typeof k.eaName === 'string' ? k.eaName : '',
+      }));
   } catch {
     return [];
   }
@@ -57,7 +73,14 @@ function loadActivations(): KeyActivation[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as KeyActivation[];
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((a) => a && typeof a.email === 'string' && typeof a.key === 'string');
+    return parsed
+      .filter((a) => a && typeof a.email === 'string' && typeof a.key === 'string')
+      .map((a) => ({
+        ...a,
+        eaId: typeof a.eaId === 'string' ? a.eaId : '',
+        eaName: typeof a.eaName === 'string' ? a.eaName : '',
+        eaImageUri: a.eaImageUri ?? null,
+      }));
   } catch {
     return [];
   }
@@ -93,25 +116,37 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     persistActivations(activations);
   }, [activations]);
 
-  const createKey = useCallback((input: { user: string; ea: string; plan: string }) => {
-    const entry: LicenseKey = {
-      id: `key-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      key: generateLicenseKeyCode(),
-      ea: input.ea,
-      user: input.user.trim(),
-      plan: input.plan,
-      status: 'Active',
-      createdAt: new Date().toISOString(),
-      boundEmail: null,
-    };
-    setKeys((prev) => [entry, ...prev]);
-    return entry;
-  }, []);
+  const createKey = useCallback(
+    (input: {
+      user: string;
+      plan: string;
+      eaId: string;
+      eaName: string;
+      eaImageUri: string | null;
+    }) => {
+      const entry: LicenseKey = {
+        id: `key-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        key: generateLicenseKeyCode(),
+        eaId: input.eaId,
+        eaName: input.eaName,
+        eaImageUri: input.eaImageUri,
+        ea: input.eaName,
+        user: input.user.trim(),
+        plan: input.plan,
+        status: 'Active',
+        createdAt: new Date().toISOString(),
+        boundEmail: null,
+      };
+      setKeys((prev) => [entry, ...prev]);
+      return entry;
+    },
+    [],
+  );
 
   const hasActivatedKey = useCallback(
     (email: string) => {
       const n = normalizeEmail(email);
-      return activations.some((a) => a.email === n);
+      return activations.some((a) => a.email === n && !!a.eaId);
     },
     [activations],
   );
@@ -119,7 +154,28 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
   const activationForEmail = useCallback(
     (email: string) => {
       const n = normalizeEmail(email);
-      return activations.find((a) => a.email === n) ?? null;
+      return activations.find((a) => a.email === n && !!a.eaId) ?? null;
+    },
+    [activations],
+  );
+
+  const unlockedRobotsForEmail = useCallback(
+    (email: string): UnlockedRobot[] => {
+      const n = normalizeEmail(email);
+      const mine = activations.filter((a) => a.email === n && a.eaId);
+      const byEa = new Map<string, UnlockedRobot>();
+      for (const a of mine) {
+        // Prefer newest activation for each EA
+        if (!byEa.has(a.eaId)) {
+          byEa.set(a.eaId, {
+            id: a.eaId,
+            name: a.eaName,
+            imageUri: a.eaImageUri,
+            key: a.key,
+          });
+        }
+      }
+      return Array.from(byEa.values());
     },
     [activations],
   );
@@ -142,26 +198,32 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       if (found.status !== 'Active') {
         return { ok: false, reason: 'This key is expired. Contact your mentor.' };
       }
+      if (!found.eaId || !found.eaName) {
+        return {
+          ok: false,
+          reason: 'This key is not linked to an EA. Ask your admin to create the key against an expert advisor.',
+        };
+      }
       if (found.boundEmail && found.boundEmail !== n) {
         return { ok: false, reason: 'This key is already linked to another account.' };
       }
 
-      // Already activated this key for this email
-      if (activations.some((a) => a.email === n && a.key === keyCode)) {
+      const already = activations.some((a) => a.email === n && a.key === keyCode);
+      if (already) {
         return { ok: true, key: found };
       }
 
-      // Email already activated a different key — allow re-bind to this key
-      setActivations((prev) => {
-        const without = prev.filter((a) => a.email !== n);
-        return [{ email: n, key: keyCode, activatedAt: new Date().toISOString() }, ...without];
-      });
+      const activation: KeyActivation = {
+        email: n,
+        key: keyCode,
+        activatedAt: new Date().toISOString(),
+        eaId: found.eaId,
+        eaName: found.eaName,
+        eaImageUri: found.eaImageUri,
+      };
+      setActivations((prev) => [activation, ...prev.filter((a) => !(a.email === n && a.key === keyCode))]);
       setKeys((prev) =>
-        prev.map((k) => {
-          if (k.id === found.id) return { ...k, boundEmail: n };
-          if (k.boundEmail === n && k.id !== found.id) return { ...k, boundEmail: null };
-          return k;
-        }),
+        prev.map((k) => (k.id === found.id ? { ...k, boundEmail: n } : k)),
       );
       return { ok: true, key: { ...found, boundEmail: n } };
     },
@@ -176,8 +238,17 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       activateKey,
       hasActivatedKey,
       activationForEmail,
+      unlockedRobotsForEmail,
     }),
-    [keys, activations, createKey, activateKey, hasActivatedKey, activationForEmail],
+    [
+      keys,
+      activations,
+      createKey,
+      activateKey,
+      hasActivatedKey,
+      activationForEmail,
+      unlockedRobotsForEmail,
+    ],
   );
 
   return <LicenseContext.Provider value={value}>{children}</LicenseContext.Provider>;

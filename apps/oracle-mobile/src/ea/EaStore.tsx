@@ -8,19 +8,18 @@ import {
   type ReactNode,
 } from 'react';
 import { Platform } from 'react-native';
-import {
-  createDefaultOracle,
-  DEFAULT_ORACLE_ID,
-  type ExpertAdvisor,
-} from './types';
+import type { ExpertAdvisor } from './types';
 
 const STORAGE_KEY = 'oracle.eas.v1';
 const SELECTED_KEY = 'oracle.eas.selected.v1';
+/** Legacy seeded default — strip on load so the catalog starts empty. */
+const LEGACY_DEFAULT_ID = 'default-the-oracle';
 
 type EaContextValue = {
+  /** Admin catalog — empty until EAs are created in the portal. */
   eas: ExpertAdvisor[];
-  selectedId: string;
-  selected: ExpertAdvisor;
+  selectedId: string | null;
+  selected: ExpertAdvisor | null;
   addEa: (input: {
     name: string;
     imageUri: string | null;
@@ -40,15 +39,23 @@ function loadEas(): ExpertAdvisor[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as ExpertAdvisor[];
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((e) => e && typeof e.id === 'string' && typeof e.name === 'string');
+    return parsed.filter(
+      (e) =>
+        e &&
+        typeof e.id === 'string' &&
+        typeof e.name === 'string' &&
+        e.id !== LEGACY_DEFAULT_ID &&
+        !(e as { isDefault?: boolean }).isDefault,
+    );
   } catch {
     return [];
   }
 }
 
-function loadSelectedId(eas: ExpertAdvisor[]): string {
+function loadSelectedId(eas: ExpertAdvisor[]): string | null {
+  if (eas.length === 0) return null;
   if (Platform.OS !== 'web' || typeof localStorage === 'undefined') {
-    return eas[0]?.id ?? DEFAULT_ORACLE_ID;
+    return eas[0]?.id ?? null;
   }
   try {
     const id = localStorage.getItem(SELECTED_KEY);
@@ -56,44 +63,41 @@ function loadSelectedId(eas: ExpertAdvisor[]): string {
   } catch {
     /* ignore */
   }
-  return eas[0]?.id ?? DEFAULT_ORACLE_ID;
+  return eas[0]?.id ?? null;
 }
 
-function persist(eas: ExpertAdvisor[], selectedId: string) {
+function persist(eas: ExpertAdvisor[], selectedId: string | null) {
   if (Platform.OS !== 'web' || typeof localStorage === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(eas));
-    localStorage.setItem(SELECTED_KEY, selectedId);
+    if (selectedId) localStorage.setItem(SELECTED_KEY, selectedId);
+    else localStorage.removeItem(SELECTED_KEY);
   } catch {
     /* quota / private mode */
   }
 }
 
-/** Visible list: user EAs, or default THE ORACLE when none yet. */
-function visibleEas(userEas: ExpertAdvisor[]): ExpertAdvisor[] {
-  if (userEas.length === 0) return [createDefaultOracle()];
-  return userEas;
-}
-
 export function EaProvider({ children }: { children: ReactNode }) {
-  const [userEas, setUserEas] = useState<ExpertAdvisor[]>(() => loadEas());
-  const [selectedId, setSelectedId] = useState(() => loadSelectedId(loadEas()));
-
-  const eas = useMemo(() => visibleEas(userEas), [userEas]);
+  const [eas, setEas] = useState<ExpertAdvisor[]>(() => loadEas());
+  const [selectedId, setSelectedId] = useState<string | null>(() => loadSelectedId(loadEas()));
 
   useEffect(() => {
-    const list = visibleEas(userEas);
-    if (!list.some((e) => e.id === selectedId)) {
-      setSelectedId(list[0].id);
+    if (eas.length === 0) {
+      if (selectedId !== null) setSelectedId(null);
+      return;
     }
-  }, [userEas, selectedId]);
+    if (!eas.some((e) => e.id === selectedId)) {
+      setSelectedId(eas[0].id);
+    }
+  }, [eas, selectedId]);
 
   useEffect(() => {
-    persist(userEas, selectedId);
-  }, [userEas, selectedId]);
+    persist(eas, selectedId);
+  }, [eas, selectedId]);
 
   const selected = useMemo(() => {
-    return eas.find((e) => e.id === selectedId) ?? eas[0];
+    if (!selectedId) return null;
+    return eas.find((e) => e.id === selectedId) ?? eas[0] ?? null;
   }, [eas, selectedId]);
 
   const addEa = useCallback(
@@ -105,7 +109,7 @@ export function EaProvider({ children }: { children: ReactNode }) {
         type: input.type,
         createdAt: new Date().toISOString(),
       };
-      setUserEas((prev) => [entry, ...prev]);
+      setEas((prev) => [entry, ...prev]);
       setSelectedId(entry.id);
       return entry;
     },
@@ -113,26 +117,14 @@ export function EaProvider({ children }: { children: ReactNode }) {
   );
 
   const updateEaImage = useCallback((id: string, imageUri: string | null) => {
-    setUserEas((prev) => {
-      const idx = prev.findIndex((e) => e.id === id);
-      if (idx >= 0) {
-        return prev.map((e) => (e.id === id ? { ...e, imageUri } : e));
-      }
-      // Persist image on ephemeral default THE ORACLE (or any missing id from visible list)
-      if (id === DEFAULT_ORACLE_ID) {
-        return [{ ...createDefaultOracle(), imageUri }, ...prev];
-      }
-      return prev;
-    });
+    setEas((prev) => prev.map((e) => (e.id === id ? { ...e, imageUri } : e)));
     setSelectedId(id);
   }, []);
 
   const removeEa = useCallback((id: string) => {
-    if (id === DEFAULT_ORACLE_ID) return;
-    setUserEas((prev) => {
+    setEas((prev) => {
       const next = prev.filter((e) => e.id !== id);
-      const visible = visibleEas(next);
-      setSelectedId((cur) => (cur === id ? visible[0].id : cur));
+      setSelectedId((cur) => (cur === id ? next[0]?.id ?? null : cur));
       return next;
     });
   }, []);

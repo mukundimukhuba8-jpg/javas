@@ -237,7 +237,7 @@ function DashboardSection({
 }) {
   const f = useFf(fontsReady);
   const { eas } = useEas();
-  const userEaCount = eas.filter((e) => !e.isDefault).length;
+  const userEaCount = eas.length;
   const kpis = [
     {
       label: 'TOTAL LICENSES',
@@ -333,23 +333,39 @@ function CreateKeysSection({
 }) {
   const f = useFf(fontsReady);
   const { createKey } = useLicenses();
+  const { eas: storedEas } = useEas();
   const [name, setName] = useState('');
-  const [eaName, setEaName] = useState('THE ORACLE');
+  const [eaId, setEaId] = useState<string | null>(null);
   const [plan, setPlan] = useState('30 days');
   const [emailOk, setEmailOk] = useState(false);
   const [permOk, setPermOk] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<string | null>(null);
   const [eaOpen, setEaOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
 
-  const { eas: storedEas } = useEas();
-  const eas = storedEas.map((e) => e.name);
+  const selectedEa = storedEas.find((e) => e.id === eaId) ?? null;
   const plans = ['7 days', '30 days', '90 days', '1 year', 'Lifetime'];
 
   const generate = () => {
     if (!name.trim() || !permOk) return;
-    const entry = createKey({ user: name.trim(), ea: eaName, plan });
+    if (storedEas.length === 0) {
+      setFormError('Create an expert advisor first (EXPERT ADVISER), then generate a key for it.');
+      return;
+    }
+    if (!selectedEa) {
+      setFormError('Select an expert advisor. Keys must be tied to an EA with name and image.');
+      return;
+    }
+    const entry = createKey({
+      user: name.trim(),
+      plan,
+      eaId: selectedEa.id,
+      eaName: selectedEa.name,
+      eaImageUri: selectedEa.imageUri,
+    });
     setGenerated(entry.key);
+    setFormError(null);
   };
 
   return (
@@ -364,10 +380,18 @@ function CreateKeysSection({
           <View style={{ flex: 1 }}>
             <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Generate key</Text>
             <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
-              The key is tied to your EA and the customer name you enter below.
+              The key is tied to a selected EA (name + image). Activating it loads that robot on
+              Home.
             </Text>
           </View>
         </View>
+
+        {storedEas.length === 0 ? (
+          <Text style={[{ color: ea.orange, fontSize: 13, lineHeight: 18 }, f && { fontFamily: f.ui }]}>
+            No expert advisors yet. Go to EXPERT ADVISER, create one with a name and image, then
+            return here.
+          </Text>
+        ) : null}
 
         <FieldLabel text="CUSTOMER / USER NAME" fontsReady={fontsReady} />
         <Input
@@ -379,7 +403,7 @@ function CreateKeysSection({
 
         <FieldLabel text="EXPERT ADVISOR" fontsReady={fontsReady} />
         <SelectRow
-          value={eaName}
+          value={selectedEa?.name ?? ''}
           placeholder="Select an EA"
           fontsReady={fontsReady}
           onPress={() => {
@@ -388,16 +412,17 @@ function CreateKeysSection({
           }}
         />
         {eaOpen
-          ? eas.map((item) => (
+          ? storedEas.map((item) => (
               <Pressable
-                key={item}
+                key={item.id}
                 onPress={() => {
-                  setEaName(item);
+                  setEaId(item.id);
                   setEaOpen(false);
+                  setFormError(null);
                 }}
                 style={styles.optionRow}
               >
-                <Text style={[styles.optionText, f && { fontFamily: f.uiMed }]}>{item}</Text>
+                <Text style={[styles.optionText, f && { fontFamily: f.uiMed }]}>{item.name}</Text>
               </Pressable>
             ))
           : null}
@@ -440,6 +465,10 @@ function CreateKeysSection({
           fontsReady={fontsReady}
         />
 
+        {formError ? (
+          <Text style={[{ color: ea.red, fontSize: 13 }, f && { fontFamily: f.ui }]}>{formError}</Text>
+        ) : null}
+
         <PrimaryBtn
           label="Generate key"
           icon="sparkles"
@@ -457,7 +486,7 @@ function CreateKeysSection({
             <Text style={[styles.fieldLabel, f && { fontFamily: f.uiBold }]}>GENERATED KEY</Text>
             <Text style={[styles.keyMono, f && { fontFamily: f.monoBold }]}>{generated}</Text>
             <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
-              {name || 'Customer'} · {eaName} · {plan}
+              {name || 'Customer'} · {selectedEa?.name ?? 'EA'} · {plan}
             </Text>
           </View>
         ) : null}
@@ -603,8 +632,8 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
               Your expert advisors
             </Text>
             <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
-              Saved EAs sync to Home. Tap a row to select; tap the photo or Edit image to replace
-              the thumbnail.
+              Create EAs here, then issue keys against them. Tap photo or Edit image to replace the
+              thumbnail.
             </Text>
           </View>
         </View>
@@ -612,47 +641,57 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
           <Text style={[styles.tableLabel, f && { fontFamily: f.uiBold }]}>EXPERT ADVISOR</Text>
           <Text style={[styles.tableLabel, f && { fontFamily: f.uiBold }]}>TYPE</Text>
         </View>
-        {eas.map((item) => {
-          const thumb = item.imageUri ? { uri: item.imageUri } : assets.oracleHero;
-          const busy = editingId === item.id;
-          return (
-            <Pressable
-              key={item.id}
-              style={styles.tableRow}
-              onPress={() => selectEa(item.id)}
-              accessibilityRole="button"
-            >
+        {eas.length === 0 ? (
+          <Text style={[styles.emptyState, f && { fontFamily: f.uiMed }]}>
+            No expert advisors yet — add one above
+          </Text>
+        ) : (
+          eas.map((item) => {
+            const thumb = item.imageUri ? { uri: item.imageUri } : null;
+            const busy = editingId === item.id;
+            return (
               <Pressable
-                onPress={() => onEditRowImage(item.id)}
-                style={styles.eaThumbWrap}
+                key={item.id}
+                style={styles.tableRow}
+                onPress={() => selectEa(item.id)}
                 accessibilityRole="button"
-                accessibilityLabel={`Edit image for ${item.name}`}
               >
-                <Image source={thumb} style={styles.eaThumb} />
-                <View style={styles.eaThumbBadge}>
-                  <Ionicons name="camera" size={12} color="#fff" />
-                </View>
-              </Pressable>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.eaName, f && { fontFamily: f.uiBold }]}>{item.name}</Text>
-                <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
-                  {item.imageUri ? 'Custom image' : 'Default hero'}
-                </Text>
                 <Pressable
                   onPress={() => onEditRowImage(item.id)}
-                  hitSlop={6}
+                  style={styles.eaThumbWrap}
                   accessibilityRole="button"
                   accessibilityLabel={`Edit image for ${item.name}`}
                 >
-                  <Text style={[styles.editImageLink, f && { fontFamily: f.uiMed }]}>
-                    {busy ? 'Opening…' : 'Edit image'}
-                  </Text>
+                  {thumb ? (
+                    <Image source={thumb} style={styles.eaThumb} />
+                  ) : (
+                    <View style={[styles.eaThumb, { alignItems: 'center', justifyContent: 'center' }]}>
+                      <Ionicons name="image-outline" size={18} color={ea.textMuted} />
+                    </View>
+                  )}
+                  <View style={styles.eaThumbBadge}>
+                    <Ionicons name="camera" size={12} color="#fff" />
+                  </View>
                 </Pressable>
-              </View>
-              <View style={styles.typePill}>
-                <Text style={[styles.typePillText, f && { fontFamily: f.uiMed }]}>{item.type}</Text>
-              </View>
-              {!item.isDefault ? (
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.eaName, f && { fontFamily: f.uiBold }]}>{item.name}</Text>
+                  <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
+                    {item.imageUri ? 'Custom image' : 'No image yet'}
+                  </Text>
+                  <Pressable
+                    onPress={() => onEditRowImage(item.id)}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit image for ${item.name}`}
+                  >
+                    <Text style={[styles.editImageLink, f && { fontFamily: f.uiMed }]}>
+                      {busy ? 'Opening…' : 'Edit image'}
+                    </Text>
+                  </Pressable>
+                </View>
+                <View style={styles.typePill}>
+                  <Text style={[styles.typePillText, f && { fontFamily: f.uiMed }]}>{item.type}</Text>
+                </View>
                 <Pressable
                   onPress={() => removeEa(item.id)}
                   hitSlop={8}
@@ -661,10 +700,10 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
                 >
                   <Ionicons name="trash-outline" size={18} color={ea.textMuted} />
                 </Pressable>
-              ) : null}
-            </Pressable>
-          );
-        })}
+              </Pressable>
+            );
+          })
+        )}
       </Card>
       <FooterNote fontsReady={fontsReady} />
     </ScrollView>
@@ -963,7 +1002,9 @@ function KeysAnalyticsSection({
               </View>
               <View style={styles.eaNameRow}>
                 <Ionicons name="hardware-chip" size={14} color={ea.primary} />
-                <Text style={[styles.eaName, f && { fontFamily: f.uiBold }]}>{item.ea}</Text>
+                <Text style={[styles.eaName, f && { fontFamily: f.uiBold }]}>
+                  {item.eaName || item.ea}
+                </Text>
               </View>
               <View style={styles.keyCopyRow}>
                 <View style={styles.keyBox}>

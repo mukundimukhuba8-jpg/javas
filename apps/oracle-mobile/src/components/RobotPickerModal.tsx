@@ -8,14 +8,13 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { assets } from '../assets';
 import { colors, radii } from '../theme';
-import type { ExpertAdvisor } from '../ea/types';
+import type { UnlockedRobot } from '../license/types';
 
 type Props = {
   visible: boolean;
-  eas: ExpertAdvisor[];
-  selectedId: string;
+  robots: UnlockedRobot[];
+  selectedId: string | null;
   onSelect: (id: string) => void;
   onClose: () => void;
   onOpenPortal?: () => void;
@@ -23,7 +22,7 @@ type Props = {
 
 export function RobotPickerModal({
   visible,
-  eas,
+  robots,
   selectedId,
   onSelect,
   onClose,
@@ -39,35 +38,46 @@ export function RobotPickerModal({
               <Ionicons name="close" size={22} color={colors.textPrimary} />
             </Pressable>
           </View>
-          <Text style={styles.sub}>Select an EA to show on Home. Create new ones in the portal.</Text>
+          <Text style={styles.sub}>
+            Robots unlocked by activated license keys. Switch which one shows on Home.
+          </Text>
           <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-            {eas.map((ea) => {
-              const selected = ea.id === selectedId;
-              const src = ea.imageUri ? { uri: ea.imageUri } : assets.oracleHero;
-              return (
-                <Pressable
-                  key={ea.id}
-                  style={[styles.row, selected && styles.rowSelected]}
-                  onPress={() => {
-                    onSelect(ea.id);
-                    onClose();
-                  }}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                >
-                  <Image source={src} style={styles.thumb} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.name} numberOfLines={1}>
-                      {ea.name}
-                    </Text>
-                    <Text style={styles.meta}>{ea.type}</Text>
-                  </View>
-                  {selected ? (
-                    <Ionicons name="checkmark-circle" size={22} color={colors.neon} />
-                  ) : null}
-                </Pressable>
-              );
-            })}
+            {robots.length === 0 ? (
+              <Text style={styles.empty}>No robots yet — activate a key first</Text>
+            ) : (
+              robots.map((robot) => {
+                const selected = robot.id === selectedId;
+                return (
+                  <Pressable
+                    key={robot.id}
+                    style={[styles.row, selected && styles.rowSelected]}
+                    onPress={() => {
+                      onSelect(robot.id);
+                      onClose();
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                  >
+                    {robot.imageUri ? (
+                      <Image source={{ uri: robot.imageUri }} style={styles.thumb} />
+                    ) : (
+                      <View style={[styles.thumb, styles.thumbEmpty]}>
+                        <Ionicons name="hardware-chip-outline" size={22} color={colors.textMuted} />
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.name} numberOfLines={1}>
+                        {robot.name}
+                      </Text>
+                      <Text style={styles.meta}>Activated</Text>
+                    </View>
+                    {selected ? (
+                      <Ionicons name="checkmark-circle" size={22} color={colors.neon} />
+                    ) : null}
+                  </Pressable>
+                );
+              })
+            )}
           </ScrollView>
           {onOpenPortal ? (
             <Pressable
@@ -78,7 +88,7 @@ export function RobotPickerModal({
               }}
               accessibilityRole="button"
             >
-              <Text style={styles.portalBtnText}>Create EA in Portal</Text>
+              <Text style={styles.portalBtnText}>Open Portal</Text>
             </Pressable>
           ) : null}
         </Pressable>
@@ -121,6 +131,12 @@ const styles = StyleSheet.create({
   },
   list: { flexGrow: 0 },
   listContent: { gap: 8, paddingBottom: 8 },
+  empty: {
+    color: colors.textMuted,
+    fontSize: 14,
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -139,6 +155,10 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 12,
     backgroundColor: '#1a1a1a',
+  },
+  thumbEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   name: {
     color: colors.textPrimary,

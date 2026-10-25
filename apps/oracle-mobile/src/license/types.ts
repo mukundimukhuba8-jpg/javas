@@ -2,6 +2,11 @@ export type LicenseKey = {
   id: string;
   /** Canonical XXX-XXX-XXX-XXX */
   key: string;
+  /** Linked EA id from Create keys — required for Activate → Home branding */
+  eaId: string;
+  eaName: string;
+  eaImageUri: string | null;
+  /** @deprecated display alias — same as eaName */
   ea: string;
   user: string;
   plan: string;
@@ -15,13 +20,23 @@ export type KeyActivation = {
   email: string;
   key: string;
   activatedAt: string;
+  eaId: string;
+  eaName: string;
+  eaImageUri: string | null;
+};
+
+/** Robot unlocked for Home after Activate. */
+export type UnlockedRobot = {
+  id: string;
+  name: string;
+  imageUri: string | null;
+  key: string;
 };
 
 /** Normalize user-entered keys to uppercase dashed form for comparison. */
 export function normalizeLicenseKey(raw: string): string {
   const compact = raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (compact.length !== 12) {
-    // Still return a dashed best-effort for display; validation checks length
     const parts = compact.match(/.{1,3}/g) ?? [];
     return parts.join('-');
   }

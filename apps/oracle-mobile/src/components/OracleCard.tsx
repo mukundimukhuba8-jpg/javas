@@ -31,7 +31,7 @@ export function OracleCard({
   onOpenQuotes,
   onRemove,
   selectedCount = 0,
-  title = 'THE ORACLE',
+  title = 'Robot',
   imageUri = null,
 }: Props) {
   const heroSource = imageUri ? { uri: imageUri } : assets.oracleHero;
