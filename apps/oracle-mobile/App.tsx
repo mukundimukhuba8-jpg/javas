@@ -6,10 +6,12 @@ import { HomeScreen } from './src/screens/HomeScreen';
 import { AiScannerScreen } from './src/screens/AiScannerScreen';
 import { MetaTraderScreen } from './src/screens/MetaTraderScreen';
 import { EmailGateScreen } from './src/screens/EmailGateScreen';
+import { ActivateRobotScreen } from './src/screens/ActivateRobotScreen';
 import { PortalScreen } from './src/screens/portal/PortalScreen';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { EaProvider } from './src/ea/EaStore';
 import { AccessProvider, useAccess } from './src/access/AccessStore';
+import { LicenseProvider, useLicenses } from './src/license/LicenseStore';
 import type { TabKey } from './src/components/BottomNav';
 import type { PortalSectionId } from './src/screens/portal/portalSections';
 
@@ -26,7 +28,8 @@ function useIconFonts() {
 }
 
 function AppShell() {
-  const { isAllowed } = useAccess();
+  const { isAllowed, sessionEmail } = useAccess();
+  const { hasActivatedKey } = useLicenses();
   const [tab, setTab] = useState<TabKey>('home');
   const [portalOpen, setPortalOpen] = useState(false);
   const [portalSection, setPortalSection] = useState<PortalSectionId>('dashboard');
@@ -51,12 +54,19 @@ function AppShell() {
     );
   }
 
-  if (!isAllowed) {
+  // 1) Sign in
+  if (!isAllowed || !sessionEmail) {
     return (
       <EmailGateScreen onOpenAdminPortal={() => openPortal('reactivate-email')} />
     );
   }
 
+  // 2) Activate robot (skip if this email already activated a key)
+  if (!hasActivatedKey(sessionEmail)) {
+    return <ActivateRobotScreen />;
+  }
+
+  // 3) Home / app
   if (tab === 'home') {
     return (
       <HomeScreen
@@ -98,10 +108,12 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <AccessProvider>
-          <EaProvider>
-            <StatusBar style="light" />
-            <AppShell />
-          </EaProvider>
+          <LicenseProvider>
+            <EaProvider>
+              <StatusBar style="light" />
+              <AppShell />
+            </EaProvider>
+          </LicenseProvider>
         </AccessProvider>
       </ThemeProvider>
     </SafeAreaProvider>

@@ -14,6 +14,7 @@ import { ACCENT_PRESETS, useTheme } from '../../theme/ThemeContext';
 import { portalFonts } from '../../theme/portalFonts';
 import { useEas } from '../../ea/EaStore';
 import { useAccess } from '../../access/AccessStore';
+import { useLicenses } from '../../license/LicenseStore';
 import { pickEaImageAsDataUrl } from '../../ea/pickEaImage';
 import { assets } from '../../assets';
 import type { PortalSectionId } from './portalSections';
@@ -331,6 +332,7 @@ function CreateKeysSection({
   onNavigate: (id: PortalSectionId) => void;
 }) {
   const f = useFf(fontsReady);
+  const { createKey } = useLicenses();
   const [name, setName] = useState('');
   const [eaName, setEaName] = useState('THE ORACLE');
   const [plan, setPlan] = useState('30 days');
@@ -346,21 +348,8 @@ function CreateKeysSection({
 
   const generate = () => {
     if (!name.trim() || !permOk) return;
-    const chunk = () => Math.random().toString(36).slice(2, 5).toUpperCase();
-    const key = `${chunk()}-${chunk()}-${chunk()}-${chunk()}`;
-    setGenerated(key);
-    pushSessionKey({
-      id: `${Date.now()}`,
-      key,
-      ea: eaName,
-      status: 'Active',
-      date: new Date().toLocaleDateString(undefined, {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      }),
-      user: name.trim(),
-    });
+    const entry = createKey({ user: name.trim(), ea: eaName, plan });
+    setGenerated(entry.key);
   };
 
   return (
@@ -824,27 +813,16 @@ function AffiliatesSection({ fontsReady }: { fontsReady: boolean }) {
   );
 }
 
-type SessionKey = {
-  id: string;
-  key: string;
-  ea: string;
-  status: 'Active' | 'Expired';
-  date: string;
-  user: string;
-};
-
-/** In-session keys only — starts empty; Create keys / analytics can append. */
-let sessionKeys: SessionKey[] = [];
-const sessionKeyListeners = new Set<() => void>();
-function subscribeSessionKeys(fn: () => void) {
-  sessionKeyListeners.add(fn);
-  return () => {
-    sessionKeyListeners.delete(fn);
-  };
-}
-function pushSessionKey(entry: SessionKey) {
-  sessionKeys = [entry, ...sessionKeys];
-  sessionKeyListeners.forEach((fn) => fn());
+function formatKeyDate(iso: string) {
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  } catch {
+    return iso;
+  }
 }
 
 function KeysAnalyticsSection({
@@ -855,12 +833,10 @@ function KeysAnalyticsSection({
   onNavigate: (id: PortalSectionId) => void;
 }) {
   const f = useFf(fontsReady);
+  const { keys } = useLicenses();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'expired'>('all');
   const [copied, setCopied] = useState<string | null>(null);
-  const [keys, setKeys] = useState<SessionKey[]>(() => [...sessionKeys]);
-
-  useEffect(() => subscribeSessionKeys(() => setKeys([...sessionKeys])), []);
 
   const activeCount = keys.filter((k) => k.status === 'Active').length;
   const expiredCount = keys.filter((k) => k.status === 'Expired').length;
@@ -1014,7 +990,8 @@ function KeysAnalyticsSection({
               <View style={styles.keyMetaRow}>
                 <Ionicons name="calendar-outline" size={12} color={ea.textMuted} />
                 <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
-                  {item.date} · {item.user}
+                  {formatKeyDate(item.createdAt)} · {item.user}
+                  {item.boundEmail ? ` · ${item.boundEmail}` : ''}
                 </Text>
               </View>
             </View>
