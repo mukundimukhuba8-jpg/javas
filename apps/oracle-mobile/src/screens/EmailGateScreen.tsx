@@ -8,13 +8,125 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAccess } from '../access/AccessStore';
-import { ea } from './portal/eaTradeTheme';
 
 type Props = {
   onOpenAdminPortal: () => void;
 };
+
+/** Squircle mark: phone outline + target with diagonal arrow + eatrade wordmark. */
+function EaTradeLogoMark() {
+  return (
+    <View style={logo.mark} accessibilityElementsHidden>
+      <View style={logo.phone}>
+        <View style={logo.phoneNotch} />
+        <View style={logo.targetRing}>
+          <View style={logo.targetMid}>
+            <View style={logo.targetCore} />
+          </View>
+        </View>
+        <View style={logo.arrowShaft} />
+        <View style={logo.arrowHead} />
+      </View>
+      <Text style={logo.word}>eatrade</Text>
+    </View>
+  );
+}
+
+const logo = StyleSheet.create({
+  mark: {
+    width: 88,
+    height: 88,
+    borderRadius: 22,
+    backgroundColor: '#14161C',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    ...Platform.select({
+      web: { boxShadow: '0 12px 32px rgba(0,0,0,0.45)' } as object,
+      default: {
+        shadowColor: '#000',
+        shadowOpacity: 0.45,
+        shadowRadius: 16,
+        shadowOffset: { width: 0, height: 8 },
+      },
+    }),
+  },
+  phone: {
+    width: 28,
+    height: 40,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    paddingTop: 4,
+    overflow: 'visible',
+  },
+  phoneNotch: {
+    width: 8,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 4,
+  },
+  targetRing: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  targetMid: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 1.25,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  targetCore: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#FFFFFF',
+  },
+  arrowShaft: {
+    position: 'absolute',
+    width: 14,
+    height: 1.5,
+    backgroundColor: '#FFFFFF',
+    top: 10,
+    left: 14,
+    transform: [{ rotate: '-42deg' }],
+  },
+  arrowHead: {
+    position: 'absolute',
+    width: 0,
+    height: 0,
+    top: 2,
+    left: 24,
+    borderLeftWidth: 4,
+    borderRightWidth: 4,
+    borderBottomWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: '#FFFFFF',
+    transform: [{ rotate: '48deg' }],
+  },
+  word: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+});
 
 export function EmailGateScreen({ onOpenAdminPortal }: Props) {
   const insets = useSafeAreaInsets();
@@ -32,182 +144,201 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={[
-        styles.root,
-        {
-          paddingTop: Math.max(insets.top, 24),
-          paddingBottom: Math.max(insets.bottom, 24),
-        },
-      ]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.markRow}>
-        <View style={styles.logoMark}>
-          <View style={styles.logoOuter}>
-            <View style={styles.logoCore} />
-          </View>
+    <View style={styles.root}>
+      <LinearGradient
+        colors={['#0B1A3A', '#070B14', '#000000']}
+        locations={[0, 0.45, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <KeyboardAvoidingView
+        style={[
+          styles.content,
+          {
+            paddingTop: Math.max(insets.top, 12) + 8,
+            paddingBottom: Math.max(insets.bottom, 24),
+          },
+        ]}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <Pressable
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          hitSlop={8}
+        >
+          <View style={styles.backArrow} />
+        </Pressable>
+
+        <View style={styles.hero}>
+          <Pressable
+            onLongPress={onOpenAdminPortal}
+            delayLongPress={700}
+            accessibilityRole="image"
+            accessibilityLabel="EA Trade logo. Long press for admin."
+          >
+            <EaTradeLogoMark />
+          </Pressable>
+
+          <Text style={styles.brandLabel}>EA TRADE</Text>
+          <Text style={styles.title}>Sign in</Text>
+          <Text style={styles.sub}>Use the email linked to your membership</Text>
         </View>
-        <Text style={styles.brand}>EA Trade</Text>
-      </View>
 
-      <View style={styles.card}>
-        <Text style={styles.title}>Access check</Text>
-        <Text style={styles.sub}>
-          Enter the email your admin reactivated. This is not a signup — only activated emails can
-          continue.
-        </Text>
+        <View style={styles.card}>
+          <Text style={styles.label}>EMAIL</Text>
+          <TextInput
+            value={email}
+            onChangeText={(v) => {
+              setEmail(v);
+              setError(null);
+            }}
+            placeholder="you@email.com"
+            placeholderTextColor="#6B7280"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={styles.input}
+            onSubmitEditing={onContinue}
+          />
 
-        <Text style={styles.label}>EMAIL</Text>
-        <TextInput
-          value={email}
-          onChangeText={(v) => {
-            setEmail(v);
-            setError(null);
-          }}
-          placeholder="you@domain.com"
-          placeholderTextColor={ea.textMuted}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={styles.input}
-          onSubmitEditing={onContinue}
-        />
+          {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+          <Pressable
+            onPress={onContinue}
+            style={styles.continue}
+            accessibilityRole="button"
+            accessibilityLabel="Continue"
+          >
+            <Text style={styles.continueText}>Continue</Text>
+          </Pressable>
+        </View>
 
         <Pressable
-          onPress={onContinue}
-          style={styles.primary}
+          onPress={onOpenAdminPortal}
+          style={styles.adminLink}
           accessibilityRole="button"
-          accessibilityLabel="Continue"
+          accessibilityLabel="Admin"
         >
-          <Text style={styles.primaryText}>Continue</Text>
+          <Text style={styles.adminLinkText}>Admin</Text>
         </Pressable>
-      </View>
-
-      <Pressable
-        onPress={onOpenAdminPortal}
-        style={styles.adminLink}
-        accessibilityRole="button"
-        accessibilityLabel="Open admin portal"
-      >
-        <Text style={styles.adminLinkText}>Admin portal</Text>
-      </Pressable>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: ea.bg,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
+    backgroundColor: '#000000',
   },
-  markRow: {
-    flexDirection: 'row',
+  content: {
+    flex: 1,
+    paddingHorizontal: 22,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
-    gap: 10,
+    justifyContent: 'center',
     marginBottom: 28,
-    justifyContent: 'center',
   },
-  logoMark: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(47,107,255,0.45)',
+  backArrow: {
+    width: 10,
+    height: 10,
+    borderLeftWidth: 2,
+    borderBottomWidth: 2,
+    borderColor: '#FFFFFF',
+    transform: [{ rotate: '45deg' }],
+    marginLeft: 3,
+  },
+  hero: {
     alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 28,
+    gap: 10,
   },
-  logoOuter: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: '#93C5FD',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoCore: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: ea.primary,
-  },
-  brand: {
-    color: ea.text,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  card: {
-    backgroundColor: ea.card,
-    borderRadius: ea.radius,
-    borderWidth: 1,
-    borderColor: ea.border,
-    padding: 20,
-    gap: 12,
+  brandLabel: {
+    color: '#9CA3AF',
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 2.4,
+    marginTop: 6,
   },
   title: {
-    color: ea.text,
-    fontSize: 24,
+    color: '#FFFFFF',
+    fontSize: 34,
     fontWeight: '700',
-    letterSpacing: -0.4,
+    letterSpacing: -0.6,
+    marginTop: 4,
   },
   sub: {
-    color: ea.textSecondary,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  label: {
-    color: ea.label,
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    marginTop: 4,
-  },
-  input: {
-    backgroundColor: ea.input,
-    borderWidth: 1,
-    borderColor: ea.borderStrong,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    color: ea.text,
+    color: 'rgba(255,255,255,0.88)',
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '400',
+    textAlign: 'center',
+    lineHeight: 22,
+    maxWidth: 280,
   },
-  error: {
-    color: ea.red,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  primary: {
-    backgroundColor: ea.primary,
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 4,
+  card: {
+    backgroundColor: '#14161C',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    padding: 18,
+    gap: 12,
     ...Platform.select({
-      web: { boxShadow: `0 0 20px ${ea.primaryGlow}` } as object,
+      web: { boxShadow: '0 18px 40px rgba(0,0,0,0.35)' } as object,
       default: {},
     }),
   },
-  primaryText: {
-    color: '#fff',
+  label: {
+    color: '#8E8E93',
+    fontSize: 11,
     fontWeight: '700',
+    letterSpacing: 1,
+  },
+  input: {
+    backgroundColor: '#0C0E14',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    color: '#FFFFFF',
     fontSize: 15,
+    fontWeight: '500',
+  },
+  error: {
+    color: '#F87171',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  continue: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  continueText: {
+    color: '#0A0A0A',
+    fontWeight: '700',
+    fontSize: 16,
   },
   adminLink: {
     alignSelf: 'center',
-    marginTop: 22,
-    padding: 10,
+    marginTop: 28,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
   },
   adminLinkText: {
-    color: ea.textMuted,
-    fontSize: 13,
-    fontWeight: '600',
-    textDecorationLine: 'underline',
+    color: 'rgba(156,163,175,0.45)',
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: 0.4,
   },
 });
