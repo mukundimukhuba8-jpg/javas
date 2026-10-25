@@ -6,6 +6,7 @@ import { AddRobotButton } from '../components/AddRobotButton';
 import { BottomNav, type TabKey } from '../components/BottomNav';
 import { QuotesModal } from '../components/QuotesModal';
 import { RobotPickerModal } from '../components/RobotPickerModal';
+import { useAccess } from '../access/AccessStore';
 import { useEas } from '../ea/EaStore';
 import { DEFAULT_ORACLE_ID } from '../ea/types';
 import { colors, spacing } from '../theme';
@@ -35,10 +36,14 @@ export function HomeScreen({
   const [quotesOpen, setQuotesOpen] = useState(false);
   const [robotsOpen, setRobotsOpen] = useState(false);
   const { eas, selected, selectedId, selectEa, removeEa } = useEas();
+  const { signOut } = useAccess();
 
+  /** REMOVE: clear session and return to Sign in; also drop selected user EA if any. */
   const onRemove = () => {
-    if (selected.id === DEFAULT_ORACLE_ID) return;
-    removeEa(selected.id);
+    if (selected.id !== DEFAULT_ORACLE_ID) {
+      removeEa(selected.id);
+    }
+    signOut();
   };
 
   return (
