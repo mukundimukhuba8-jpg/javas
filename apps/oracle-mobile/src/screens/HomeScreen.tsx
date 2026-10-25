@@ -7,6 +7,7 @@ import { BottomNav, type TabKey } from '../components/BottomNav';
 import { QuotesModal } from '../components/QuotesModal';
 import { RobotPickerModal } from '../components/RobotPickerModal';
 import { useAccess } from '../access/AccessStore';
+import { useEas } from '../ea/EaStore';
 import { useLicenses } from '../license/LicenseStore';
 import { colors, spacing } from '../theme';
 
@@ -36,8 +37,17 @@ export function HomeScreen({
   const [robotsOpen, setRobotsOpen] = useState(false);
   const { sessionEmail, signOut } = useAccess();
   const { unlockedRobotsForEmail } = useLicenses();
+  const { eas } = useEas();
 
-  const robots = sessionEmail ? unlockedRobotsForEmail(sessionEmail) : [];
+  const robots = (sessionEmail ? unlockedRobotsForEmail(sessionEmail) : []).map((r) => {
+    const live = eas.find((e) => e.id === r.id);
+    if (!live) return r;
+    return {
+      ...r,
+      name: live.name || r.name,
+      imageUri: live.imageUri ?? r.imageUri,
+    };
+  });
   const [selectedId, setSelectedId] = useState<string | null>(robots[0]?.id ?? null);
 
   useEffect(() => {
