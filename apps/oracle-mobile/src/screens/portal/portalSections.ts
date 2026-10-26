@@ -73,7 +73,7 @@ export const PORTAL_MENU: PortalMenuItem[] = [
   {
     id: 'subscription',
     title: 'Subscription',
-    subtitle: 'Plans & billing',
+    subtitle: 'Paid · awaiting approval',
     icon: 'card-outline',
   },
   {

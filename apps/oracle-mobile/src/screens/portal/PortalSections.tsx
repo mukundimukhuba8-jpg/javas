@@ -18,7 +18,10 @@ import { pickEaImageAsDataUrl } from '../../ea/pickEaImage';
 import {
   fetchCloudPrimary,
   pushMentorsToCloud,
+  pushReactivatedToCloud,
+  pushSubscriptionsToCloud,
   type Mentor,
+  type SubscriptionPayment,
 } from '../../cloud/oracleCloud';
 import { assets } from '../../assets';
 import type { PortalSectionId } from './portalSections';
@@ -1628,26 +1631,59 @@ function ManageMentorsSection({ fontsReady }: { fontsReady: boolean }) {
 
 function SubscriptionSection({ fontsReady }: { fontsReady: boolean }) {
   const f = useFf(fontsReady);
-  const planCards = [
-    {
-      id: 'starter',
-      name: 'Starter',
-      price: '—',
-      blurb: 'For mentors issuing a small key volume. Pricing TBD.',
-    },
-    {
-      id: 'pro',
-      name: 'Pro',
-      price: '—',
-      blurb: 'Higher key quotas and priority support. Pricing TBD.',
-    },
-    {
-      id: 'enterprise',
-      name: 'Enterprise',
-      price: '—',
-      blurb: 'Custom limits for multi-EA teams. Contact sales later.',
-    },
-  ];
+  const [tab, setTab] = useState<'awaiting' | 'approved' | 'declined'>('awaiting');
+  const [rows, setRows] = useState<SubscriptionPayment[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const pull = async () => {
+      try {
+        const store = await fetchCloudPrimary();
+        if (!cancelled) setRows(store.subscriptions || []);
+      } catch {
+        if (!cancelled) setRows([]);
+      }
+    };
+    void pull();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filtered = useMemo(() => rows.filter((r) => r.status === tab), [rows, tab]);
+
+  const persist = async (next: SubscriptionPayment[]) => {
+    setRows(next);
+    await pushSubscriptionsToCloud(next);
+  };
+
+  const setStatus = async (id: string, status: 'approved' | 'declined') => {
+    setBusyId(id);
+    try {
+      const current = rows.find((r) => r.id === id);
+      const next = rows.map((r) => (r.id === id ? { ...r, status } : r));
+      await persist(next);
+      // Hook approved payers into access so they can sign in toward Activate / keys
+      if (status === 'approved' && current?.email) {
+        try {
+          await pushReactivatedToCloud({
+            email: current.email.toLowerCase(),
+            paid: true,
+            reactivatedAt: new Date().toISOString(),
+            status: 'active',
+          });
+        } catch {
+          /* subscription status still saved */
+        }
+      }
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const statusLabel =
+    tab === 'awaiting' ? 'Awaiting approval' : tab === 'approved' ? 'Approved' : 'Declined';
 
   return (
     <ScrollView
@@ -1658,45 +1694,87 @@ function SubscriptionSection({ fontsReady }: { fontsReady: boolean }) {
       <View style={styles.pageIntro}>
         <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>Subscription</Text>
         <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
-          Plans and billing for the EA Trade portal. No live customers yet — admin stub only.
+          People who paid — approve them before they receive license keys.
         </Text>
       </View>
       <Card>
-        <View style={styles.cardHeadRow}>
-          <IconTile color={ea.primary} soft={ea.primarySoft} name="card" />
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Plan catalog</Text>
-            <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
-              Placeholder tiers. Billing providers and checkout land in a later step.
-            </Text>
-          </View>
+        <View style={styles.filterRow}>
+          {(
+            [
+              { id: 'awaiting' as const, label: 'Awaiting' },
+              { id: 'approved' as const, label: 'Approved' },
+              { id: 'declined' as const, label: 'Declined' },
+            ] as const
+          ).map((t) => {
+            const on = tab === t.id;
+            return (
+              <Pressable
+                key={t.id}
+                onPress={() => setTab(t.id)}
+                style={[styles.filterPill, on && styles.filterPillOn]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on }}
+              >
+                <Text
+                  style={[
+                    styles.filterPillText,
+                    f && { fontFamily: f.uiBold },
+                    on && { color: '#fff' },
+                  ]}
+                >
+                  {t.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
-        {planCards.map((p) => (
-          <View key={p.id} style={styles.mentorCard}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
-              <Text style={[styles.actionTitle, f && { fontFamily: f.uiBold }]}>{p.name}</Text>
-              <Text style={[styles.kpiValue, f && { fontFamily: f.monoBold }, { fontSize: 18 }]}>
-                {p.price}
-              </Text>
+
+        {filtered.length === 0 ? (
+          <Text style={[styles.emptyState, f && { fontFamily: f.uiMed }]}>
+            No subscription payments yet
+          </Text>
+        ) : (
+          filtered.map((r) => (
+            <View key={r.id} style={styles.mentorCard}>
+              <View style={{ gap: 4 }}>
+                <Text style={[styles.actionTitle, f && { fontFamily: f.uiBold }]}>{r.email}</Text>
+                <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
+                  {statusLabel}
+                  {r.plan ? ` · ${r.plan}` : ''}
+                  {r.paidAt
+                    ? ` · paid ${new Date(r.paidAt).toLocaleDateString()}`
+                    : ''}
+                </Text>
+              </View>
+              {tab === 'awaiting' ? (
+                <View style={styles.btnRow}>
+                  <Pressable
+                    disabled={busyId === r.id}
+                    onPress={() => void setStatus(r.id, 'approved')}
+                    style={[styles.newKeyBtn, { flex: 1 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Approve ${r.email}`}
+                  >
+                    <Text style={[styles.newKeyBtnText, f && { fontFamily: f.uiBold }]}>
+                      {busyId === r.id ? '…' : 'Approve'}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    disabled={busyId === r.id}
+                    onPress={() => void setStatus(r.id, 'declined')}
+                    style={[styles.secondaryBtn, { flex: 1, paddingVertical: 10 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Decline ${r.email}`}
+                  >
+                    <Text style={[styles.secondaryBtnText, f && { fontFamily: f.uiBold }]}>
+                      Decline
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
             </View>
-            <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>{p.blurb}</Text>
-            <Pressable
-              disabled
-              style={[styles.secondaryBtn, { opacity: 0.45 }]}
-              accessibilityState={{ disabled: true }}
-            >
-              <Text style={[styles.secondaryBtnText, f && { fontFamily: f.uiBold }]}>
-                Coming soon
-              </Text>
-            </Pressable>
-          </View>
-        ))}
-      </Card>
-      <Card>
-        <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Active subscriptions</Text>
-        <Text style={[styles.emptyState, f && { fontFamily: f.uiMed }]}>
-          No subscriptions yet
-        </Text>
+          ))
+        )}
       </Card>
       <FooterNote fontsReady={fontsReady} />
     </ScrollView>

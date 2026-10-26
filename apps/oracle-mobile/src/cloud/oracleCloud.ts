@@ -18,12 +18,22 @@ export type Mentor = {
   keysUsed: number;
 };
 
+/** Paid subscription requests awaiting admin approval (before license keys). */
+export type SubscriptionPayment = {
+  id: string;
+  email: string;
+  status: 'awaiting' | 'approved' | 'declined';
+  paidAt: string;
+  plan?: string;
+};
+
 export type OracleCloudStore = {
   keys: LicenseKey[];
   reactivated: ReactivatedEmail[];
   eas: ExpertAdvisor[];
   activations: KeyActivation[];
   mentors: Mentor[];
+  subscriptions: SubscriptionPayment[];
   updatedAt: string;
 };
 
@@ -33,6 +43,7 @@ const EMPTY: OracleCloudStore = {
   eas: [],
   activations: [],
   mentors: [],
+  subscriptions: [],
   updatedAt: new Date(0).toISOString(),
 };
 
@@ -58,6 +69,34 @@ function mergeMentors(a: Mentor[], b: Mentor[]): Mentor[] {
     map.set(m.id, m);
   }
   return Array.from(map.values());
+}
+
+function normalizeSubscription(raw: unknown): SubscriptionPayment | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const s = raw as Partial<SubscriptionPayment>;
+  if (typeof s.id !== 'string' || !s.id) return null;
+  if (typeof s.email !== 'string' || !s.email.trim()) return null;
+  const status =
+    s.status === 'approved' ? 'approved' : s.status === 'declined' ? 'declined' : 'awaiting';
+  return {
+    id: s.id,
+    email: s.email.trim().toLowerCase(),
+    status,
+    paidAt: typeof s.paidAt === 'string' ? s.paidAt : new Date().toISOString(),
+    plan: typeof s.plan === 'string' ? s.plan : undefined,
+  };
+}
+
+function mergeSubscriptions(
+  a: SubscriptionPayment[],
+  b: SubscriptionPayment[],
+): SubscriptionPayment[] {
+  const map = new Map<string, SubscriptionPayment>();
+  for (const s of [...b, ...a]) {
+    if (!s?.id) continue;
+    map.set(s.id, s);
+  }
+  return Array.from(map.values()).sort((x, y) => (y.paidAt || '').localeCompare(x.paidAt || ''));
 }
 
 function resolveWriteUrl(): string {
@@ -125,6 +164,11 @@ function normalizeStore(raw: unknown): OracleCloudStore {
       : [],
     mentors: Array.isArray((o as { mentors?: unknown }).mentors)
       ? ((o as { mentors: unknown[] }).mentors.map(normalizeMentor).filter(Boolean) as Mentor[])
+      : [],
+    subscriptions: Array.isArray((o as { subscriptions?: unknown }).subscriptions)
+      ? ((o as { subscriptions: unknown[] }).subscriptions
+          .map(normalizeSubscription)
+          .filter(Boolean) as SubscriptionPayment[])
       : [],
     updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : new Date().toISOString(),
   };
@@ -334,6 +378,7 @@ async function putCloudStore(store: OracleCloudStore): Promise<OracleCloudStore>
     eas: store.eas.map((e) => ({ ...e, imageUri: capImage(e.imageUri ?? null) })),
     activations: store.activations.map((a) => ({ ...a, eaImageUri: null })),
     mentors: Array.isArray(store.mentors) ? store.mentors : [],
+    subscriptions: Array.isArray(store.subscriptions) ? store.subscriptions : [],
     updatedAt: new Date().toISOString(),
   };
   let lastErr: Error | null = null;
@@ -433,6 +478,7 @@ export function mergeStores(local: Partial<OracleCloudStore>, remote: OracleClou
     eas: mergeEas(local.eas || [], remote.eas),
     activations: mergeActivations(local.activations || [], remote.activations),
     mentors: mergeMentors(local.mentors || [], remote.mentors || []),
+    subscriptions: mergeSubscriptions(local.subscriptions || [], remote.subscriptions || []),
     updatedAt: new Date().toISOString(),
   };
 }
@@ -458,6 +504,9 @@ export async function patchCloudStore(
         ? mergeActivations(patch.activations, remote.activations)
         : remote.activations,
       mentors: patch.mentors ? mergeMentors(patch.mentors, remote.mentors || []) : remote.mentors || [],
+      subscriptions: patch.subscriptions
+        ? mergeSubscriptions(patch.subscriptions, remote.subscriptions || [])
+        : remote.subscriptions || [],
       updatedAt: new Date().toISOString(),
     };
     return putCloudStore(next);
@@ -522,6 +571,7 @@ export async function pushActivationToCloud(
       reactivated: remote.reactivated,
       eas: remote.eas,
       mentors: remote.mentors || [],
+      subscriptions: remote.subscriptions || [],
       activations: [
         {
           email: activation.email,
@@ -561,6 +611,7 @@ export async function replaceCloudStore(store: OracleCloudStore): Promise<Oracle
       eas: store.eas.map((e) => ({ ...e, imageUri: capImage(e.imageUri ?? null) })),
       activations: store.activations.map((a) => ({ ...a, eaImageUri: null })),
       mentors: Array.isArray(store.mentors) ? store.mentors : [],
+      subscriptions: Array.isArray(store.subscriptions) ? store.subscriptions : [],
       updatedAt: new Date().toISOString(),
     };
     await putCloudStore(payload);
@@ -572,7 +623,23 @@ export async function replaceCloudStore(store: OracleCloudStore): Promise<Oracle
 export async function pushMentorsToCloud(mentors: Mentor[]): Promise<OracleCloudStore> {
   return enqueueWrite(async () => {
     const remote = await fetchCloudPrimary();
-    return putCloudStore({ ...remote, mentors: mentors.map((m) => normalizeMentor(m)!).filter(Boolean) });
+    return putCloudStore({
+      ...remote,
+      mentors: mentors.map((m) => normalizeMentor(m)!).filter(Boolean),
+    });
+  });
+}
+
+/** Replace subscription payment requests (approve / decline). */
+export async function pushSubscriptionsToCloud(
+  subscriptions: SubscriptionPayment[],
+): Promise<OracleCloudStore> {
+  return enqueueWrite(async () => {
+    const remote = await fetchCloudPrimary();
+    return putCloudStore({
+      ...remote,
+      subscriptions: subscriptions.map((s) => normalizeSubscription(s)!).filter(Boolean),
+    });
   });
 }
 
