@@ -289,11 +289,19 @@ function mergeEas(a: ExpertAdvisor[], b: ExpertAdvisor[]): ExpertAdvisor[] {
   for (const e of [...b, ...a]) {
     if (!e?.id) continue;
     const prev = map.get(e.id);
-    if (!prev || (e.createdAt || '') >= (prev.createdAt || '')) {
-      map.set(e.id, { ...e, imageUri: capImage(e.imageUri ?? null) });
-    } else if (prev && !prev.imageUri && e.imageUri) {
-      map.set(e.id, { ...prev, imageUri: capImage(e.imageUri) });
+    const incomingImg = capImage(e.imageUri ?? null);
+    if (!prev) {
+      map.set(e.id, { ...e, imageUri: incomingImg });
+      continue;
     }
+    const newer = (e.createdAt || '') >= (prev.createdAt || '') ? e : prev;
+    const older = newer === e ? prev : e;
+    // Never let a null image overwrite a real uploaded picture
+    map.set(e.id, {
+      ...newer,
+      name: newer.name || older.name,
+      imageUri: capImage(newer.imageUri ?? null) || capImage(older.imageUri ?? null),
+    });
   }
   return Array.from(map.values());
 }

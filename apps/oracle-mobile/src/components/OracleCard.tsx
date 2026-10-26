@@ -25,12 +25,29 @@ type Props = {
   imageUri?: string | null;
 };
 
-function titleStyleFor(name: string) {
+/** Size the overlay so full EA names (e.g. "UNLIMITED BULL") fit without mid-word ellipsis. */
+function titleStyleFor(name: string, lineCount: number) {
   const len = name.trim().length;
-  if (len > 22) return { fontSize: 22, letterSpacing: 0.6, lineHeight: 26 };
-  if (len > 16) return { fontSize: 26, letterSpacing: 0.8, lineHeight: 30 };
-  if (len > 12) return { fontSize: 30, letterSpacing: 1, lineHeight: 34 };
+  if (lineCount >= 2) {
+    if (len > 22) return { fontSize: 22, letterSpacing: 0.5, lineHeight: 26 };
+    if (len > 14) return { fontSize: 26, letterSpacing: 0.7, lineHeight: 30 };
+    return { fontSize: 28, letterSpacing: 0.8, lineHeight: 32 };
+  }
+  if (len > 18) return { fontSize: 22, letterSpacing: 0.6, lineHeight: 26 };
+  if (len > 12) return { fontSize: 26, letterSpacing: 0.8, lineHeight: 30 };
+  if (len > 8) return { fontSize: 30, letterSpacing: 1, lineHeight: 34 };
   return { fontSize: 34, letterSpacing: 1.2, lineHeight: 38 };
+}
+
+function titleLines(name: string): string[] {
+  const trimmed = name.trim();
+  if (!trimmed) return ['Robot'];
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  // Prefer natural word wrap for multi-word EA names so nothing is ellipsized mid-word
+  if (parts.length >= 2 && trimmed.length > 10) {
+    return parts;
+  }
+  return [trimmed];
 }
 
 export function OracleCard({
@@ -44,7 +61,8 @@ export function OracleCard({
 }: Props) {
   const hasCustomImage = typeof imageUri === 'string' && imageUri.trim().length > 0;
   const heroSource = hasCustomImage ? { uri: imageUri!.trim() } : assets.oracleHero;
-  const titleFit = titleStyleFor(title);
+  const lines = titleLines(title);
+  const titleFit = titleStyleFor(title, lines.length);
 
   const actions: Action[] = [
     {
@@ -88,14 +106,20 @@ export function OracleCard({
           style={styles.heroFade}
         />
         <View style={styles.titleRow}>
-          <Text
-            style={[styles.title, titleFit]}
-            numberOfLines={2}
-            adjustsFontSizeToFit
-            minimumFontScale={0.55}
-          >
-            {title}
-          </Text>
+          <View style={styles.titleCol} accessibilityLabel={title}>
+            {lines.map((line) => (
+              <Text
+                key={line}
+                style={[styles.title, titleFit]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.5}
+                ellipsizeMode="clip"
+              >
+                {line}
+              </Text>
+            ))}
+          </View>
           <View style={[styles.statusDot, running ? styles.statusDotRunning : styles.statusDotIdle]} />
         </View>
         {running ? (
@@ -156,9 +180,13 @@ const styles = StyleSheet.create({
     gap: 10,
     zIndex: 2,
   },
-  title: {
+  titleCol: {
     flex: 1,
     flexShrink: 1,
+    minWidth: 0,
+  },
+  title: {
+    width: '100%',
     color: colors.textPrimary,
     fontWeight: '800',
     textShadowColor: 'rgba(0,0,0,0.75)',

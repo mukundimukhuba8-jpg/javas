@@ -127,10 +127,19 @@ function persistKeysToDisk(keys: LicenseKey[]): void {
 }
 
 function persistActivationsToDisk(list: KeyActivation[]): void {
-  const slim = list.map((a) => ({ ...a, eaImageUri: null }));
-  memoryActivations = slim;
+  // Keep resolved images in memory for Home; strip only the localStorage payload
+  // so quota stays small (cloud EA catalog is the durable image source).
+  memoryActivations = list.map((a) => ({
+    email: a.email,
+    key: normalizeLicenseKey(a.key),
+    activatedAt: a.activatedAt || new Date().toISOString(),
+    eaId: a.eaId || '',
+    eaName: a.eaName || '',
+    eaImageUri: a.eaImageUri || null,
+  }));
   if (!canUseStorage()) return;
   try {
+    const slim = memoryActivations.map((a) => ({ ...a, eaImageUri: null }));
     localStorage.setItem(ACT_STORAGE, JSON.stringify(slim));
   } catch {
     /* ignore */
