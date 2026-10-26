@@ -6,7 +6,7 @@ export type PortalSectionId =
   | 'affiliate-program'
   | 'manage-users'
   | 'affiliates'
-  | 'color-changer'
+  | 'subscription'
   | 'reactivate-license'
   | 'keys-analytics';
 
@@ -22,7 +22,7 @@ export type PortalMenuItem = {
     | 'git-network-outline'
     | 'people-outline'
     | 'briefcase-outline'
-    | 'color-palette-outline'
+    | 'card-outline'
     | 'refresh-outline'
     | 'stats-chart-outline';
 };
@@ -60,8 +60,8 @@ export const PORTAL_MENU: PortalMenuItem[] = [
   },
   {
     id: 'manage-users',
-    title: 'Manage users',
-    subtitle: 'Accounts & roles',
+    title: 'Manage mentors',
+    subtitle: 'Approve & key quotas',
     icon: 'people-outline',
   },
   {
@@ -71,10 +71,10 @@ export const PORTAL_MENU: PortalMenuItem[] = [
     icon: 'briefcase-outline',
   },
   {
-    id: 'color-changer',
-    title: 'Color changer',
-    subtitle: 'App accent theme',
-    icon: 'color-palette-outline',
+    id: 'subscription',
+    title: 'Subscription',
+    subtitle: 'Plans & billing',
+    icon: 'card-outline',
   },
   {
     id: 'reactivate-license',

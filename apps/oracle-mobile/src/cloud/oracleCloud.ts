@@ -8,11 +8,22 @@ import type { ReactivatedEmail } from '../access/types';
 import type { ExpertAdvisor } from '../ea/types';
 import { normalizeLicenseKey, toSlimKey, type KeyActivation, type LicenseKey } from '../license/types';
 
+/** Portal mentor accounts — signup later; persist empty until then. */
+export type Mentor = {
+  id: string;
+  name?: string;
+  email?: string;
+  status: 'waiting' | 'approved';
+  keysAllowed: number;
+  keysUsed: number;
+};
+
 export type OracleCloudStore = {
   keys: LicenseKey[];
   reactivated: ReactivatedEmail[];
   eas: ExpertAdvisor[];
   activations: KeyActivation[];
+  mentors: Mentor[];
   updatedAt: string;
 };
 
@@ -21,8 +32,33 @@ const EMPTY: OracleCloudStore = {
   reactivated: [],
   eas: [],
   activations: [],
+  mentors: [],
   updatedAt: new Date(0).toISOString(),
 };
+
+function normalizeMentor(raw: unknown): Mentor | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const m = raw as Partial<Mentor>;
+  if (typeof m.id !== 'string' || !m.id) return null;
+  const status = m.status === 'approved' ? 'approved' : 'waiting';
+  return {
+    id: m.id,
+    name: typeof m.name === 'string' ? m.name : undefined,
+    email: typeof m.email === 'string' ? m.email : undefined,
+    status,
+    keysAllowed: typeof m.keysAllowed === 'number' && m.keysAllowed >= 0 ? m.keysAllowed : 0,
+    keysUsed: typeof m.keysUsed === 'number' && m.keysUsed >= 0 ? m.keysUsed : 0,
+  };
+}
+
+function mergeMentors(a: Mentor[], b: Mentor[]): Mentor[] {
+  const map = new Map<string, Mentor>();
+  for (const m of [...b, ...a]) {
+    if (!m?.id) continue;
+    map.set(m.id, m);
+  }
+  return Array.from(map.values());
+}
 
 function resolveWriteUrl(): string {
   if (typeof window !== 'undefined') {
@@ -86,6 +122,9 @@ function normalizeStore(raw: unknown): OracleCloudStore {
             eaName: a.eaName || '',
             eaImageUri: null,
           }))
+      : [],
+    mentors: Array.isArray((o as { mentors?: unknown }).mentors)
+      ? ((o as { mentors: unknown[] }).mentors.map(normalizeMentor).filter(Boolean) as Mentor[])
       : [],
     updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : new Date().toISOString(),
   };
@@ -294,6 +333,7 @@ async function putCloudStore(store: OracleCloudStore): Promise<OracleCloudStore>
     reactivated: store.reactivated,
     eas: store.eas.map((e) => ({ ...e, imageUri: capImage(e.imageUri ?? null) })),
     activations: store.activations.map((a) => ({ ...a, eaImageUri: null })),
+    mentors: Array.isArray(store.mentors) ? store.mentors : [],
     updatedAt: new Date().toISOString(),
   };
   let lastErr: Error | null = null;
@@ -392,6 +432,7 @@ export function mergeStores(local: Partial<OracleCloudStore>, remote: OracleClou
     reactivated: mergeReactivated(local.reactivated || [], remote.reactivated),
     eas: mergeEas(local.eas || [], remote.eas),
     activations: mergeActivations(local.activations || [], remote.activations),
+    mentors: mergeMentors(local.mentors || [], remote.mentors || []),
     updatedAt: new Date().toISOString(),
   };
 }
@@ -416,6 +457,7 @@ export async function patchCloudStore(
       activations: patch.activations
         ? mergeActivations(patch.activations, remote.activations)
         : remote.activations,
+      mentors: patch.mentors ? mergeMentors(patch.mentors, remote.mentors || []) : remote.mentors || [],
       updatedAt: new Date().toISOString(),
     };
     return putCloudStore(next);
@@ -479,6 +521,7 @@ export async function pushActivationToCloud(
       keys,
       reactivated: remote.reactivated,
       eas: remote.eas,
+      mentors: remote.mentors || [],
       activations: [
         {
           email: activation.email,
@@ -517,10 +560,19 @@ export async function replaceCloudStore(store: OracleCloudStore): Promise<Oracle
       reactivated: store.reactivated,
       eas: store.eas.map((e) => ({ ...e, imageUri: capImage(e.imageUri ?? null) })),
       activations: store.activations.map((a) => ({ ...a, eaImageUri: null })),
+      mentors: Array.isArray(store.mentors) ? store.mentors : [],
       updatedAt: new Date().toISOString(),
     };
     await putCloudStore(payload);
     return payload;
+  });
+}
+
+/** Replace the mentors list in cloud (approve / quota updates). */
+export async function pushMentorsToCloud(mentors: Mentor[]): Promise<OracleCloudStore> {
+  return enqueueWrite(async () => {
+    const remote = await fetchCloudPrimary();
+    return putCloudStore({ ...remote, mentors: mentors.map((m) => normalizeMentor(m)!).filter(Boolean) });
   });
 }
 

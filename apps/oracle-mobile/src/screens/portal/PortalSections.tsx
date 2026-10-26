@@ -10,12 +10,16 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { ACCENT_PRESETS, useTheme } from '../../theme/ThemeContext';
 import { portalFonts } from '../../theme/portalFonts';
 import { useEas } from '../../ea/EaStore';
 import { useAccess } from '../../access/AccessStore';
 import { useLicenses } from '../../license/LicenseStore';
 import { pickEaImageAsDataUrl } from '../../ea/pickEaImage';
+import {
+  fetchCloudPrimary,
+  pushMentorsToCloud,
+  type Mentor,
+} from '../../cloud/oracleCloud';
 import { assets } from '../../assets';
 import type { PortalSectionId } from './portalSections';
 import { ea } from './eaTradeTheme';
@@ -142,32 +146,74 @@ function ConfirmBox({
   );
 }
 
+/** Mutually exclusive delivery choice for Create keys (radio-style cards). */
+function DeliveryOption({
+  title,
+  subtitle,
+  selected,
+  onSelect,
+  fontsReady,
+  icon,
+}: {
+  title: string;
+  subtitle: string;
+  selected: boolean;
+  onSelect: () => void;
+  fontsReady: boolean;
+  icon: keyof typeof Ionicons.glyphMap;
+}) {
+  const f = useFf(fontsReady);
+  return (
+    <Pressable
+      onPress={onSelect}
+      style={[styles.deliveryCard, selected && styles.deliveryCardOn]}
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      accessibilityLabel={title}
+    >
+      <View style={[styles.deliveryRadio, selected && styles.deliveryRadioOn]}>
+        {selected ? <View style={styles.deliveryRadioDot} /> : null}
+      </View>
+      <Ionicons name={icon} size={18} color={selected ? ea.primary : ea.textSecondary} />
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={[styles.deliveryTitle, f && { fontFamily: f.uiBold }]}>{title}</Text>
+        <Text style={[styles.deliverySub, f && { fontFamily: f.ui }]}>{subtitle}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
 function PrimaryBtn({
   label,
   onPress,
   icon,
   fontsReady,
   color = ea.primary,
+  disabled = false,
 }: {
   label: string;
   onPress: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
   fontsReady: boolean;
   color?: string;
+  disabled?: boolean;
 }) {
   const f = useFf(fontsReady);
   return (
     <Pressable
-      onPress={onPress}
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
       style={[
         styles.primaryBtn,
-        { backgroundColor: color },
-        Platform.select({
-          web: { boxShadow: `0 0 22px ${color}66` } as object,
-          default: {},
-        }),
+        { backgroundColor: color, opacity: disabled ? 0.4 : 1 },
+        !disabled &&
+          Platform.select({
+            web: { boxShadow: `0 0 22px ${color}66` } as object,
+            default: {},
+          }),
       ]}
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
     >
       {icon ? <Ionicons name={icon} size={16} color="#fff" /> : null}
       <Text style={[styles.primaryBtnText, f && { fontFamily: f.uiBold }]}>{label}</Text>
@@ -214,11 +260,11 @@ export function PortalSectionBody({ section, fontsReady, onNavigate }: Props) {
     case 'affiliate-program':
       return <AffiliateProgramSection fontsReady={fontsReady} />;
     case 'manage-users':
-      return <ManageUsersSection fontsReady={fontsReady} />;
+      return <ManageMentorsSection fontsReady={fontsReady} />;
     case 'affiliates':
       return <AffiliatesSection fontsReady={fontsReady} />;
-    case 'color-changer':
-      return <ColorChangerSection fontsReady={fontsReady} />;
+    case 'subscription':
+      return <SubscriptionSection fontsReady={fontsReady} />;
     case 'reactivate-license':
       return <ReactivateLicenseSection fontsReady={fontsReady} />;
     case 'keys-analytics':
@@ -337,7 +383,8 @@ function CreateKeysSection({
   const [name, setName] = useState('');
   const [eaId, setEaId] = useState<string | null>(null);
   const [plan, setPlan] = useState('30 days');
-  const [emailOk, setEmailOk] = useState(false);
+  /** Exactly one delivery method required before Generate. */
+  const [delivery, setDelivery] = useState<'email' | 'manual' | null>(null);
   const [permOk, setPermOk] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<string | null>(null);
@@ -348,17 +395,11 @@ function CreateKeysSection({
 
   const selectedEa = storedEas.find((e) => e.id === eaId) ?? null;
   const plans = ['7 days', '30 days', '90 days', '1 year', 'Lifetime'];
+  const canGenerate =
+    !!name.trim() && !!selectedEa && !!delivery && permOk && !saving && storedEas.length > 0;
 
   const generate = async () => {
-    if (!name.trim() || !permOk || saving) return;
-    if (storedEas.length === 0) {
-      setFormError('Create an expert advisor first (EXPERT ADVISER), then generate a key for it.');
-      return;
-    }
-    if (!selectedEa) {
-      setFormError('Select an expert advisor. Keys must be tied to an EA with name and image.');
-      return;
-    }
+    if (!canGenerate || !selectedEa || !delivery) return;
     setFormError(null);
     setGenerated(null);
     setSavedOk(false);
@@ -369,11 +410,16 @@ function CreateKeysSection({
         plan,
         eaId: selectedEa.id,
         eaName: selectedEa.name,
+        eaImageUri: selectedEa.imageUri,
       });
       if (result.saved) {
         setGenerated(result.key.key);
         setSavedOk(true);
         setFormError(null);
+        // Email delivery is UI-stubbed for now — Manual shows the key to copy below.
+        if (delivery === 'email' && typeof window !== 'undefined') {
+          /* stub: would send result.key.key to the customer email */
+        }
       } else {
         setGenerated(null);
         setSavedOk(false);
@@ -470,12 +516,27 @@ function CreateKeysSection({
             ))
           : null}
 
-        <ConfirmBox
-          label="SEND LICENSE KEY VIA EMAIL AFTER GENERATION"
-          checked={emailOk}
-          onToggle={() => setEmailOk((v) => !v)}
+        <FieldLabel text="DELIVERY METHOD" fontsReady={fontsReady} />
+        <Text style={[styles.help, f && { fontFamily: f.ui }]}>
+          Choose how this key will be delivered. Generate stays locked until you pick one.
+        </Text>
+        <DeliveryOption
+          title="Send through email"
+          subtitle="Email the key to the customer after generation (ready for wiring)."
+          icon="mail-outline"
+          selected={delivery === 'email'}
+          onSelect={() => setDelivery('email')}
           fontsReady={fontsReady}
         />
+        <DeliveryOption
+          title="Manual"
+          subtitle="Show and copy the key so you can share it yourself."
+          icon="copy-outline"
+          selected={delivery === 'manual'}
+          onSelect={() => setDelivery('manual')}
+          fontsReady={fontsReady}
+        />
+
         <ConfirmBox
           label="I CONFIRM THAT I HAVE PERMISSION TO GENERATE THIS LICENCE KEY."
           checked={permOk}
@@ -488,10 +549,17 @@ function CreateKeysSection({
         ) : null}
 
         <PrimaryBtn
-          label={saving ? 'Saving to cloud…' : 'Generate key'}
+          label={
+            saving
+              ? 'Saving to cloud…'
+              : !delivery
+                ? 'Select a delivery method'
+                : 'Generate key'
+          }
           icon="sparkles"
           onPress={generate}
           fontsReady={fontsReady}
+          disabled={!canGenerate}
         />
         <SecondaryBtn
           label="View all keys"
@@ -511,7 +579,9 @@ function CreateKeysSection({
               ]}
             >
               {savedOk
-                ? `Saved to cloud ✓ · works on any device · ${name || 'Customer'} · ${selectedEa?.name ?? 'EA'} · ${plan}`
+                ? delivery === 'email'
+                  ? `Saved to cloud ✓ · email delivery queued (stub) · ${name || 'Customer'} · ${selectedEa?.name ?? 'EA'} · ${plan}`
+                  : `Saved to cloud ✓ · copy & share manually · ${name || 'Customer'} · ${selectedEa?.name ?? 'EA'} · ${plan}`
                 : `Not saved to cloud — Activate on other devices will not find this key.`}
             </Text>
           </View>
@@ -1350,16 +1420,81 @@ function ReactivateEmailSection({ fontsReady }: { fontsReady: boolean }) {
   );
 }
 
-function ManageUsersSection({ fontsReady }: { fontsReady: boolean }) {
+function ManageMentorsSection({ fontsReady }: { fontsReady: boolean }) {
   const f = useFf(fontsReady);
   const [q, setQ] = useState('');
-  const users = useMemo(() => [] as { name: string; email: string; role: string; status: string }[], []);
-  const filtered = users.filter(
-    (u) =>
-      !q.trim() ||
-      u.name.toLowerCase().includes(q.toLowerCase()) ||
-      u.email.toLowerCase().includes(q.toLowerCase()),
-  );
+  const [tab, setTab] = useState<'waiting' | 'approved'>('waiting');
+  const [mentors, setMentors] = useState<Mentor[]>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [quotaDraft, setQuotaDraft] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    const pull = async () => {
+      try {
+        const store = await fetchCloudPrimary();
+        if (!cancelled) setMentors(store.mentors || []);
+      } catch {
+        if (!cancelled) setMentors([]);
+      }
+    };
+    void pull();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return mentors.filter((m) => {
+      if (m.status !== tab) return false;
+      if (!needle) return true;
+      return (
+        (m.name || '').toLowerCase().includes(needle) ||
+        (m.email || '').toLowerCase().includes(needle)
+      );
+    });
+  }, [mentors, tab, q]);
+
+  const persist = async (next: Mentor[]) => {
+    setMentors(next);
+    await pushMentorsToCloud(next);
+  };
+
+  const approve = async (id: string) => {
+    setBusyId(id);
+    try {
+      await persist(
+        mentors.map((m) =>
+          m.id === id ? { ...m, status: 'approved' as const, keysAllowed: m.keysAllowed || 0 } : m,
+        ),
+      );
+      setTab('approved');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const reject = async (id: string) => {
+    setBusyId(id);
+    try {
+      await persist(mentors.filter((m) => m.id !== id));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const saveQuota = async (id: string) => {
+    const raw = quotaDraft[id];
+    const n = Math.max(0, Math.floor(Number(raw)));
+    if (!Number.isFinite(n)) return;
+    setBusyId(id);
+    try {
+      await persist(mentors.map((m) => (m.id === id ? { ...m, keysAllowed: n } : m)));
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   return (
     <ScrollView
@@ -1368,12 +1503,42 @@ function ManageUsersSection({ fontsReady }: { fontsReady: boolean }) {
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.pageIntro}>
-        <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>Manage users</Text>
+        <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>Manage mentors</Text>
         <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
-          Search accounts, roles, and access status.
+          Approve mentors and set how many license keys they can generate.
         </Text>
       </View>
       <Card>
+        <View style={styles.filterRow}>
+          {(
+            [
+              { id: 'waiting' as const, label: 'Waiting approval' },
+              { id: 'approved' as const, label: 'Approved' },
+            ] as const
+          ).map((t) => {
+            const on = tab === t.id;
+            return (
+              <Pressable
+                key={t.id}
+                onPress={() => setTab(t.id)}
+                style={[styles.filterPill, on && styles.filterPillOn]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on }}
+              >
+                <Text
+                  style={[
+                    styles.filterPillText,
+                    f && { fontFamily: f.uiBold },
+                    on && { color: '#fff' },
+                  ]}
+                >
+                  {t.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
         <View style={styles.searchWrap}>
           <Ionicons name="search" size={16} color={ea.textMuted} />
           <TextInput
@@ -1384,33 +1549,74 @@ function ManageUsersSection({ fontsReady }: { fontsReady: boolean }) {
             style={[styles.searchInput, f && { fontFamily: f.uiMed }]}
           />
         </View>
+
         {filtered.length === 0 ? (
-          <Text style={[styles.emptyState, f && { fontFamily: f.uiMed }]}>No users yet</Text>
+          <Text style={[styles.emptyState, f && { fontFamily: f.uiMed }]}>
+            {tab === 'waiting' ? 'No mentors waiting approval' : 'No approved mentors yet'}
+          </Text>
         ) : (
-          filtered.map((u) => (
-            <View key={u.email} style={styles.userRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.actionTitle, f && { fontFamily: f.uiBold }]}>{u.name}</Text>
+          filtered.map((m) => (
+            <View key={m.id} style={styles.mentorCard}>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={[styles.actionTitle, f && { fontFamily: f.uiBold }]}>
+                  {m.name?.trim() || 'Mentor'}
+                </Text>
                 <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
-                  {u.email} · {u.role}
+                  {m.email?.trim() || 'No email on file'}
                 </Text>
               </View>
-              <View
-                style={[
-                  styles.statusPill,
-                  u.status === 'Active' ? styles.statusActive : styles.statusExpired,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.statusPillText,
-                    f && { fontFamily: f.uiBold },
-                    { color: u.status === 'Active' ? ea.green : ea.orange },
-                  ]}
-                >
-                  {u.status}
-                </Text>
-              </View>
+
+              {tab === 'waiting' ? (
+                <View style={styles.btnRow}>
+                  <Pressable
+                    disabled={busyId === m.id}
+                    onPress={() => void approve(m.id)}
+                    style={[styles.newKeyBtn, { flex: 1 }]}
+                  >
+                    <Text style={[styles.newKeyBtnText, f && { fontFamily: f.uiBold }]}>
+                      {busyId === m.id ? '…' : 'Approve'}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    disabled={busyId === m.id}
+                    onPress={() => void reject(m.id)}
+                    style={[styles.secondaryBtn, { flex: 1, paddingVertical: 10 }]}
+                  >
+                    <Text style={[styles.secondaryBtnText, f && { fontFamily: f.uiBold }]}>
+                      Reject
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={{ gap: 8 }}>
+                  <Text style={[styles.fieldLabel, f && { fontFamily: f.uiBold }]}>
+                    KEYS ALLOWED TO GENERATE
+                  </Text>
+                  <View style={styles.keyCopyRow}>
+                    <TextInput
+                      value={quotaDraft[m.id] ?? String(m.keysAllowed ?? 0)}
+                      onChangeText={(v) =>
+                        setQuotaDraft((prev) => ({ ...prev, [m.id]: v.replace(/[^\d]/g, '') }))
+                      }
+                      keyboardType="number-pad"
+                      placeholder="0"
+                      placeholderTextColor={ea.textMuted}
+                      style={[styles.keyBox, styles.searchInput, f && { fontFamily: f.monoBold }]}
+                    />
+                    <Pressable
+                      disabled={busyId === m.id}
+                      onPress={() => void saveQuota(m.id)}
+                      style={styles.copySquare}
+                      accessibilityLabel="Save key quota"
+                    >
+                      <Ionicons name="checkmark" size={18} color="#fff" />
+                    </Pressable>
+                  </View>
+                  <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
+                    Used {m.keysUsed ?? 0} of {m.keysAllowed ?? 0}
+                  </Text>
+                </View>
+              )}
             </View>
           ))
         )}
@@ -1420,42 +1626,77 @@ function ManageUsersSection({ fontsReady }: { fontsReady: boolean }) {
   );
 }
 
-function ColorChangerSection({ fontsReady }: { fontsReady: boolean }) {
+function SubscriptionSection({ fontsReady }: { fontsReady: boolean }) {
   const f = useFf(fontsReady);
-  const { accent, setAccent } = useTheme();
+  const planCards = [
+    {
+      id: 'starter',
+      name: 'Starter',
+      price: '—',
+      blurb: 'For mentors issuing a small key volume. Pricing TBD.',
+    },
+    {
+      id: 'pro',
+      name: 'Pro',
+      price: '—',
+      blurb: 'Higher key quotas and priority support. Pricing TBD.',
+    },
+    {
+      id: 'enterprise',
+      name: 'Enterprise',
+      price: '—',
+      blurb: 'Custom limits for multi-EA teams. Contact sales later.',
+    },
+  ];
 
   return (
-    <ScrollView contentContainerStyle={styles.stack} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={styles.stack}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
       <View style={styles.pageIntro}>
-        <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>Color changer</Text>
+        <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>Subscription</Text>
         <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
-          Update the live Oracle app accent outside this portal shell.
+          Plans and billing for the EA Trade portal. No live customers yet — admin stub only.
         </Text>
       </View>
       <Card>
         <View style={styles.cardHeadRow}>
-          <IconTile color={ea.purple} soft={ea.purpleSoft} name="color-palette" />
-          <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Accent presets</Text>
+          <IconTile color={ea.primary} soft={ea.primarySoft} name="card" />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Plan catalog</Text>
+            <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+              Placeholder tiers. Billing providers and checkout land in a later step.
+            </Text>
+          </View>
         </View>
-        <View style={styles.swatchGrid}>
-          {ACCENT_PRESETS.map((p) => {
-            const selected = accent.toLowerCase() === p.value.toLowerCase();
-            return (
-              <Pressable
-                key={p.id}
-                onPress={() => setAccent(p.value)}
-                style={[
-                  styles.swatch,
-                  { backgroundColor: p.value, borderColor: selected ? '#fff' : p.value },
-                ]}
-                accessibilityLabel={p.label}
-              >
-                {selected ? <Ionicons name="checkmark" size={18} color="#000" /> : null}
-              </Pressable>
-            );
-          })}
-        </View>
-        <Text style={[styles.kpiSub, f && { fontFamily: f.mono }]}>Active: {accent}</Text>
+        {planCards.map((p) => (
+          <View key={p.id} style={styles.mentorCard}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
+              <Text style={[styles.actionTitle, f && { fontFamily: f.uiBold }]}>{p.name}</Text>
+              <Text style={[styles.kpiValue, f && { fontFamily: f.monoBold }, { fontSize: 18 }]}>
+                {p.price}
+              </Text>
+            </View>
+            <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>{p.blurb}</Text>
+            <Pressable
+              disabled
+              style={[styles.secondaryBtn, { opacity: 0.45 }]}
+              accessibilityState={{ disabled: true }}
+            >
+              <Text style={[styles.secondaryBtnText, f && { fontFamily: f.uiBold }]}>
+                Coming soon
+              </Text>
+            </Pressable>
+          </View>
+        ))}
+      </Card>
+      <Card>
+        <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Active subscriptions</Text>
+        <Text style={[styles.emptyState, f && { fontFamily: f.uiMed }]}>
+          No subscriptions yet
+        </Text>
       </Card>
       <FooterNote fontsReady={fontsReady} />
     </ScrollView>
@@ -1612,6 +1853,49 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.3,
     textAlign: 'center',
+    lineHeight: 16,
+  },
+  deliveryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(47,107,255,0.35)',
+    backgroundColor: 'rgba(47,107,255,0.06)',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+  },
+  deliveryCardOn: {
+    backgroundColor: 'rgba(47,107,255,0.18)',
+    borderColor: ea.primary,
+  },
+  deliveryRadio: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    borderColor: ea.textMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deliveryRadioOn: {
+    borderColor: ea.primary,
+  },
+  deliveryRadioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: ea.primary,
+  },
+  deliveryTitle: {
+    color: ea.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  deliverySub: {
+    color: ea.textSecondary,
+    fontSize: 12,
     lineHeight: 16,
   },
   primaryBtn: {
@@ -1941,6 +2225,14 @@ const styles = StyleSheet.create({
     backgroundColor: ea.cardElevated,
     borderRadius: 14,
     padding: 12,
+  },
+  mentorCard: {
+    backgroundColor: ea.cardElevated,
+    borderRadius: 14,
+    padding: 14,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: ea.border,
   },
   swatchGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   swatch: {
