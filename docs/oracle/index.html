@@ -9,21 +9,27 @@
     <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
     <style id="expo-reset">
       html, body, #root {
-        height: 100%;
         min-height: 100%;
         background-color: #000000 !important;
         color: #FFFFFF;
       }
-      html { background: #000000; }
+      html {
+        background: #000000;
+        overflow: auto !important;
+        overflow-x: hidden !important;
+      }
       body {
-        overflow: hidden;
+        margin: 0;
         background-color: #000000 !important;
         color: #FFFFFF;
-        margin: 0;
+        overflow: auto !important;
+        overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch;
       }
       #root {
         display: flex;
-        height: 100%;
+        min-height: 100%;
+        height: auto !important;
         flex: 1;
         background-color: #000000 !important;
       }
@@ -47,6 +53,6 @@
     <noscript> You need to enable JavaScript to run this app. </noscript>
     <!-- The root element for your Expo app. -->
     <div id="root"></div>
-  <script src="/javas/oracle/expo/static/js/web/index-acf7f0d359ee234600e1a304291fd613.js?v=1793034258" defer></script>
+  <script src="/javas/oracle/expo/static/js/web/index-83a87a49b549be741c402ec3ac414302.js?v=1793035342" defer></script>
 </body>
 </html>

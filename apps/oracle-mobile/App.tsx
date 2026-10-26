@@ -8,6 +8,7 @@ import { MetaTraderScreen } from './src/screens/MetaTraderScreen';
 import { EmailGateScreen } from './src/screens/EmailGateScreen';
 import { ActivateRobotScreen } from './src/screens/ActivateRobotScreen';
 import { AdminSignInScreen } from './src/screens/AdminSignInScreen';
+import { AdminRegisterScreen } from './src/screens/AdminRegisterScreen';
 import { PortalScreen } from './src/screens/portal/PortalScreen';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { EaProvider } from './src/ea/EaStore';
@@ -34,6 +35,7 @@ function AppShell() {
   const [tab, setTab] = useState<TabKey>('home');
   const [portalOpen, setPortalOpen] = useState(false);
   const [adminSignIn, setAdminSignIn] = useState(false);
+  const [adminRegister, setAdminRegister] = useState(false);
   const [portalSection, setPortalSection] = useState<PortalSectionId>('dashboard');
   const [eaRunning, setEaRunning] = useState(false);
   const [selectedSymbolIds, setSelectedSymbolIds] = useState<string[]>([
@@ -44,16 +46,19 @@ function AppShell() {
 
   const requestPortal = (section: PortalSectionId = 'dashboard') => {
     setPortalSection(section);
+    setAdminRegister(false);
     setAdminSignIn(true);
   };
 
   const enterPortal = () => {
+    setAdminRegister(false);
     setAdminSignIn(false);
     setPortalOpen(true);
   };
 
   const exitPortal = () => {
     setPortalOpen(false);
+    setAdminRegister(false);
     setAdminSignIn(true);
   };
 
@@ -61,11 +66,29 @@ function AppShell() {
     return <PortalScreen onExit={exitPortal} initialSection={portalSection} />;
   }
 
+  if (adminRegister) {
+    return (
+      <AdminRegisterScreen
+        onBackToSignIn={() => {
+          setAdminRegister(false);
+          setAdminSignIn(true);
+        }}
+      />
+    );
+  }
+
   if (adminSignIn) {
     return (
       <AdminSignInScreen
         onSuccess={enterPortal}
-        onBackToMember={() => setAdminSignIn(false)}
+        onBackToMember={() => {
+          setAdminRegister(false);
+          setAdminSignIn(false);
+        }}
+        onOpenRegister={() => {
+          setAdminSignIn(true);
+          setAdminRegister(true);
+        }}
       />
     );
   }

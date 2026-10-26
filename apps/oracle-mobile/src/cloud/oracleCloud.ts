@@ -8,14 +8,18 @@ import type { ReactivatedEmail } from '../access/types';
 import type { ExpertAdvisor } from '../ea/types';
 import { normalizeLicenseKey, toSlimKey, type KeyActivation, type LicenseKey } from '../license/types';
 
-/** Portal mentor accounts — signup later; persist empty until then. */
+/** Portal mentor accounts — public Register lands here as status waiting. */
 export type Mentor = {
   id: string;
   name?: string;
   email?: string;
+  mentorName?: string;
+  whatsapp?: string;
+  instagram?: string;
   status: 'waiting' | 'approved';
   keysAllowed: number;
   keysUsed: number;
+  registeredAt?: string;
 };
 
 /** Paid subscription requests awaiting admin approval (before license keys). */
@@ -55,10 +59,14 @@ function normalizeMentor(raw: unknown): Mentor | null {
   return {
     id: m.id,
     name: typeof m.name === 'string' ? m.name : undefined,
-    email: typeof m.email === 'string' ? m.email : undefined,
+    email: typeof m.email === 'string' ? m.email.trim().toLowerCase() : undefined,
+    mentorName: typeof m.mentorName === 'string' ? m.mentorName : undefined,
+    whatsapp: typeof m.whatsapp === 'string' ? m.whatsapp : undefined,
+    instagram: typeof m.instagram === 'string' ? m.instagram : undefined,
     status,
     keysAllowed: typeof m.keysAllowed === 'number' && m.keysAllowed >= 0 ? m.keysAllowed : 0,
     keysUsed: typeof m.keysUsed === 'number' && m.keysUsed >= 0 ? m.keysUsed : 0,
+    registeredAt: typeof m.registeredAt === 'string' ? m.registeredAt : undefined,
   };
 }
 
@@ -628,6 +636,67 @@ export async function pushMentorsToCloud(mentors: Mentor[]): Promise<OracleCloud
       mentors: mentors.map((m) => normalizeMentor(m)!).filter(Boolean),
     });
   });
+}
+
+export type MentorRegistrationInput = {
+  name: string;
+  mentorName: string;
+  email: string;
+  whatsapp: string;
+  instagram: string;
+};
+
+/** Append a public signup as status waiting — never auto-approves. */
+export async function registerMentorWaiting(
+  input: MentorRegistrationInput,
+): Promise<{ ok: true; store: OracleCloudStore } | { ok: false; reason: string }> {
+  const name = input.name.trim();
+  const mentorName = input.mentorName.trim();
+  const email = input.email.trim().toLowerCase();
+  const whatsapp = input.whatsapp.trim();
+  const instagram = input.instagram.trim();
+  if (!name || !mentorName || !email || !whatsapp || !instagram) {
+    return { ok: false, reason: 'Fill in every field.' };
+  }
+  if (!email.includes('@')) {
+    return { ok: false, reason: 'Enter a valid email.' };
+  }
+
+  try {
+    const store = await enqueueWrite(async () => {
+      const remote = await fetchCloudPrimary();
+      const existing = (remote.mentors || []).find(
+        (m) => (m.email || '').trim().toLowerCase() === email,
+      );
+      if (existing) {
+        throw new Error(
+          existing.status === 'approved'
+            ? 'This email is already an approved mentor.'
+            : 'This email is already waiting for approval.',
+        );
+      }
+      const mentor: Mentor = {
+        id: `mentor_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+        name,
+        mentorName,
+        email,
+        whatsapp,
+        instagram,
+        status: 'waiting',
+        keysAllowed: 0,
+        keysUsed: 0,
+        registeredAt: new Date().toISOString(),
+      };
+      return putCloudStore({
+        ...remote,
+        mentors: [...(remote.mentors || []), mentor],
+      });
+    });
+    return { ok: true, store };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Could not save registration.';
+    return { ok: false, reason: msg };
+  }
 }
 
 /** Replace subscription payment requests (approve / decline). */

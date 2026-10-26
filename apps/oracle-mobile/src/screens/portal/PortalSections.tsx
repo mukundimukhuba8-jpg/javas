@@ -1564,9 +1564,19 @@ function ManageMentorsSection({ fontsReady }: { fontsReady: boolean }) {
                 <Text style={[styles.actionTitle, f && { fontFamily: f.uiBold }]}>
                   {m.name?.trim() || 'Mentor'}
                 </Text>
+                {m.mentorName?.trim() ? (
+                  <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
+                    Mentor: {m.mentorName.trim()}
+                  </Text>
+                ) : null}
                 <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
                   {m.email?.trim() || 'No email on file'}
                 </Text>
+                {m.whatsapp?.trim() ? (
+                  <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
+                    WhatsApp: {m.whatsapp.trim()}
+                  </Text>
+                ) : null}
               </View>
 
               {tab === 'waiting' ? (
