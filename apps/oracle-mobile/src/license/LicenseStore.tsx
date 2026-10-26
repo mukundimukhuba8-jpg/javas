@@ -9,6 +9,13 @@ import {
 } from 'react';
 import { normalizeEmail } from '../access/types';
 import {
+  attachCloudDebug,
+  fetchCloudStore,
+  mergeKeysCloud,
+  pushActivationToCloud,
+  pushKeyToCloud,
+} from '../cloud/oracleCloud';
+import {
   generateLicenseKeyCode,
   normalizeLicenseKey,
   toSlimKey,
@@ -18,29 +25,35 @@ import {
 } from './types';
 
 /**
- * Dedicated slim catalog — never stores EA images.
- * v2 avoids legacy records that embedded multi‑MB data URLs and blew the quota.
+ * Local cache only — source of truth is the shared cloud store.
+ * Kept so offline/dev still has a last-known catalog.
  */
 export const KEYS_STORAGE = 'oracle.license.catalog.v2';
-/** Legacy key (may contain images) — migrated once into v2. */
 const KEYS_STORAGE_LEGACY = 'oracle.license.keys.v1';
 export const ACT_STORAGE = 'oracle.license.activations.v1';
-const EA_STORAGE = 'oracle.eas.v1';
+
+type CreateKeyResult = { key: LicenseKey; saved: boolean; error?: string };
+type ActivateKeyResult = {
+  ok: boolean;
+  reason?: string;
+  key?: LicenseKey;
+  catalogCount?: number;
+};
 
 type LicenseContextValue = {
   keys: LicenseKey[];
   activations: KeyActivation[];
+  cloudReady: boolean;
+  cloudError: string | null;
+  refreshCloud: () => Promise<void>;
   createKey: (input: {
     user: string;
     plan: string;
     eaId: string;
     eaName: string;
     eaImageUri?: string | null;
-  }) => { key: LicenseKey; saved: boolean; error?: string };
-  activateKey: (
-    email: string,
-    rawKey: string,
-  ) => { ok: boolean; reason?: string; key?: LicenseKey; catalogCount?: number };
+  }) => Promise<CreateKeyResult>;
+  activateKey: (email: string, rawKey: string) => Promise<ActivateKeyResult>;
   hasActivatedKey: (email: string) => boolean;
   activationForEmail: (email: string) => KeyActivation | null;
   unlockedRobotsForEmail: (email: string) => UnlockedRobot[];
@@ -52,7 +65,6 @@ function canUseStorage() {
   return typeof localStorage !== 'undefined';
 }
 
-/** Module singleton — Create keys + Activate share one catalog. */
 let memoryKeys: LicenseKey[] = [];
 let memoryActivations: KeyActivation[] = [];
 let hydrated = false;
@@ -74,16 +86,7 @@ function loadKeysFromDisk(): LicenseKey[] {
   if (!canUseStorage()) return [];
   const v2 = parseKeyArray(localStorage.getItem(KEYS_STORAGE));
   if (v2.length > 0) return v2;
-  // One-time migrate legacy (strip images)
   const legacy = parseKeyArray(localStorage.getItem(KEYS_STORAGE_LEGACY));
-  if (legacy.length > 0) {
-    persistKeysToDisk(legacy);
-    try {
-      localStorage.removeItem(KEYS_STORAGE_LEGACY);
-    } catch {
-      /* ignore */
-    }
-  }
   return legacy;
 }
 
@@ -109,68 +112,14 @@ function loadActivationsFromDisk(): KeyActivation[] {
   }
 }
 
-function mergeKeys(primary: LicenseKey[], secondary: LicenseKey[]): LicenseKey[] {
-  const byCode = new Map<string, LicenseKey>();
-  for (const k of [...secondary, ...primary].map(toSlimKey)) {
-    const code = normalizeLicenseKey(k.key);
-    const prev = byCode.get(code);
-    if (!prev || (k.createdAt || '') >= (prev.createdAt || '')) byCode.set(code, k);
-  }
-  return Array.from(byCode.values()).sort((a, b) =>
-    (b.createdAt || '').localeCompare(a.createdAt || ''),
-  );
-}
-
-/** Strip EA images from localStorage to free quota for the slim key catalog. */
-function freeEaImageQuota(): void {
-  if (!canUseStorage()) return;
-  try {
-    const raw = localStorage.getItem(EA_STORAGE);
-    if (!raw) return;
-    const eas = JSON.parse(raw) as Array<{ imageUri?: string | null }>;
-    if (!Array.isArray(eas)) return;
-    const stripped = eas.map((e) => ({ ...e, imageUri: null }));
-    localStorage.setItem(EA_STORAGE, JSON.stringify(stripped));
-  } catch {
-    /* ignore */
-  }
-  try {
-    localStorage.removeItem(KEYS_STORAGE_LEGACY);
-  } catch {
-    /* ignore */
-  }
-}
-
-function persistKeysToDisk(keys: LicenseKey[]): { ok: boolean; error?: string } {
+function persistKeysToDisk(keys: LicenseKey[]): void {
   const slim = keys.map(toSlimKey);
   memoryKeys = slim;
-  if (!canUseStorage()) return { ok: true };
-
-  const payload = JSON.stringify(slim);
+  if (!canUseStorage()) return;
   try {
-    localStorage.setItem(KEYS_STORAGE, payload);
-    // Round-trip verify
-    const read = parseKeyArray(localStorage.getItem(KEYS_STORAGE));
-    const ok = slim.every((k) =>
-      read.some((r) => normalizeLicenseKey(r.key) === normalizeLicenseKey(k.key)),
-    );
-    if (!ok) return { ok: false, error: 'Key catalog write could not be verified.' };
-    return { ok: true };
-  } catch (e1) {
-    // Free space from EA images and retry once
-    freeEaImageQuota();
-    try {
-      localStorage.setItem(KEYS_STORAGE, payload);
-      const read = parseKeyArray(localStorage.getItem(KEYS_STORAGE));
-      const ok = slim.every((k) =>
-        read.some((r) => normalizeLicenseKey(r.key) === normalizeLicenseKey(k.key)),
-      );
-      if (!ok) return { ok: false, error: 'Key catalog write failed after freeing space.' };
-      return { ok: true };
-    } catch (e2) {
-      const msg = e2 instanceof Error ? e2.message : 'localStorage quota exceeded';
-      return { ok: false, error: msg };
-    }
+    localStorage.setItem(KEYS_STORAGE, JSON.stringify(slim));
+  } catch {
+    /* ignore quota — cloud is source of truth */
   }
 }
 
@@ -181,19 +130,14 @@ function persistActivationsToDisk(list: KeyActivation[]): void {
   try {
     localStorage.setItem(ACT_STORAGE, JSON.stringify(slim));
   } catch {
-    freeEaImageQuota();
-    try {
-      localStorage.setItem(ACT_STORAGE, JSON.stringify(slim));
-    } catch {
-      /* keep memory */
-    }
+    /* ignore */
   }
 }
 
 function hydrateMemory() {
   const diskKeys = loadKeysFromDisk();
   const diskActs = loadActivationsFromDisk();
-  memoryKeys = mergeKeys(memoryKeys, diskKeys);
+  memoryKeys = mergeKeysCloud(memoryKeys, diskKeys);
   const actMap = new Map<string, KeyActivation>();
   for (const a of diskActs) actMap.set(`${a.email}::${normalizeLicenseKey(a.key)}`, a);
   for (const a of memoryActivations) {
@@ -206,12 +150,13 @@ function hydrateMemory() {
 
 export function readLicenseKeys(): LicenseKey[] {
   if (!hydrated) hydrateMemory();
-  else memoryKeys = mergeKeys(memoryKeys, loadKeysFromDisk());
+  else memoryKeys = mergeKeysCloud(memoryKeys, loadKeysFromDisk());
   return memoryKeys;
 }
 
 function attachDebug() {
   if (typeof window === 'undefined') return;
+  attachCloudDebug();
   (window as unknown as { __ORACLE_LICENSE?: object }).__ORACLE_LICENSE = {
     storageKey: KEYS_STORAGE,
     read: () => readLicenseKeys(),
@@ -231,6 +176,47 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
   }, []);
   const [keys, setKeys] = useState<LicenseKey[]>(() => initial.keys);
   const [activations, setActivations] = useState<KeyActivation[]>(() => initial.activations);
+  const [cloudReady, setCloudReady] = useState(false);
+  const [cloudError, setCloudError] = useState<string | null>(null);
+
+  const applyCloud = useCallback(async () => {
+    try {
+      const store = await fetchCloudStore();
+      // Merge cloud into whatever analytics/create already holds — never drop local keys
+      setKeys((prev) => {
+        memoryKeys = mergeKeysCloud(store.keys, mergeKeysCloud(prev, mergeKeysCloud(memoryKeys, loadKeysFromDisk())));
+        persistKeysToDisk(memoryKeys);
+        return memoryKeys;
+      });
+      const actMap = new Map<string, KeyActivation>();
+      for (const a of memoryActivations) {
+        actMap.set(`${a.email}::${normalizeLicenseKey(a.key)}`, a);
+      }
+      for (const a of loadActivationsFromDisk()) {
+        actMap.set(`${a.email}::${normalizeLicenseKey(a.key)}`, a);
+      }
+      for (const a of store.activations) {
+        actMap.set(`${a.email}::${normalizeLicenseKey(a.key)}`, a);
+      }
+      memoryActivations = Array.from(actMap.values());
+      persistActivationsToDisk(memoryActivations);
+      setActivations(memoryActivations);
+      setCloudReady(true);
+      setCloudError(null);
+      attachDebug();
+    } catch (e) {
+      setCloudError(e instanceof Error ? e.message : 'Cloud sync failed');
+      setCloudReady(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void applyCloud();
+    const id = setInterval(() => {
+      void applyCloud();
+    }, 20000);
+    return () => clearInterval(id);
+  }, [applyCloud]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -245,13 +231,13 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const createKey = useCallback(
-    (input: {
+    async (input: {
       user: string;
       plan: string;
       eaId: string;
       eaName: string;
       eaImageUri?: string | null;
-    }) => {
+    }): Promise<CreateKeyResult> => {
       const entry = toSlimKey({
         id: `key-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         key: normalizeLicenseKey(generateLicenseKeyCode()),
@@ -265,14 +251,31 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
         createdAt: new Date().toISOString(),
         boundEmail: null,
       });
-      // ignore input.eaImageUri on purpose — never persist images on keys
       void input.eaImageUri;
 
-      const next = mergeKeys([entry], readLicenseKeys());
-      const result = persistKeysToDisk(next);
+      // Optimistic local cache
+      const next = mergeKeysCloud([entry], readLicenseKeys());
+      persistKeysToDisk(next);
       setKeys(memoryKeys);
       attachDebug();
-      return { key: entry, saved: result.ok, error: result.error };
+
+      try {
+        const cloud = await pushKeyToCloud(entry);
+        memoryKeys = mergeKeysCloud(cloud.keys, memoryKeys);
+        persistKeysToDisk(memoryKeys);
+        setKeys(memoryKeys);
+        setCloudReady(true);
+        setCloudError(null);
+        return { key: entry, saved: true };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Cloud save failed';
+        setCloudError(msg);
+        return {
+          key: entry,
+          saved: false,
+          error: `Could not save key to the shared cloud store. ${msg}`,
+        };
+      }
     },
     [],
   );
@@ -319,85 +322,128 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     [activations],
   );
 
-  const activateKey = useCallback((email: string, rawKey: string) => {
-    const n = normalizeEmail(email);
-    if (!n) return { ok: false, reason: 'Sign in again, then enter your robot key.' };
+  const activateKey = useCallback(
+    async (email: string, rawKey: string): Promise<ActivateKeyResult> => {
+      const n = normalizeEmail(email);
+      if (!n) return { ok: false, reason: 'Sign in again, then enter your robot key.' };
 
-    const keyCode = normalizeLicenseKey(rawKey);
-    const compact = keyCode.replace(/-/g, '');
-    if (compact.length !== 12) {
-      return { ok: false, reason: 'Enter a valid key (XXX-XXX-XXX-XXX).' };
-    }
+      const keyCode = normalizeLicenseKey(rawKey);
+      const compact = keyCode.replace(/-/g, '');
+      if (compact.length !== 12) {
+        return { ok: false, reason: 'Enter a valid key (XXX-XXX-XXX-XXX).' };
+      }
 
-    const catalog = readLicenseKeys();
-    setKeys(catalog);
-    const catalogCount = catalog.length;
+      /**
+       * ONE shared catalog — same source Keys analytics reads (`keys` state),
+       * plus module memory, localStorage cache, then worldwide cloud.
+       * Never validate against an empty re-read while analytics still shows keys.
+       */
+      let catalog = mergeKeysCloud(keys, mergeKeysCloud(memoryKeys, readLicenseKeys()));
 
-    const found = catalog.find((k) => normalizeLicenseKey(k.key) === keyCode);
-    if (!found) {
-      return {
-        ok: false,
-        catalogCount,
-        reason:
-          catalogCount === 0
-            ? 'No license keys saved yet (0 in catalog). Generate a key in Admin → Create keys on this same browser, then try again.'
-            : `Invalid robot key. Catalog has ${catalogCount} key(s) but not this one. Generate a new key and use it immediately.`,
+      try {
+        const store = await fetchCloudStore();
+        catalog = mergeKeysCloud(catalog, store.keys);
+        memoryKeys = catalog;
+        persistKeysToDisk(catalog);
+        const actMap = new Map<string, KeyActivation>();
+        for (const a of memoryActivations) {
+          actMap.set(`${a.email}::${normalizeLicenseKey(a.key)}`, a);
+        }
+        for (const a of store.activations) {
+          actMap.set(`${a.email}::${normalizeLicenseKey(a.key)}`, a);
+        }
+        memoryActivations = Array.from(actMap.values());
+        persistActivationsToDisk(memoryActivations);
+        setActivations(memoryActivations);
+        setCloudReady(true);
+        setCloudError(null);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Cloud unreachable';
+        setCloudError(msg);
+      }
+
+      // Keep React state in lockstep with the catalog Activate just used
+      memoryKeys = catalog;
+      persistKeysToDisk(catalog);
+      setKeys(catalog);
+
+      const catalogCount = catalog.length;
+      const found = catalog.find((k) => normalizeLicenseKey(k.key) === keyCode);
+      if (!found) {
+        return {
+          ok: false,
+          catalogCount,
+          reason:
+            catalogCount === 0
+              ? 'No license keys found. Ask your admin to generate a key in Create keys.'
+              : `Invalid robot key. Catalog has ${catalogCount} key(s) but not this one. Generate a new key and use it immediately.`,
+        };
+      }
+      if (found.status !== 'Active') {
+        return { ok: false, catalogCount, reason: 'This key is expired. Contact your mentor.' };
+      }
+      if (!found.eaId || !found.eaName) {
+        return {
+          ok: false,
+          catalogCount,
+          reason:
+            'This key is not linked to an EA. Ask your admin to create the key against an expert advisor.',
+        };
+      }
+      if (found.boundEmail && found.boundEmail !== n) {
+        return {
+          ok: false,
+          catalogCount,
+          reason: 'This key is already linked to another account.',
+        };
+      }
+
+      const already = memoryActivations.some(
+        (a) => a.email === n && normalizeLicenseKey(a.key) === keyCode,
+      );
+      if (already) return { ok: true, key: found, catalogCount };
+
+      const activation: KeyActivation = {
+        email: n,
+        key: keyCode,
+        activatedAt: new Date().toISOString(),
+        eaId: found.eaId,
+        eaName: found.eaName,
+        eaImageUri: null,
       };
-    }
-    if (found.status !== 'Active') {
-      return { ok: false, catalogCount, reason: 'This key is expired. Contact your mentor.' };
-    }
-    if (!found.eaId || !found.eaName) {
-      return {
-        ok: false,
-        catalogCount,
-        reason:
-          'This key is not linked to an EA. Ask your admin to create the key against an expert advisor.',
-      };
-    }
-    if (found.boundEmail && found.boundEmail !== n) {
-      return {
-        ok: false,
-        catalogCount,
-        reason: 'This key is already linked to another account.',
-      };
-    }
+      const nextActs = [
+        activation,
+        ...memoryActivations.filter(
+          (a) => !(a.email === n && normalizeLicenseKey(a.key) === keyCode),
+        ),
+      ];
+      persistActivationsToDisk(nextActs);
+      setActivations(nextActs);
 
-    const already = memoryActivations.some(
-      (a) => a.email === n && normalizeLicenseKey(a.key) === keyCode,
-    );
-    if (already) return { ok: true, key: found, catalogCount };
+      const bound = { ...found, boundEmail: n };
+      const nextKeys = catalog.map((k) => (k.id === found.id ? bound : k));
+      persistKeysToDisk(nextKeys);
+      setKeys(memoryKeys);
 
-    const activation: KeyActivation = {
-      email: n,
-      key: keyCode,
-      activatedAt: new Date().toISOString(),
-      eaId: found.eaId,
-      eaName: found.eaName,
-      eaImageUri: null,
-    };
-    const nextActs = [
-      activation,
-      ...memoryActivations.filter(
-        (a) => !(a.email === n && normalizeLicenseKey(a.key) === keyCode),
-      ),
-    ];
-    persistActivationsToDisk(nextActs);
-    setActivations(nextActs);
+      try {
+        await pushActivationToCloud(activation, bound);
+        setCloudReady(true);
+      } catch (e) {
+        setCloudError(e instanceof Error ? e.message : 'Cloud activation sync failed');
+      }
 
-    const nextKeys = catalog.map((k) =>
-      k.id === found.id ? { ...k, boundEmail: n } : k,
-    );
-    persistKeysToDisk(nextKeys);
-    setKeys(memoryKeys);
-
-    return { ok: true, key: { ...found, boundEmail: n }, catalogCount };
-  }, []);
+      return { ok: true, key: bound, catalogCount };
+    },
+    [keys],
+  );
 
   const value = useMemo(
     () => ({
       keys,
       activations,
+      cloudReady,
+      cloudError,
+      refreshCloud: applyCloud,
       createKey,
       activateKey,
       hasActivatedKey,
@@ -407,6 +453,9 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     [
       keys,
       activations,
+      cloudReady,
+      cloudError,
+      applyCloud,
       createKey,
       activateKey,
       hasActivatedKey,

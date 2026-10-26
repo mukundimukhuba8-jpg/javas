@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Platform } from 'react-native';
+import { fetchCloudStore, pushEaToCloud } from '../cloud/oracleCloud';
 import type { ExpertAdvisor } from './types';
 
 const STORAGE_KEY = 'oracle.eas.v1';
@@ -77,6 +78,17 @@ function persist(eas: ExpertAdvisor[], selectedId: string | null) {
   }
 }
 
+function mergeEaLists(a: ExpertAdvisor[], b: ExpertAdvisor[]): ExpertAdvisor[] {
+  const map = new Map<string, ExpertAdvisor>();
+  for (const e of [...b, ...a]) {
+    if (!e?.id || e.id === LEGACY_DEFAULT_ID) continue;
+    const prev = map.get(e.id);
+    if (!prev || (e.createdAt || '') >= (prev.createdAt || '')) map.set(e.id, e);
+    else if (prev && !prev.imageUri && e.imageUri) map.set(e.id, { ...prev, imageUri: e.imageUri });
+  }
+  return Array.from(map.values());
+}
+
 export function EaProvider({ children }: { children: ReactNode }) {
   const [eas, setEas] = useState<ExpertAdvisor[]>(() => loadEas());
   const [selectedId, setSelectedId] = useState<string | null>(() => loadSelectedId(loadEas()));
@@ -95,6 +107,27 @@ export function EaProvider({ children }: { children: ReactNode }) {
     persist(eas, selectedId);
   }, [eas, selectedId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const pull = async () => {
+      try {
+        const store = await fetchCloudStore();
+        if (cancelled) return;
+        setEas((prev) => mergeEaLists(store.eas, prev));
+      } catch {
+        /* keep local */
+      }
+    };
+    void pull();
+    const id = setInterval(() => {
+      void pull();
+    }, 20000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
   const selected = useMemo(() => {
     if (!selectedId) return null;
     return eas.find((e) => e.id === selectedId) ?? eas[0] ?? null;
@@ -111,13 +144,19 @@ export function EaProvider({ children }: { children: ReactNode }) {
       };
       setEas((prev) => [entry, ...prev]);
       setSelectedId(entry.id);
+      void pushEaToCloud(entry);
       return entry;
     },
     [],
   );
 
   const updateEaImage = useCallback((id: string, imageUri: string | null) => {
-    setEas((prev) => prev.map((e) => (e.id === id ? { ...e, imageUri } : e)));
+    setEas((prev) => {
+      const next = prev.map((e) => (e.id === id ? { ...e, imageUri } : e));
+      const updated = next.find((e) => e.id === id);
+      if (updated) void pushEaToCloud(updated);
+      return next;
+    });
     setSelectedId(id);
   }, []);
 

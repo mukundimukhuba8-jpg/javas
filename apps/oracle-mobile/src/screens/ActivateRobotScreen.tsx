@@ -20,22 +20,29 @@ export function ActivateRobotScreen() {
   const [key, setKey] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const onActivate = () => {
+  const [busy, setBusy] = useState(false);
+
+  const onActivate = async () => {
     if (!sessionEmail) {
       setError('Sign in again, then enter your robot key.');
       return;
     }
-    const result = activateKey(sessionEmail, key);
-    if (!result.ok) {
-      const count = result.catalogCount ?? catalogKeys.length;
-      setError(
-        `${result.reason ?? 'Invalid robot key.'}${
-          typeof count === 'number' ? ` (${count} keys in catalog)` : ''
-        }`,
-      );
-      return;
+    setBusy(true);
+    try {
+      const result = await activateKey(sessionEmail, key);
+      if (!result.ok) {
+        const count = result.catalogCount ?? catalogKeys.length;
+        setError(
+          `${result.reason ?? 'Invalid robot key.'}${
+            typeof count === 'number' ? ` (${count} keys in catalog)` : ''
+          }`,
+        );
+        return;
+      }
+      setError(null);
+    } finally {
+      setBusy(false);
     }
-    setError(null);
   };
 
   return (
@@ -81,11 +88,12 @@ export function ActivateRobotScreen() {
 
           <Pressable
             onPress={onActivate}
-            style={styles.primary}
+            disabled={busy}
+            style={[styles.primary, busy && { opacity: 0.7 }]}
             accessibilityRole="button"
             accessibilityLabel="Activate"
           >
-            <Text style={styles.primaryText}>Activate</Text>
+            <Text style={styles.primaryText}>{busy ? 'Checking…' : 'Activate'}</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>

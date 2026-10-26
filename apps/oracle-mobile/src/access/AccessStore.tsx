@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { Platform } from 'react-native';
+import { fetchCloudStore, pushReactivatedToCloud } from '../cloud/oracleCloud';
 import { normalizeEmail, type ReactivatedEmail } from './types';
 
 const LIST_KEY = 'oracle.access.reactivated.v1';
@@ -17,11 +18,12 @@ type AccessContextValue = {
   reactivated: ReactivatedEmail[];
   sessionEmail: string | null;
   isAllowed: boolean;
-  reactivate: (email: string, paid: boolean) => ReactivatedEmail;
+  reactivate: (email: string, paid: boolean) => Promise<ReactivatedEmail>;
   removeReactivated: (email: string) => void;
-  tryEnter: (email: string) => { ok: boolean; reason?: string };
+  tryEnter: (email: string) => Promise<{ ok: boolean; reason?: string }>;
   signOut: () => void;
   isEmailActive: (email: string) => boolean;
+  refreshCloudAccess: () => Promise<void>;
 };
 
 const AccessContext = createContext<AccessContextValue | null>(null);
@@ -37,9 +39,7 @@ function loadList(): ReactivatedEmail[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as ReactivatedEmail[];
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (e) => e && typeof e.email === 'string' && e.status === 'active',
-    );
+    return parsed.filter((e) => e && typeof e.email === 'string' && e.status === 'active');
   } catch {
     return [];
   }
@@ -74,6 +74,16 @@ function persistSession(email: string | null) {
   }
 }
 
+function mergeReactivated(a: ReactivatedEmail[], b: ReactivatedEmail[]): ReactivatedEmail[] {
+  const map = new Map<string, ReactivatedEmail>();
+  for (const e of [...b, ...a]) {
+    if (!e?.email) continue;
+    const prev = map.get(e.email);
+    if (!prev || (e.reactivatedAt || '') >= (prev.reactivatedAt || '')) map.set(e.email, e);
+  }
+  return Array.from(map.values()).filter((e) => e.status === 'active');
+}
+
 export function AccessProvider({ children }: { children: ReactNode }) {
   const [reactivated, setReactivated] = useState<ReactivatedEmail[]>(() => loadList());
   const [sessionEmail, setSessionEmail] = useState<string | null>(() => {
@@ -91,12 +101,32 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     persistSession(sessionEmail);
   }, [sessionEmail]);
 
-  // Drop session if email was removed from active list
   useEffect(() => {
     if (!sessionEmail) return;
     const still = reactivated.some((e) => e.email === sessionEmail && e.status === 'active');
     if (!still) setSessionEmail(null);
   }, [reactivated, sessionEmail]);
+
+  const refreshCloudAccess = useCallback(async () => {
+    try {
+      const store = await fetchCloudStore();
+      setReactivated((prev) => {
+        const next = mergeReactivated(store.reactivated, prev);
+        persistList(next);
+        return next;
+      });
+    } catch {
+      /* keep local */
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshCloudAccess();
+    const id = setInterval(() => {
+      void refreshCloudAccess();
+    }, 20000);
+    return () => clearInterval(id);
+  }, [refreshCloudAccess]);
 
   const isEmailActive = useCallback(
     (email: string) => {
@@ -106,7 +136,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     [reactivated],
   );
 
-  const reactivate = useCallback((email: string, paid: boolean) => {
+  const reactivate = useCallback(async (email: string, paid: boolean) => {
     const n = normalizeEmail(email);
     const entry: ReactivatedEmail = {
       email: n,
@@ -116,32 +146,58 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     };
     setReactivated((prev) => {
       const without = prev.filter((e) => e.email !== n);
-      return [entry, ...without];
+      const next = [entry, ...without];
+      persistList(next);
+      return next;
     });
+    try {
+      await pushReactivatedToCloud(entry);
+    } catch {
+      /* local kept; cloud may lag */
+    }
     return entry;
   }, []);
 
   const removeReactivated = useCallback((email: string) => {
     const n = normalizeEmail(email);
-    setReactivated((prev) => prev.filter((e) => e.email !== n));
+    setReactivated((prev) => {
+      const next = prev.filter((e) => e.email !== n);
+      persistList(next);
+      return next;
+    });
   }, []);
 
   const tryEnter = useCallback(
-    (email: string) => {
+    async (email: string) => {
       const n = normalizeEmail(email);
       if (!n || !n.includes('@')) {
         return { ok: false, reason: 'Enter a valid email address.' };
       }
-      if (!isEmailActive(n)) {
-        return {
-          ok: false,
-          reason: 'Access isn’t active for this email. Contact your admin to reactivate.',
-        };
+      // Refresh worldwide list before gate check
+      try {
+        const store = await fetchCloudStore();
+        const next = mergeReactivated(store.reactivated, reactivated);
+        setReactivated(next);
+        persistList(next);
+        const active = next.some((e) => e.email === n && e.status === 'active');
+        if (!active) {
+          return {
+            ok: false,
+            reason: 'Access isn’t active for this email. Contact your admin to reactivate.',
+          };
+        }
+      } catch {
+        if (!isEmailActive(n)) {
+          return {
+            ok: false,
+            reason: 'Access isn’t active for this email. Contact your admin to reactivate.',
+          };
+        }
       }
       setSessionEmail(n);
       return { ok: true };
     },
-    [isEmailActive],
+    [isEmailActive, reactivated],
   );
 
   const signOut = useCallback(() => {
@@ -160,6 +216,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       tryEnter,
       signOut,
       isEmailActive,
+      refreshCloudAccess,
     }),
     [
       reactivated,
@@ -170,6 +227,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       tryEnter,
       signOut,
       isEmailActive,
+      refreshCloudAccess,
     ],
   );
 

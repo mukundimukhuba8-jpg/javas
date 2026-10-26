@@ -348,7 +348,7 @@ function CreateKeysSection({
   const selectedEa = storedEas.find((e) => e.id === eaId) ?? null;
   const plans = ['7 days', '30 days', '90 days', '1 year', 'Lifetime'];
 
-  const generate = () => {
+  const generate = async () => {
     if (!name.trim() || !permOk) return;
     if (storedEas.length === 0) {
       setFormError('Create an expert advisor first (EXPERT ADVISER), then generate a key for it.');
@@ -358,7 +358,8 @@ function CreateKeysSection({
       setFormError('Select an expert advisor. Keys must be tied to an EA with name and image.');
       return;
     }
-    const result = createKey({
+    setFormError(null);
+    const result = await createKey({
       user: name.trim(),
       plan,
       eaId: selectedEa.id,
@@ -369,8 +370,7 @@ function CreateKeysSection({
     setFormError(
       result.saved
         ? null
-        : result.error ||
-            'Could not save key to this browser’s storage. Free space and try again.',
+        : result.error || 'Could not save key to the shared cloud store. Try again.',
     );
   };
 
@@ -499,18 +499,18 @@ function CreateKeysSection({
               ]}
             >
               {savedOk
-                ? `Saved ✓ · ${name || 'Customer'} · ${selectedEa?.name ?? 'EA'} · ${plan}`
-                : `Not saved to browser storage — Activate will not find this key.`}
+                ? `Saved to cloud ✓ · works on any device · ${name || 'Customer'} · ${selectedEa?.name ?? 'EA'} · ${plan}`
+                : `Not saved to cloud — Activate on other devices will not find this key.`}
             </Text>
           </View>
         ) : null}
 
         <View style={{ marginTop: 8, gap: 6 }}>
           <Text style={[styles.fieldLabel, f && { fontFamily: f.uiBold }]}>
-            KEYS ACTIVATE WILL ACCEPT ({catalogKeys.length})
+            CLOUD KEYS ({catalogKeys.length})
           </Text>
           {catalogKeys.length === 0 ? (
-            <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>No keys saved yet</Text>
+            <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>No keys in cloud yet</Text>
           ) : (
             catalogKeys.slice(0, 8).map((k) => (
               <Text key={k.id} style={[styles.keyMono, f && { fontFamily: f.monoBold }, { fontSize: 13 }]}>
@@ -1165,16 +1165,16 @@ function ReactivateEmailSection({ fontsReady }: { fontsReady: boolean }) {
   const [confirmMsg, setConfirmMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const onReactivate = () => {
+  const onReactivate = async () => {
     const trimmed = email.trim();
     if (!trimmed || !trimmed.includes('@')) {
       setError('Enter a valid email address.');
       setConfirmMsg(null);
       return;
     }
-    const entry = reactivate(trimmed, paid);
+    const entry = await reactivate(trimmed, paid);
     setConfirmMsg(
-      `${entry.email} reactivated · ${entry.paid ? 'paid' : 'not paid'} · status active`,
+      `${entry.email} reactivated worldwide · ${entry.paid ? 'paid' : 'not paid'} · status active`,
     );
     setError(null);
     setEmail('');
@@ -1198,7 +1198,7 @@ function ReactivateEmailSection({ fontsReady }: { fontsReady: boolean }) {
           <View style={{ flex: 1 }}>
             <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>Reactivate access</Text>
             <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
-              Mark paid or not paid, then reactivate. Stored locally for this demo.
+              Mark paid or not paid, then reactivate. Synced to the shared cloud store.
             </Text>
           </View>
         </View>

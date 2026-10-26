@@ -23,8 +23,8 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const onContinue = () => {
-    const result = tryEnter(email);
+  const onContinue = async () => {
+    const result = await tryEnter(email);
     if (!result.ok) {
       setError(result.reason ?? 'Access denied.');
       return;
