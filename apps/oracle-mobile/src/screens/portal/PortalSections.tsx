@@ -1542,7 +1542,7 @@ function ManageMentorsSection({ fontsReady }: { fontsReady: boolean }) {
           accessibilityLabel="Refresh mentors"
           style={{ alignSelf: 'flex-start', marginTop: 8 }}
         >
-          <Text style={[styles.kpiSub, f && { fontFamily: f.uiMed }, { color: ea.neon }]}>
+          <Text style={[styles.kpiSub, f && { fontFamily: f.uiMed }, { color: '#93C5FD' }]}>
             {refreshing ? 'Refreshing…' : 'Refresh list'}
           </Text>
         </Pressable>
