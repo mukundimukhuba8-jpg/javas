@@ -153,8 +153,8 @@
     {
       "id": "mentor_probe_1",
       "name": "Probe User",
-      "mentorName": "Probe",
       "email": "probe-register@example.com",
+      "mentorName": "Probe",
       "whatsapp": "+10000000000",
       "status": "waiting",
       "keysAllowed": 0,
@@ -164,15 +164,26 @@
     {
       "id": "mentor_proof_keep",
       "name": "Proof Mentor",
-      "mentorName": "ProofMN",
       "email": "mentor-proof-1793038082@example.com",
+      "mentorName": "ProofMN",
       "whatsapp": "+27123456789",
       "status": "waiting",
       "keysAllowed": 0,
       "keysUsed": 0,
       "registeredAt": "2026-10-26T18:08:08.156Z"
+    },
+    {
+      "id": "mentor_mvpkruoo_vcah86",
+      "name": "Live Mentor",
+      "mentorName": "LiveMN",
+      "email": "live-mentor-1793038403@example.com",
+      "whatsapp": "+27998887766",
+      "status": "waiting",
+      "keysAllowed": 0,
+      "keysUsed": 0,
+      "registeredAt": "2026-10-26T18:13:28.728Z"
     }
   ],
   "subscriptions": [],
-  "updatedAt": "2026-10-26T18:00:00Z"
+  "updatedAt": "2026-10-26T18:13:28.903Z"
 }
