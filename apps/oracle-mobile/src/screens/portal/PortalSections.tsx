@@ -332,7 +332,7 @@ function CreateKeysSection({
   onNavigate: (id: PortalSectionId) => void;
 }) {
   const f = useFf(fontsReady);
-  const { createKey } = useLicenses();
+  const { createKey, keys: catalogKeys } = useLicenses();
   const { eas: storedEas } = useEas();
   const [name, setName] = useState('');
   const [eaId, setEaId] = useState<string | null>(null);
@@ -341,6 +341,7 @@ function CreateKeysSection({
   const [permOk, setPermOk] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<string | null>(null);
+  const [savedOk, setSavedOk] = useState(false);
   const [eaOpen, setEaOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
 
@@ -357,15 +358,20 @@ function CreateKeysSection({
       setFormError('Select an expert advisor. Keys must be tied to an EA with name and image.');
       return;
     }
-    const entry = createKey({
+    const result = createKey({
       user: name.trim(),
       plan,
       eaId: selectedEa.id,
       eaName: selectedEa.name,
-      eaImageUri: selectedEa.imageUri,
     });
-    setGenerated(entry.key);
-    setFormError(null);
+    setGenerated(result.key.key);
+    setSavedOk(result.saved);
+    setFormError(
+      result.saved
+        ? null
+        : result.error ||
+            'Could not save key to this browser’s storage. Free space and try again.',
+    );
   };
 
   return (
@@ -485,11 +491,34 @@ function CreateKeysSection({
           <View style={styles.keyResult}>
             <Text style={[styles.fieldLabel, f && { fontFamily: f.uiBold }]}>GENERATED KEY</Text>
             <Text style={[styles.keyMono, f && { fontFamily: f.monoBold }]}>{generated}</Text>
-            <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
-              {name || 'Customer'} · {selectedEa?.name ?? 'EA'} · {plan}
+            <Text
+              style={[
+                styles.kpiSub,
+                f && { fontFamily: f.ui },
+                { color: savedOk ? ea.green : ea.red },
+              ]}
+            >
+              {savedOk
+                ? `Saved ✓ · ${name || 'Customer'} · ${selectedEa?.name ?? 'EA'} · ${plan}`
+                : `Not saved to browser storage — Activate will not find this key.`}
             </Text>
           </View>
         ) : null}
+
+        <View style={{ marginTop: 8, gap: 6 }}>
+          <Text style={[styles.fieldLabel, f && { fontFamily: f.uiBold }]}>
+            KEYS ACTIVATE WILL ACCEPT ({catalogKeys.length})
+          </Text>
+          {catalogKeys.length === 0 ? (
+            <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>No keys saved yet</Text>
+          ) : (
+            catalogKeys.slice(0, 8).map((k) => (
+              <Text key={k.id} style={[styles.keyMono, f && { fontFamily: f.monoBold }, { fontSize: 13 }]}>
+                {k.key} · {k.eaName}
+              </Text>
+            ))
+          )}
+        </View>
       </Card>
       <FooterNote fontsReady={fontsReady} />
     </ScrollView>

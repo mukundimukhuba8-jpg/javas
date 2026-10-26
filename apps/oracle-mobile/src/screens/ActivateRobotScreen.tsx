@@ -16,7 +16,7 @@ import { useLicenses } from '../license/LicenseStore';
 export function ActivateRobotScreen() {
   const insets = useSafeAreaInsets();
   const { sessionEmail } = useAccess();
-  const { activateKey } = useLicenses();
+  const { activateKey, keys: catalogKeys } = useLicenses();
   const [key, setKey] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +27,12 @@ export function ActivateRobotScreen() {
     }
     const result = activateKey(sessionEmail, key);
     if (!result.ok) {
-      setError(result.reason ?? 'Invalid robot key.');
+      const count = result.catalogCount ?? catalogKeys.length;
+      setError(
+        `${result.reason ?? 'Invalid robot key.'}${
+          typeof count === 'number' ? ` (${count} keys in catalog)` : ''
+        }`,
+      );
       return;
     }
     setError(null);
