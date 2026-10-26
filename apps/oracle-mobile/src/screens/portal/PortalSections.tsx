@@ -1431,19 +1431,44 @@ function ManageMentorsSection({ fontsReady }: { fontsReady: boolean }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [quotaDraft, setQuotaDraft] = useState<Record<string, string>>({});
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const pullMentors = async () => {
+    setRefreshing(true);
+    try {
+      const store = await fetchCloudPrimary();
+      setMentors(store.mentors || []);
+      setLoadError(null);
+    } catch (e) {
+      setMentors([]);
+      setLoadError(e instanceof Error ? e.message : 'Could not load mentors.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     const pull = async () => {
       try {
         const store = await fetchCloudPrimary();
-        if (!cancelled) setMentors(store.mentors || []);
-      } catch {
-        if (!cancelled) setMentors([]);
+        if (!cancelled) {
+          setMentors(store.mentors || []);
+          setLoadError(null);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setMentors([]);
+          setLoadError(e instanceof Error ? e.message : 'Could not load mentors.');
+        }
       }
     };
     void pull();
+    const timer = setInterval(() => void pull(), 12_000);
     return () => {
       cancelled = true;
+      clearInterval(timer);
     };
   }, []);
 
@@ -1510,6 +1535,22 @@ function ManageMentorsSection({ fontsReady }: { fontsReady: boolean }) {
         <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
           Approve mentors and set how many license keys they can generate.
         </Text>
+        <Pressable
+          onPress={() => void pullMentors()}
+          disabled={refreshing}
+          accessibilityRole="button"
+          accessibilityLabel="Refresh mentors"
+          style={{ alignSelf: 'flex-start', marginTop: 8 }}
+        >
+          <Text style={[styles.kpiSub, f && { fontFamily: f.uiMed }, { color: ea.neon }]}>
+            {refreshing ? 'Refreshing…' : 'Refresh list'}
+          </Text>
+        </Pressable>
+        {loadError ? (
+          <Text style={[styles.kpiSub, f && { fontFamily: f.ui }, { color: '#F87171', marginTop: 6 }]}>
+            {loadError}
+          </Text>
+        ) : null}
       </View>
       <Card>
         <View style={styles.filterRow}>

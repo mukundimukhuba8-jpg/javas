@@ -149,7 +149,19 @@
       "eaImageUri": null
     }
   ],
-  "mentors": [],
-  "updatedAt": "2026-10-26T16:46:33Z",
-  "subscriptions": []
+  "mentors": [
+    {
+      "id": "mentor_probe_1",
+      "name": "Probe User",
+      "mentorName": "Probe",
+      "email": "probe-register@example.com",
+      "whatsapp": "+10000000000",
+      "status": "waiting",
+      "keysAllowed": 0,
+      "keysUsed": 0,
+      "registeredAt": "2026-10-26T18:00:00Z"
+    }
+  ],
+  "subscriptions": [],
+  "updatedAt": "2026-10-26T18:00:00Z"
 }

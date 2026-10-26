@@ -1,0 +1,27 @@
+/**
+ * Shared worldwide store for license keys, reactivated emails, and EA metadata.
+ *
+ * Primary R/W: free crudcrud.com REST document (CORS *).
+ * Read fallbacks used ONLY when primary is unreachable (disaster recovery).
+ * Create keys / Activate always prefer the primary URL and verify writes.
+ *
+ * Override at runtime: window.__ORACLE_CLOUD_URL
+ */
+export const CLOUD_DOC_URL =
+  'https://crudcrud.com/api/ae56a742c94a4577953e70db49d1dd60/oracle/6adf95db17adab03e8d8be8d';
+
+/** Same-origin / raw snapshots — last-resort reads only. */
+export const CLOUD_FALLBACK_URLS: string[] = [
+  'cloud-store.json',
+  '/javas/oracle/cloud-store.json',
+  'https://raw.githubusercontent.com/mukundimukhuba8-jpg/javas/main/docs/oracle/cloud-store.json',
+];
+
+/**
+ * Max data-URL length kept inline on the EA record (~280KB binary ≈ 380k chars).
+ * Larger uploads are compressed and/or hosted; https:// URLs are uncapped.
+ */
+export const MAX_EA_IMAGE_CHARS = 380_000;
+
+/** Prefer hosting once a data URL exceeds this (keeps the cloud doc lean). */
+export const PREFER_HOST_CHARS = 100_000;

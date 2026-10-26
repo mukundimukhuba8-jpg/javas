@@ -123,13 +123,51 @@ function resolveReadUrls(): string[] {
   return [primary, ...extras];
 }
 
+async function readErrorBody(res: Response): Promise<string> {
+  try {
+    const text = (await res.text()).trim();
+    if (!text) return '';
+    if (text.length > 240) return `${text.slice(0, 240)}…`;
+    return text;
+  } catch {
+    return '';
+  }
+}
+
+function cloudErrorMessage(prefix: string, res: Response, body: string): string {
+  const detail = body ? `: ${body.replace(/^"|"$/g, '')}` : '';
+  return `${prefix} (${res.status})${detail}`;
+}
+
+/** Safari often surfaces network/CORS failures as TypeError "Load failed". */
+function normalizeNetworkError(e: unknown, fallback: string): Error {
+  if (e instanceof Error) {
+    const msg = e.message || fallback;
+    if (/^load failed$/i.test(msg) || /failed to fetch/i.test(msg) || /networkerror/i.test(msg)) {
+      return new Error(
+        `${fallback}: network/CORS or cloud quota. ${msg}`,
+      );
+    }
+    return e;
+  }
+  return new Error(fallback);
+}
+
 async function fetchJson(url: string): Promise<unknown> {
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-    cache: 'no-store',
-  });
-  if (!res.ok) throw new Error(`Cloud read failed (${res.status}) at ${url}`);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+  } catch (e) {
+    throw normalizeNetworkError(e, 'Cloud read failed');
+  }
+  if (!res.ok) {
+    const body = await readErrorBody(res);
+    throw new Error(cloudErrorMessage('Cloud read failed', res, body));
+  }
   return res.json();
 }
 
@@ -378,27 +416,44 @@ export function linkedEmailOf(key: Pick<LicenseKey, 'boundEmail'> | null | undef
   return n || null;
 }
 
-async function putCloudStore(store: OracleCloudStore): Promise<OracleCloudStore> {
-  const url = resolveWriteUrl();
-  const payload: OracleCloudStore = {
+function slimStoreForWrite(store: OracleCloudStore, stripInlineImages: boolean): OracleCloudStore {
+  return {
     keys: store.keys.map((k) => toSlimKey({ ...k, boundEmail: linkedEmailOf(k) })),
     reactivated: store.reactivated,
-    eas: store.eas.map((e) => ({ ...e, imageUri: capImage(e.imageUri ?? null) })),
+    eas: store.eas.map((e) => {
+      const imageUri = capImage(e.imageUri ?? null);
+      if (!stripInlineImages) return { ...e, imageUri };
+      // Keep https refs; drop bulky data-URLs so mentor/key writes stay under quota
+      if (imageUri && /^https?:\/\//i.test(imageUri)) return { ...e, imageUri };
+      return { ...e, imageUri: null };
+    }),
     activations: store.activations.map((a) => ({ ...a, eaImageUri: null })),
     mentors: Array.isArray(store.mentors) ? store.mentors : [],
     subscriptions: Array.isArray(store.subscriptions) ? store.subscriptions : [],
     updatedAt: new Date().toISOString(),
   };
+}
+
+async function putCloudStore(store: OracleCloudStore): Promise<OracleCloudStore> {
+  const url = resolveWriteUrl();
   let lastErr: Error | null = null;
   for (let attempt = 0; attempt < 3; attempt++) {
+    const stripInlineImages = attempt > 0;
+    const payload = slimStoreForWrite(store, stripInlineImages);
     try {
-      const res = await fetch(url, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      } catch (e) {
+        throw normalizeNetworkError(e, 'Cloud write failed');
+      }
       if (!res.ok && res.status !== 200 && res.status !== 201 && res.status !== 204) {
-        throw new Error(`Cloud store write failed (${res.status})`);
+        const body = await readErrorBody(res);
+        throw new Error(cloudErrorMessage('Cloud write failed', res, body));
       }
       // Confirm round-trip on primary — never trust PUT alone
       const verified = await fetchCloudPrimary();
@@ -663,6 +718,18 @@ export async function registerMentorWaiting(
   }
 
   try {
+    const mentor: Mentor = {
+      id: `mentor_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      name,
+      mentorName,
+      email,
+      whatsapp,
+      ...(instagram ? { instagram } : {}),
+      status: 'waiting',
+      keysAllowed: 0,
+      keysUsed: 0,
+      registeredAt: new Date().toISOString(),
+    };
     const store = await enqueueWrite(async () => {
       const remote = await fetchCloudPrimary();
       const existing = (remote.mentors || []).find(
@@ -675,27 +742,22 @@ export async function registerMentorWaiting(
             : 'This email is already waiting for approval.',
         );
       }
-      const mentor: Mentor = {
-        id: `mentor_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
-        name,
-        mentorName,
-        email,
-        whatsapp,
-        ...(instagram ? { instagram } : {}),
-        status: 'waiting',
-        keysAllowed: 0,
-        keysUsed: 0,
-        registeredAt: new Date().toISOString(),
-      };
-      return putCloudStore({
+      const verified = await putCloudStore({
         ...remote,
         mentors: [...(remote.mentors || []), mentor],
       });
+      const saved = (verified.mentors || []).some(
+        (m) => (m.email || '').trim().toLowerCase() === email && m.status === 'waiting',
+      );
+      if (!saved) {
+        throw new Error('Cloud write did not persist the mentor (verification failed).');
+      }
+      return verified;
     });
     return { ok: true, store };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Could not save registration.';
-    return { ok: false, reason: msg };
+    const err = normalizeNetworkError(e, 'Could not save registration');
+    return { ok: false, reason: err.message };
   }
 }
 
