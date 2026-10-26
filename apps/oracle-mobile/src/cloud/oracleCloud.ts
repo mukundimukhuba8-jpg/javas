@@ -131,21 +131,22 @@ function enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
 
 export async function fetchCloudStore(): Promise<OracleCloudStore> {
   const urls = resolveReadUrls();
-  let merged = { ...EMPTY };
-  let any = false;
+  const snapshots: OracleCloudStore[] = [];
   const errors: string[] = [];
   for (const url of urls) {
     try {
-      const json = await fetchJson(url);
-      merged = mergeStores(normalizeStore(json), merged);
-      any = true;
-      // Prefer a successful primary write-target; still merge fallbacks for completeness
+      snapshots.push(normalizeStore(await fetchJson(url)));
     } catch (e) {
       errors.push(e instanceof Error ? e.message : String(e));
     }
   }
-  if (!any) {
+  if (snapshots.length === 0) {
     throw new Error(errors[0] || 'Cloud store unreachable');
+  }
+  // Fallbacks first, primary (index 0 / write URL) last so it wins on conflicts
+  let merged = { ...EMPTY };
+  for (let i = snapshots.length - 1; i >= 0; i -= 1) {
+    merged = mergeStores(snapshots[i], merged);
   }
   return merged;
 }

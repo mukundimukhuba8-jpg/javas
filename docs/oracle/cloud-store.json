@@ -1,6 +1,32 @@
 {
   "keys": [
     {
+      "id": "key-world-1792987988939",
+      "key": "WW1-XX2-YY3-ZZ4",
+      "eaId": "ea-unlimited-bull",
+      "eaName": "UNLIMITED BULL",
+      "eaImageUri": null,
+      "ea": "UNLIMITED BULL",
+      "user": "World Proof",
+      "plan": "90 days",
+      "status": "Active",
+      "createdAt": "2026-10-26T04:13:08.939Z",
+      "boundEmail": null
+    },
+    {
+      "id": "key-ctxa-1792987901451",
+      "key": "AA1-BB2-CC3-DD4",
+      "eaId": "ea-unlimited-bull",
+      "eaName": "UNLIMITED BULL",
+      "eaImageUri": null,
+      "ea": "UNLIMITED BULL",
+      "user": "Context A",
+      "plan": "90 days",
+      "status": "Active",
+      "createdAt": "2026-10-26T04:11:41.451Z",
+      "boundEmail": null
+    },
+    {
       "id": "key-proof-1792987673350",
       "key": "ZZ9-YY8-XX7-WW6",
       "eaId": "ea-unlimited-bull",
@@ -24,7 +50,7 @@
       "plan": "90 days",
       "status": "Active",
       "createdAt": "2026-10-26T04:00:00Z",
-      "boundEmail": "proof@eatrade.test"
+      "boundEmail": null
     },
     {
       "id": "key-s4a",
@@ -55,9 +81,9 @@
   ],
   "reactivated": [
     {
-      "email": "proof@eatrade.test",
+      "email": "gx2-user@eatrade.test",
       "paid": true,
-      "reactivatedAt": "2026-10-26T04:10:00Z",
+      "reactivatedAt": "2026-10-26T04:30:00.000Z",
       "status": "active"
     }
   ],
@@ -70,15 +96,6 @@
       "createdAt": "2026-10-25T12:00:00Z"
     }
   ],
-  "activations": [
-    {
-      "email": "proof@eatrade.test",
-      "key": "GX2-6W7-CBA-6R6",
-      "activatedAt": "2026-10-26T04:08:05.081Z",
-      "eaId": "ea-unlimited-bull",
-      "eaName": "UNLIMITED BULL",
-      "eaImageUri": null
-    }
-  ],
-  "updatedAt": "2026-10-26T04:08:06.213Z"
+  "activations": [],
+  "updatedAt": "2026-10-26T04:32:00.000Z"
 }
