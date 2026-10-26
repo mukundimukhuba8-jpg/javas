@@ -8,7 +8,7 @@
  * Override at runtime: window.__ORACLE_CLOUD_URL
  */
 export const CLOUD_DOC_URL =
-  'https://crudcrud.com/api/ea3befcf49d04445886354714c072753/oracle/6adf32e3db422303e8fa6a85';
+  'https://crudcrud.com/api/d0beed68a3bf499a97e4dd1598fc9ff8/oracle/6adf7cf1286ff303e839ba7e';
 
 /** Same-origin / raw snapshots — last-resort reads only. */
 export const CLOUD_FALLBACK_URLS: string[] = [
@@ -17,5 +17,11 @@ export const CLOUD_FALLBACK_URLS: string[] = [
   'https://raw.githubusercontent.com/mukundimukhuba8-jpg/javas/main/docs/oracle/cloud-store.json',
 ];
 
-/** Max data-URL length kept in the shared EA catalog (bytes of string). */
-export const MAX_EA_IMAGE_CHARS = 120_000;
+/**
+ * Max data-URL length kept inline on the EA record (~280KB binary ≈ 380k chars).
+ * Larger uploads are compressed and/or hosted; https:// URLs are uncapped.
+ */
+export const MAX_EA_IMAGE_CHARS = 380_000;
+
+/** Prefer hosting once a data URL exceeds this (keeps the cloud doc lean). */
+export const PREFER_HOST_CHARS = 100_000;

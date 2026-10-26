@@ -11,7 +11,6 @@ import { normalizeEmail } from '../access/types';
 import {
   attachCloudDebug,
   fetchCloudPrimary,
-  linkedEmailOf,
   mergeKeysCloud,
   pushActivationToCloud,
   pushKeyToCloud,

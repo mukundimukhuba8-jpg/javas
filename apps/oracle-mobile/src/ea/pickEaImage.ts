@@ -1,28 +1,43 @@
 import { Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { cloudFriendlyImage } from '../cloud/oracleCloud';
 
-/** Pick an image and return a durable data URL (works with localStorage). */
+/**
+ * Pick an image and return a cloud-ready URI (https or compact JPEG data URL).
+ * Compresses / hosts before returning so Create EA / Edit picture persist worldwide.
+ */
 export async function pickEaImageAsDataUrl(): Promise<string | null> {
+  let raw: string | null = null;
+
   if (Platform.OS === 'web' && typeof document !== 'undefined') {
-    return pickFileAsDataUrl('image/*');
+    raw = await pickFileAsDataUrl('image/*');
+  } else {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return null;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.7,
+      allowsEditing: true,
+      aspect: [3, 4],
+      base64: true,
+    });
+    if (result.canceled || !result.assets[0]) return null;
+    const asset = result.assets[0];
+    if (asset.base64) {
+      const mime = asset.mimeType || 'image/jpeg';
+      raw = `data:${mime};base64,${asset.base64}`;
+    } else {
+      raw = asset.uri;
+    }
   }
 
-  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  if (!perm.granted) return null;
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ['images'],
-    quality: 0.75,
-    allowsEditing: true,
-    aspect: [3, 4],
-    base64: true,
-  });
-  if (result.canceled || !result.assets[0]) return null;
-  const asset = result.assets[0];
-  if (asset.base64) {
-    const mime = asset.mimeType || 'image/jpeg';
-    return `data:${mime};base64,${asset.base64}`;
+  if (!raw) return null;
+  try {
+    const friendly = await cloudFriendlyImage(raw);
+    return friendly || raw;
+  } catch {
+    return raw;
   }
-  return asset.uri;
 }
 
 function pickFileAsDataUrl(accept: string): Promise<string | null> {

@@ -194,7 +194,7 @@ export function EaProvider({ children }: { children: ReactNode }) {
   const updateEaImage = useCallback(async (id: string, imageUri: string | null) => {
     const current = eas.find((e) => e.id === id);
     const updated: ExpertAdvisor = current
-      ? { ...current, imageUri }
+      ? { ...current, imageUri, createdAt: new Date().toISOString() }
       : {
           id,
           name: 'EA',
@@ -202,19 +202,19 @@ export function EaProvider({ children }: { children: ReactNode }) {
           type: 'Standard',
           createdAt: new Date().toISOString(),
         };
+    // Optimistic local preview
     setEas((prev) => prev.map((e) => (e.id === id ? { ...e, imageUri } : e)));
     setSelectedId(id);
-    try {
-      const store = await pushEaToCloud(updated);
-      const cloudEa = store.eas.find((e) => e.id === id);
-      if (cloudEa?.imageUri) {
-        setEas((prev) =>
-          prev.map((e) => (e.id === id ? { ...e, imageUri: cloudEa.imageUri } : e)),
-        );
-      }
-    } catch {
-      /* keep local image */
-    }
+    const store = await pushEaToCloud(updated);
+    const cloudEa = store.eas.find((e) => e.id === id);
+    const persisted = cloudEa?.imageUri || imageUri;
+    setEas((prev) =>
+      prev.map((e) =>
+        e.id === id
+          ? { ...e, imageUri: persisted, name: cloudEa?.name || e.name }
+          : e,
+      ),
+    );
   }, [eas]);
 
   const getEaById = useCallback(

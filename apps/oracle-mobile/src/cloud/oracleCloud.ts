@@ -2,6 +2,7 @@ import {
   CLOUD_DOC_URL,
   CLOUD_FALLBACK_URLS,
   MAX_EA_IMAGE_CHARS,
+  PREFER_HOST_CHARS,
 } from './config';
 import type { ReactivatedEmail } from '../access/types';
 import type { ExpertAdvisor } from '../ea/types';
@@ -108,31 +109,39 @@ async function compressDataUrl(dataUrl: string, maxChars: number): Promise<strin
       el.onerror = () => reject(new Error('image load failed'));
       el.src = dataUrl;
     });
-    const maxEdge = 720;
-    const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
-    const w = Math.max(1, Math.round(img.width * scale));
-    const h = Math.max(1, Math.round(img.height * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    ctx.drawImage(img, 0, 0, w, h);
-    for (const q of [0.72, 0.55, 0.4, 0.28]) {
-      const out = canvas.toDataURL('image/jpeg', q);
-      if (out.length <= maxChars) return out;
+    const qualities = [0.82, 0.7, 0.58, 0.45, 0.35, 0.25, 0.18];
+    for (const maxEdge of [960, 720, 560, 420, 320]) {
+      const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) continue;
+      ctx.drawImage(img, 0, 0, w, h);
+      for (const q of qualities) {
+        const out = canvas.toDataURL('image/jpeg', q);
+        if (out.length <= maxChars) return out;
+      }
     }
-    const last = canvas.toDataURL('image/jpeg', 0.22);
-    return last.length <= maxChars ? last : null;
+    return null;
   } catch {
     return null;
   }
 }
 
-async function uploadToFreeHost(dataUrl: string): Promise<string | null> {
+async function blobFromDataUrl(dataUrl: string): Promise<Blob | null> {
   try {
     const res = await fetch(dataUrl);
-    const blob = await res.blob();
+    return await res.blob();
+  } catch {
+    return null;
+  }
+}
+
+async function uploadLitterbox(blob: Blob): Promise<string | null> {
+  try {
     const form = new FormData();
     form.append('reqtype', 'fileupload');
     form.append('time', '72h');
@@ -149,29 +158,77 @@ async function uploadToFreeHost(dataUrl: string): Promise<string | null> {
   return null;
 }
 
+async function uploadCatbox(blob: Blob): Promise<string | null> {
+  try {
+    const form = new FormData();
+    form.append('reqtype', 'fileupload');
+    form.append('fileToUpload', blob, 'ea.jpg');
+    const up = await fetch('https://catbox.moe/user/api.php', { method: 'POST', body: form });
+    const text = (await up.text()).trim();
+    if (text.startsWith('https://')) return text;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+async function upload0x0(blob: Blob): Promise<string | null> {
+  try {
+    const form = new FormData();
+    form.append('file', blob, 'ea.jpg');
+    const up = await fetch('https://0x0.st', { method: 'POST', body: form });
+    const text = (await up.text()).trim();
+    if (text.startsWith('https://')) return text;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+async function uploadToFreeHost(dataUrl: string): Promise<string | null> {
+  const blob = await blobFromDataUrl(dataUrl);
+  if (!blob) return null;
+  return (
+    (await uploadLitterbox(blob)) ||
+    (await uploadCatbox(blob)) ||
+    (await upload0x0(blob))
+  );
+}
+
 /**
- * Cloud-safe EA image: https URL, or compressed data URL under quota.
- * Never silently drop a user upload when compression can save it.
+ * Cloud-safe EA image: https URL preferred, else compressed JPEG data URL under quota.
+ * Never silently drop a user upload when compression or hosting can save it.
  */
 export async function cloudFriendlyImage(uri: string | null | undefined): Promise<string | null> {
   if (!uri) return null;
   if (/^https?:\/\//i.test(uri)) return uri;
   if (!uri.startsWith('data:')) return null;
 
-  if (uri.length <= MAX_EA_IMAGE_CHARS) return uri;
+  // Small enough to keep inline
+  if (uri.length <= PREFER_HOST_CHARS) return uri;
 
-  const hosted = await uploadToFreeHost(uri);
+  // Prefer a durable https URL for larger photos
+  let working = uri;
+  if (uri.length > MAX_EA_IMAGE_CHARS) {
+    const pre = await compressDataUrl(uri, Math.min(MAX_EA_IMAGE_CHARS, PREFER_HOST_CHARS * 2));
+    if (pre) working = pre;
+  }
+
+  const hosted = await uploadToFreeHost(working);
   if (hosted) return hosted;
 
   const compressed = await compressDataUrl(uri, MAX_EA_IMAGE_CHARS);
-  if (compressed) return compressed;
-
-  const mid = await compressDataUrl(uri, Math.floor(MAX_EA_IMAGE_CHARS * 1.5));
-  if (mid) {
-    const again = await uploadToFreeHost(mid);
-    if (again) return again;
+  if (compressed) {
+    if (compressed.length > PREFER_HOST_CHARS) {
+      const hosted2 = await uploadToFreeHost(compressed);
+      if (hosted2) return hosted2;
+    }
+    return compressed;
   }
-  return null;
+
+  // Last resort: tiny thumbnail so Home never falls back to the built-in hero
+  const thumb = await compressDataUrl(uri, PREFER_HOST_CHARS);
+  return thumb;
 }
 
 let writeChain: Promise<void> = Promise.resolve();
@@ -382,8 +439,19 @@ export async function pushReactivatedToCloud(entry: ReactivatedEmail): Promise<O
 }
 
 export async function pushEaToCloud(ea: ExpertAdvisor): Promise<OracleCloudStore> {
+  const hadUpload = typeof ea.imageUri === 'string' && ea.imageUri.trim().length > 0;
   const imageUri = await cloudFriendlyImage(ea.imageUri);
-  return patchCloudStore({ eas: [{ ...ea, imageUri }] });
+  if (hadUpload && !imageUri) {
+    throw new Error('Could not save EA image to cloud (compress/host failed). Try a smaller photo.');
+  }
+  const store = await patchCloudStore({
+    eas: [{ ...ea, imageUri: imageUri || ea.imageUri || null }],
+  });
+  const saved = store.eas.find((e) => e.id === ea.id);
+  if (hadUpload && saved && !saved.imageUri) {
+    throw new Error('Cloud write dropped the EA image. Retry upload.');
+  }
+  return store;
 }
 
 /**
@@ -480,7 +548,9 @@ export function attachCloudDebug() {
     fetchFallback: fetchCloudStore,
     patch: patchCloudStore,
     pushKey: pushKeyToCloud,
+    pushEa: pushEaToCloud,
     clearBindings: clearAllKeyBindingsInCloud,
+    cloudFriendlyImage,
   };
 }
 

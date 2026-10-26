@@ -561,7 +561,10 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
     setEditingId(id);
     try {
       const dataUrl = await pickEaImageAsDataUrl();
-      if (dataUrl) updateEaImage(id, dataUrl);
+      if (dataUrl) await updateEaImage(id, dataUrl);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Image upload failed';
+      if (typeof window !== 'undefined') window.alert(msg);
     } finally {
       setEditingId(null);
     }
