@@ -92,24 +92,51 @@ function normalizeStore(raw: unknown): OracleCloudStore {
 
 function capImage(uri: string | null): string | null {
   if (!uri) return null;
+  // Always keep compact https/http refs
+  if (/^https?:\/\//i.test(uri)) return uri;
   if (uri.length <= MAX_EA_IMAGE_CHARS) return uri;
   return null;
 }
 
-/** Upload oversized data URLs to a free temp host; return https URL or null. */
-export async function cloudFriendlyImage(uri: string | null | undefined): Promise<string | null> {
-  if (!uri) return null;
-  if (!uri.startsWith('data:')) {
-    return uri.length <= MAX_EA_IMAGE_CHARS ? uri : null;
-  }
-  if (uri.length <= MAX_EA_IMAGE_CHARS) return uri;
+/** Compress a data URL to JPEG under maxChars (browser canvas). */
+async function compressDataUrl(dataUrl: string, maxChars: number): Promise<string | null> {
+  if (typeof document === 'undefined') return null;
   try {
-    const res = await fetch(uri);
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('image load failed'));
+      el.src = dataUrl;
+    });
+    const maxEdge = 720;
+    const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, w, h);
+    for (const q of [0.72, 0.55, 0.4, 0.28]) {
+      const out = canvas.toDataURL('image/jpeg', q);
+      if (out.length <= maxChars) return out;
+    }
+    const last = canvas.toDataURL('image/jpeg', 0.22);
+    return last.length <= maxChars ? last : null;
+  } catch {
+    return null;
+  }
+}
+
+async function uploadToFreeHost(dataUrl: string): Promise<string | null> {
+  try {
+    const res = await fetch(dataUrl);
     const blob = await res.blob();
     const form = new FormData();
     form.append('reqtype', 'fileupload');
     form.append('time', '72h');
-    form.append('fileToUpload', blob, 'ea.png');
+    form.append('fileToUpload', blob, 'ea.jpg');
     const up = await fetch('https://litterbox.catbox.moe/resources/internals/api.php', {
       method: 'POST',
       body: form,
@@ -118,6 +145,31 @@ export async function cloudFriendlyImage(uri: string | null | undefined): Promis
     if (text.startsWith('https://')) return text;
   } catch {
     /* ignore */
+  }
+  return null;
+}
+
+/**
+ * Cloud-safe EA image: https URL, or compressed data URL under quota.
+ * Never silently drop a user upload when compression can save it.
+ */
+export async function cloudFriendlyImage(uri: string | null | undefined): Promise<string | null> {
+  if (!uri) return null;
+  if (/^https?:\/\//i.test(uri)) return uri;
+  if (!uri.startsWith('data:')) return null;
+
+  if (uri.length <= MAX_EA_IMAGE_CHARS) return uri;
+
+  const hosted = await uploadToFreeHost(uri);
+  if (hosted) return hosted;
+
+  const compressed = await compressDataUrl(uri, MAX_EA_IMAGE_CHARS);
+  if (compressed) return compressed;
+
+  const mid = await compressDataUrl(uri, Math.floor(MAX_EA_IMAGE_CHARS * 1.5));
+  if (mid) {
+    const again = await uploadToFreeHost(mid);
+    if (again) return again;
   }
   return null;
 }

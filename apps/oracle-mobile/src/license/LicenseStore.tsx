@@ -189,7 +189,14 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       memoryKeys = mergeKeysCloud(store.keys, []);
       persistKeysToDisk(memoryKeys);
       setKeys(memoryKeys);
-      memoryActivations = store.activations.map((a) => ({ ...a, eaImageUri: null }));
+      memoryActivations = store.activations.map((a) => ({
+        ...a,
+        eaName: a.eaName || store.eas.find((e) => e.id === a.eaId)?.name || a.eaName,
+        eaImageUri:
+          a.eaImageUri ||
+          store.eas.find((e) => e.id === a.eaId)?.imageUri ||
+          null,
+      }));
       persistActivationsToDisk(memoryActivations);
       setActivations(memoryActivations);
       setCloudReady(true);
@@ -336,12 +343,24 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
 
       // Fresh primary cloud catalog on every Activate attempt (no stale cache / Pages merge)
       let catalog: LicenseKey[] = [];
+      let cloudEas: { id: string; name: string; imageUri: string | null }[] = [];
       try {
         const store = await fetchCloudPrimary();
         catalog = store.keys.map(toSlimKey);
+        cloudEas = store.eas.map((e) => ({
+          id: e.id,
+          name: e.name,
+          imageUri: e.imageUri ?? null,
+        }));
         memoryKeys = catalog;
         persistKeysToDisk(catalog);
-        memoryActivations = store.activations.map((a) => ({ ...a, eaImageUri: null }));
+        memoryActivations = store.activations.map((a) => ({
+          ...a,
+          eaImageUri:
+            a.eaImageUri ||
+            cloudEas.find((e) => e.id === a.eaId)?.imageUri ||
+            null,
+        }));
         persistActivationsToDisk(memoryActivations);
         setActivations(memoryActivations);
         setKeys(catalog);
@@ -390,12 +409,33 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
         };
       }
 
+      const eaLive =
+        cloudEas.find((e) => e.id === found.eaId) ||
+        cloudEas.find(
+          (e) => e.name.trim().toLowerCase() === (found.eaName || '').trim().toLowerCase(),
+        ) ||
+        null;
+      const resolvedImage = eaLive?.imageUri || null;
+      const resolvedName = eaLive?.name || found.eaName;
+
       // Same email re-activating their own key succeeds.
       const already = memoryActivations.some(
         (a) => a.email === n && normalizeLicenseKey(a.key) === keyCode,
       );
       if (already || linked === n) {
         const selfBound = { ...found, boundEmail: n };
+        // Refresh name/image onto existing activation from live EA catalog
+        memoryActivations = memoryActivations.map((a) =>
+          a.email === n && normalizeLicenseKey(a.key) === keyCode
+            ? {
+                ...a,
+                eaName: resolvedName || a.eaName,
+                eaImageUri: resolvedImage || a.eaImageUri,
+              }
+            : a,
+        );
+        persistActivationsToDisk(memoryActivations);
+        setActivations(memoryActivations);
         return { ok: true, key: selfBound, catalogCount };
       }
 
@@ -404,8 +444,8 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
         key: keyCode,
         activatedAt: new Date().toISOString(),
         eaId: found.eaId,
-        eaName: found.eaName,
-        eaImageUri: null,
+        eaName: resolvedName,
+        eaImageUri: resolvedImage,
       };
       const nextActs = [
         activation,

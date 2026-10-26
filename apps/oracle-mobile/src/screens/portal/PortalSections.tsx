@@ -654,12 +654,13 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
           fontsReady={fontsReady}
           onPress={() => {
             if (!eaName.trim() || !confirm) return;
-            addEa({
+            const payload = {
               name: eaName.trim(),
               imageUri,
-              type: selfHost ? 'Self-host' : 'Standard',
-            });
+              type: (selfHost ? 'Self-host' : 'Standard') as 'Standard' | 'Self-host',
+            };
             resetForm();
+            void addEa(payload);
           }}
         />
         <SecondaryBtn label="Cancel" onPress={resetForm} fontsReady={fontsReady} />

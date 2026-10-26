@@ -21,9 +21,17 @@ type Props = {
   onRemove?: () => void;
   selectedCount?: number;
   title?: string;
-  /** Custom EA image (data URL / URI). Falls back to built-in Oracle hero. */
+  /** Custom EA image (data URL / URI). Only falls back to built-in hero when null. */
   imageUri?: string | null;
 };
+
+function titleStyleFor(name: string) {
+  const len = name.trim().length;
+  if (len > 22) return { fontSize: 22, letterSpacing: 0.6, lineHeight: 26 };
+  if (len > 16) return { fontSize: 26, letterSpacing: 0.8, lineHeight: 30 };
+  if (len > 12) return { fontSize: 30, letterSpacing: 1, lineHeight: 34 };
+  return { fontSize: 34, letterSpacing: 1.2, lineHeight: 38 };
+}
 
 export function OracleCard({
   running,
@@ -34,7 +42,9 @@ export function OracleCard({
   title = 'Robot',
   imageUri = null,
 }: Props) {
-  const heroSource = imageUri ? { uri: imageUri } : assets.oracleHero;
+  const hasCustomImage = typeof imageUri === 'string' && imageUri.trim().length > 0;
+  const heroSource = hasCustomImage ? { uri: imageUri!.trim() } : assets.oracleHero;
+  const titleFit = titleStyleFor(title);
 
   const actions: Action[] = [
     {
@@ -78,7 +88,12 @@ export function OracleCard({
           style={styles.heroFade}
         />
         <View style={styles.titleRow}>
-          <Text style={styles.title} numberOfLines={1}>
+          <Text
+            style={[styles.title, titleFit]}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+            minimumFontScale={0.55}
+          >
             {title}
           </Text>
           <View style={[styles.statusDot, running ? styles.statusDotRunning : styles.statusDotIdle]} />
@@ -135,17 +150,17 @@ const styles = StyleSheet.create({
   },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 22,
-    paddingBottom: 18,
+    alignItems: 'flex-end',
+    paddingHorizontal: 18,
+    paddingBottom: 16,
     gap: 10,
     zIndex: 2,
   },
   title: {
+    flex: 1,
+    flexShrink: 1,
     color: colors.textPrimary,
-    fontSize: 34,
     fontWeight: '800',
-    letterSpacing: 1.2,
     textShadowColor: 'rgba(0,0,0,0.75)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
@@ -154,7 +169,8 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    marginTop: 4,
+    marginBottom: 8,
+    flexShrink: 0,
   },
   statusDotIdle: {
     backgroundColor: colors.redDot,

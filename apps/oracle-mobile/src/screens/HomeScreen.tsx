@@ -40,12 +40,15 @@ export function HomeScreen({
   const { eas } = useEas();
 
   const robots = (sessionEmail ? unlockedRobotsForEmail(sessionEmail) : []).map((r) => {
-    const live = eas.find((e) => e.id === r.id);
-    if (!live) return r;
+    const live =
+      eas.find((e) => e.id === r.id) ||
+      eas.find((e) => e.name.trim().toLowerCase() === r.name.trim().toLowerCase());
+    // Prefer live cloud/local EA upload; never blank out a stored activation image
+    const imageUri = live?.imageUri || r.imageUri || null;
     return {
       ...r,
-      name: live.name || r.name,
-      imageUri: live.imageUri ?? r.imageUri,
+      name: live?.name || r.name,
+      imageUri,
     };
   });
   const [selectedId, setSelectedId] = useState<string | null>(robots[0]?.id ?? null);
