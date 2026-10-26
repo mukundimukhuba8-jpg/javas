@@ -153,22 +153,37 @@ function normalizeNetworkError(e: unknown, fallback: string): Error {
   return new Error(fallback);
 }
 
+function isTransientStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || status === 502 || status === 503 || status === 504;
+}
+
 async function fetchJson(url: string): Promise<unknown> {
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      cache: 'no-store',
-    });
-  } catch (e) {
-    throw normalizeNetworkError(e, 'Cloud read failed');
+  let lastErr: Error | null = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+      });
+    } catch (e) {
+      lastErr = normalizeNetworkError(e, 'Cloud read failed');
+      await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      continue;
+    }
+    if (!res.ok) {
+      const body = await readErrorBody(res);
+      lastErr = new Error(cloudErrorMessage('Cloud read failed', res, body));
+      if (isTransientStatus(res.status) || /exceeded allowed number of requests/i.test(body)) {
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      throw lastErr;
+    }
+    return res.json();
   }
-  if (!res.ok) {
-    const body = await readErrorBody(res);
-    throw new Error(cloudErrorMessage('Cloud read failed', res, body));
-  }
-  return res.json();
+  throw lastErr || new Error('Cloud read failed');
 }
 
 function stripId<T extends Record<string, unknown>>(obj: T): Omit<T, '_id'> {

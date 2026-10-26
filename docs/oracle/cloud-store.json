@@ -160,6 +160,17 @@
       "keysAllowed": 0,
       "keysUsed": 0,
       "registeredAt": "2026-10-26T18:00:00Z"
+    },
+    {
+      "id": "mentor_proof_keep",
+      "name": "Proof Mentor",
+      "mentorName": "ProofMN",
+      "email": "mentor-proof-1793038082@example.com",
+      "whatsapp": "+27123456789",
+      "status": "waiting",
+      "keysAllowed": 0,
+      "keysUsed": 0,
+      "registeredAt": "2026-10-26T18:08:08.156Z"
     }
   ],
   "subscriptions": [],
