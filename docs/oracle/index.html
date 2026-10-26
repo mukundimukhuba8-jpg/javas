@@ -8,20 +8,36 @@
     <title>Oracle</title>
     <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
     <style id="expo-reset">
-      /* These styles make the body full-height */
-      html,
-      body {
+      html, body, #root {
         height: 100%;
+        min-height: 100%;
+        background-color: #000000 !important;
+        color: #FFFFFF;
       }
-      /* These styles disable body scrolling if you are using <ScrollView> */
+      html { background: #000000; }
       body {
         overflow: hidden;
+        background-color: #000000 !important;
+        color: #FFFFFF;
+        margin: 0;
       }
-      /* These styles make the root element full-height */
       #root {
         display: flex;
         height: 100%;
         flex: 1;
+        background-color: #000000 !important;
+      }
+      input, textarea { color-scheme: dark; caret-color: #fff; }
+      input:-webkit-autofill,
+      input:-webkit-autofill:hover,
+      input:-webkit-autofill:focus,
+      textarea:-webkit-autofill,
+      select:-webkit-autofill {
+        -webkit-text-fill-color: #FFFFFF !important;
+        caret-color: #FFFFFF !important;
+        transition: background-color 99999s ease-out 0s;
+        box-shadow: 0 0 0px 1000px #0C0E14 inset !important;
+        background-color: #0C0E14 !important;
       }
     </style>
   <link rel="icon" href="/javas/oracle/favicon.ico"/></head>
@@ -31,6 +47,6 @@
     <noscript> You need to enable JavaScript to run this app. </noscript>
     <!-- The root element for your Expo app. -->
     <div id="root"></div>
-  <script src="/javas/oracle/expo/static/js/web/index-9bfbc5a1014939ee59b4d9bcc17471f2.js?v=1793033596" defer></script>
+  <script src="/javas/oracle/expo/static/js/web/index-acf7f0d359ee234600e1a304291fd613.js?v=1793034258" defer></script>
 </body>
 </html>
