@@ -386,13 +386,58 @@ export async function pushEaToCloud(ea: ExpertAdvisor): Promise<OracleCloudStore
   return patchCloudStore({ eas: [{ ...ea, imageUri }] });
 }
 
+/**
+ * Bind / rebind a key to the activating email.
+ * Always overwrites boundEmail and replaces activations for that key code
+ * so mentors can reuse the same key without "already linked" friction.
+ */
 export async function pushActivationToCloud(
   activation: KeyActivation,
   boundKey: LicenseKey,
 ): Promise<OracleCloudStore> {
-  return patchCloudStore({
-    activations: [{ ...activation, eaImageUri: null }],
-    keys: [toSlimKey({ ...boundKey, boundEmail: linkedEmailOf(boundKey) })],
+  return enqueueWrite(async () => {
+    let remote = EMPTY;
+    try {
+      remote = await fetchCloudPrimary();
+    } catch {
+      remote = EMPTY;
+    }
+    const code = normalizeLicenseKey(activation.key);
+    const bound = toSlimKey({ ...boundKey, boundEmail: linkedEmailOf(boundKey) || activation.email });
+    const keys = remote.keys.some((k) => normalizeLicenseKey(k.key) === code)
+      ? remote.keys.map((k) => (normalizeLicenseKey(k.key) === code ? bound : toSlimKey(k)))
+      : [bound, ...remote.keys.map(toSlimKey)];
+    const next: OracleCloudStore = {
+      keys,
+      reactivated: remote.reactivated,
+      eas: remote.eas,
+      activations: [
+        {
+          email: activation.email,
+          key: code,
+          activatedAt: activation.activatedAt || new Date().toISOString(),
+          eaId: activation.eaId,
+          eaName: activation.eaName,
+          eaImageUri: null,
+        },
+        ...remote.activations.filter((a) => normalizeLicenseKey(a.key) !== code),
+      ],
+      updatedAt: new Date().toISOString(),
+    };
+    return putCloudStore(next);
+  });
+}
+
+/** Wipe every key's boundEmail (one-shot unlock for the whole catalog). */
+export async function clearAllKeyBindingsInCloud(): Promise<OracleCloudStore> {
+  return enqueueWrite(async () => {
+    const remote = await fetchCloudPrimary();
+    const next: OracleCloudStore = {
+      ...remote,
+      keys: remote.keys.map((k) => toSlimKey({ ...k, boundEmail: null })),
+      updatedAt: new Date().toISOString(),
+    };
+    return putCloudStore(next);
   });
 }
 
@@ -435,6 +480,7 @@ export function attachCloudDebug() {
     fetchFallback: fetchCloudStore,
     patch: patchCloudStore,
     pushKey: pushKeyToCloud,
+    clearBindings: clearAllKeyBindingsInCloud,
   };
 }
 

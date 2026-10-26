@@ -408,15 +408,6 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
             'This key is not linked to an EA. Ask your admin to create the key against an expert advisor.',
         };
       }
-      // Link only after successful Activate. Empty/null ⇒ unassigned (never "already linked").
-      const linked = linkedEmailOf(found);
-      if (linked && linked !== n) {
-        return {
-          ok: false,
-          catalogCount,
-          reason: 'This key is already linked to another account.',
-        };
-      }
 
       const eaLive =
         cloudEas.find((e) => e.id === found.eaId) ||
@@ -427,27 +418,8 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       const resolvedImage = eaLive?.imageUri || null;
       const resolvedName = eaLive?.name || found.eaName;
 
-      // Same email re-activating their own key succeeds.
-      const already = memoryActivations.some(
-        (a) => a.email === n && normalizeLicenseKey(a.key) === keyCode,
-      );
-      if (already || linked === n) {
-        const selfBound = { ...found, boundEmail: n };
-        // Refresh name/image onto existing activation from live EA catalog
-        memoryActivations = memoryActivations.map((a) =>
-          a.email === n && normalizeLicenseKey(a.key) === keyCode
-            ? {
-                ...a,
-                eaName: resolvedName || a.eaName,
-                eaImageUri: resolvedImage || a.eaImageUri,
-              }
-            : a,
-        );
-        persistActivationsToDisk(memoryActivations);
-        setActivations(memoryActivations);
-        return { ok: true, key: selfBound, catalogCount };
-      }
-
+      // Frictionless rule: catalog hit ⇒ Activate succeeds for the signed-in email.
+      // Unbound → bind. Same email → refresh. Different email → rebind (mentor reuse/demo).
       const activation: KeyActivation = {
         email: n,
         key: keyCode,
@@ -456,24 +428,25 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
         eaName: resolvedName,
         eaImageUri: resolvedImage,
       };
+      // One holder per key: drop other emails' activations for this code
       const nextActs = [
         activation,
-        ...memoryActivations.filter(
-          (a) => !(a.email === n && normalizeLicenseKey(a.key) === keyCode),
-        ),
+        ...memoryActivations.filter((a) => normalizeLicenseKey(a.key) !== keyCode),
       ];
       persistActivationsToDisk(nextActs);
       setActivations(nextActs);
 
-      // Bound only here — never on Create keys
       const bound = { ...found, boundEmail: n };
-      const nextKeys = catalog.map((k) => (k.id === found.id ? bound : k));
-      persistKeysToDisk(nextKeys);
+      memoryKeys = catalog.map((k) =>
+        normalizeLicenseKey(k.key) === keyCode ? bound : k,
+      );
+      persistKeysToDisk(memoryKeys);
       setKeys(memoryKeys);
 
       try {
         await pushActivationToCloud(activation, bound);
         setCloudReady(true);
+        setCloudError(null);
       } catch (e) {
         setCloudError(e instanceof Error ? e.message : 'Cloud activation sync failed');
       }
