@@ -7,6 +7,7 @@ import { AiScannerScreen } from './src/screens/AiScannerScreen';
 import { MetaTraderScreen } from './src/screens/MetaTraderScreen';
 import { EmailGateScreen } from './src/screens/EmailGateScreen';
 import { ActivateRobotScreen } from './src/screens/ActivateRobotScreen';
+import { AdminSignInScreen } from './src/screens/AdminSignInScreen';
 import { PortalScreen } from './src/screens/portal/PortalScreen';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { EaProvider } from './src/ea/EaStore';
@@ -32,6 +33,7 @@ function AppShell() {
   const { hasActivatedKey } = useLicenses();
   const [tab, setTab] = useState<TabKey>('home');
   const [portalOpen, setPortalOpen] = useState(false);
+  const [adminSignIn, setAdminSignIn] = useState(false);
   const [portalSection, setPortalSection] = useState<PortalSectionId>('dashboard');
   const [eaRunning, setEaRunning] = useState(false);
   const [selectedSymbolIds, setSelectedSymbolIds] = useState<string[]>([
@@ -40,25 +42,37 @@ function AppShell() {
     'US30',
   ]);
 
-  const openPortal = (section: PortalSectionId = 'dashboard') => {
+  const requestPortal = (section: PortalSectionId = 'dashboard') => {
     setPortalSection(section);
+    setAdminSignIn(true);
+  };
+
+  const enterPortal = () => {
+    setAdminSignIn(false);
     setPortalOpen(true);
   };
 
+  const exitPortal = () => {
+    setPortalOpen(false);
+    setAdminSignIn(true);
+  };
+
   if (portalOpen) {
+    return <PortalScreen onExit={exitPortal} initialSection={portalSection} />;
+  }
+
+  if (adminSignIn) {
     return (
-      <PortalScreen
-        onExit={() => setPortalOpen(false)}
-        initialSection={portalSection}
+      <AdminSignInScreen
+        onSuccess={enterPortal}
+        onBackToMember={() => setAdminSignIn(false)}
       />
     );
   }
 
-  // 1) Sign in
+  // 1) Member sign in (email membership)
   if (!isAllowed || !sessionEmail) {
-    return (
-      <EmailGateScreen onOpenAdminPortal={() => openPortal('reactivate-email')} />
-    );
+    return <EmailGateScreen onOpenAdminPortal={() => requestPortal('dashboard')} />;
   }
 
   // 2) Activate robot (skip if this email already activated a key)
@@ -76,8 +90,8 @@ function AppShell() {
         onChangeSelectedSymbols={setSelectedSymbolIds}
         eaRunning={eaRunning}
         onToggleEa={() => setEaRunning((v) => !v)}
-        onOpenPortal={() => openPortal('dashboard')}
-        onCreateEa={() => openPortal('expert-adviser')}
+        onOpenPortal={() => requestPortal('dashboard')}
+        onCreateEa={() => requestPortal('expert-adviser')}
       />
     );
   }
@@ -87,7 +101,7 @@ function AppShell() {
       <AiScannerScreen
         activeTab={tab}
         onTabChange={setTab}
-        onOpenPortal={() => openPortal('dashboard')}
+        onOpenPortal={() => requestPortal('dashboard')}
       />
     );
   }
@@ -96,7 +110,7 @@ function AppShell() {
     <MetaTraderScreen
       activeTab={tab}
       onTabChange={setTab}
-      onOpenPortal={() => openPortal('dashboard')}
+      onOpenPortal={() => requestPortal('dashboard')}
     />
   );
 }

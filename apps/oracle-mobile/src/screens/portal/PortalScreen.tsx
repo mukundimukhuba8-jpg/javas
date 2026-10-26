@@ -147,7 +147,7 @@ export function PortalScreen({ onExit, initialSection = 'dashboard' }: Props) {
       {menuOpen ? (
         <View style={styles.accountMenu}>
           <Text style={[styles.accountEmail, f && { fontFamily: f.uiMed }]}>
-            superadmin@oracle.app
+            eatrade@gmail.com
           </Text>
           <Pressable
             onPress={() => {
