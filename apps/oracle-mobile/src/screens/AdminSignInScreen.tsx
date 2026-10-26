@@ -58,12 +58,12 @@ export function AdminSignInScreen({ onSuccess, onBackToMember, onOpenRegister }:
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
         <ScrollView
-          style={authStyles.flex}
+          style={authStyles.scroll}
           contentContainerStyle={[
             authStyles.scrollContent,
             {
               paddingTop: Math.max(insets.top, 12) + 8,
-              paddingBottom: Math.max(insets.bottom, 48) + 80,
+              paddingBottom: Math.max(insets.bottom, 48) + 120,
             },
           ]}
           keyboardShouldPersistTaps="handled"
@@ -71,6 +71,12 @@ export function AdminSignInScreen({ onSuccess, onBackToMember, onOpenRegister }:
           showsVerticalScrollIndicator
           nestedScrollEnabled
           bounces
+          {...(Platform.OS === 'web'
+            ? ({
+                // Help web hit-test + CSS target for overflow-y:auto
+                dataSet: { authScroll: '1' },
+              } as object)
+            : null)}
         >
           {onBackToMember ? (
             <Pressable

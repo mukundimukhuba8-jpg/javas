@@ -144,12 +144,12 @@ export function AdminRegisterScreen({ onBackToSignIn }: Props) {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
         <ScrollView
-          style={authStyles.flex}
+          style={authStyles.scroll}
           contentContainerStyle={[
             authStyles.scrollContent,
             {
               paddingTop: Math.max(insets.top, 12) + 8,
-              paddingBottom: Math.max(insets.bottom, 48) + 100,
+              paddingBottom: Math.max(insets.bottom, 48) + 140,
             },
           ]}
           keyboardShouldPersistTaps="handled"
@@ -157,6 +157,11 @@ export function AdminRegisterScreen({ onBackToSignIn }: Props) {
           showsVerticalScrollIndicator
           nestedScrollEnabled
           bounces
+          {...(Platform.OS === 'web'
+            ? ({
+                dataSet: { authScroll: '1' },
+              } as object)
+            : null)}
         >
           <Pressable
             style={authStyles.backBtn}

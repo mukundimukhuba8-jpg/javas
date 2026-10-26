@@ -21,12 +21,16 @@ export function useDarkWebShell(styleId = 'oracle-auth-dark-shell') {
     };
     html.style.backgroundColor = AUTH_DARK;
     html.style.color = '#FFFFFF';
-    html.style.overflow = 'auto';
+    html.style.overflow = 'hidden';
     body.style.backgroundColor = AUTH_DARK;
     body.style.color = '#FFFFFF';
-    // Allow touch scroll; do not trap with overflow:hidden
-    body.style.overflow = 'auto';
-    if (root) root.style.backgroundColor = AUTH_DARK;
+    // Document chrome stays fixed; ScrollView inside auth screens owns scrolling
+    body.style.overflow = 'hidden';
+    if (root) {
+      root.style.backgroundColor = AUTH_DARK;
+      root.style.height = '100%';
+      root.style.minHeight = '100%';
+    }
 
     let styleEl = document.getElementById(styleId) as HTMLStyleElement | null;
     if (!styleEl) {
@@ -36,18 +40,26 @@ export function useDarkWebShell(styleId = 'oracle-auth-dark-shell') {
         html, body, #root {
           background-color: ${AUTH_DARK} !important;
           color: #fff;
+          height: 100%;
           min-height: 100%;
         }
         html, body {
-          overflow: auto !important;
-          overflow-x: hidden !important;
-          -webkit-overflow-scrolling: touch;
+          overflow: hidden !important;
+          overscroll-behavior: none;
         }
         #root {
           display: flex;
+          height: 100% !important;
           min-height: 100%;
-          height: auto !important;
+          max-height: 100%;
           flex: 1;
+        }
+        /* Auth ScrollViews must scroll on mobile web (keyboard open) */
+        [data-auth-scroll="1"] {
+          overflow-y: auto !important;
+          -webkit-overflow-scrolling: touch !important;
+          touch-action: pan-y;
+          overscroll-behavior: contain;
         }
         input, textarea {
           color-scheme: dark;
@@ -104,10 +116,27 @@ export const authStyles = StyleSheet.create({
   flex: {
     flex: 1,
     backgroundColor: AUTH_DARK,
+    minHeight: 0,
     ...Platform.select({
       web: {
-        overflow: 'scroll',
+        overflow: 'hidden',
+        height: '100%',
+        maxHeight: '100%',
+      } as object,
+      default: {},
+    }),
+  } as ViewStyle,
+  scroll: {
+    flex: 1,
+    backgroundColor: AUTH_DARK,
+    minHeight: 0,
+    ...Platform.select({
+      web: {
+        overflowY: 'auto',
         WebkitOverflowScrolling: 'touch',
+        touchAction: 'pan-y',
+        height: '100%',
+        maxHeight: '100%',
       } as object,
       default: {},
     }),
