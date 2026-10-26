@@ -1,18 +1,17 @@
 /**
  * Shared worldwide store for license keys, reactivated emails, and EA metadata.
  *
- * Write/read primary: free crudcrud.com REST document (CORS *).
- * Read fallbacks (same-origin + GitHub raw) so Activate still works if crudcrud
- * rate-limits — seeded on each Pages deploy with the current catalog.
+ * Primary R/W: free crudcrud.com REST document (CORS *).
+ * Read fallbacks used ONLY when primary is unreachable (disaster recovery).
+ * Create keys / Activate always prefer the primary URL and verify writes.
  *
  * Override at runtime: window.__ORACLE_CLOUD_URL
  */
 export const CLOUD_DOC_URL =
-  'https://crudcrud.com/api/02400dfef30d4902afc283158fe636a8/oracle/6adee0e715187c03e81653c2';
+  'https://crudcrud.com/api/ea3befcf49d04445886354714c072753/oracle/6adf32e3db422303e8fa6a85';
 
-/** Same-origin snapshot shipped with GitHub Pages (no CORS issues). */
+/** Same-origin / raw snapshots — last-resort reads only. */
 export const CLOUD_FALLBACK_URLS: string[] = [
-  // Relative to /javas/oracle/
   'cloud-store.json',
   '/javas/oracle/cloud-store.json',
   'https://raw.githubusercontent.com/mukundimukhuba8-jpg/javas/main/docs/oracle/cloud-store.json',

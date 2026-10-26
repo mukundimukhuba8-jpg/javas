@@ -342,6 +342,7 @@ function CreateKeysSection({
   const [formError, setFormError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<string | null>(null);
   const [savedOk, setSavedOk] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [eaOpen, setEaOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
 
@@ -349,7 +350,7 @@ function CreateKeysSection({
   const plans = ['7 days', '30 days', '90 days', '1 year', 'Lifetime'];
 
   const generate = async () => {
-    if (!name.trim() || !permOk) return;
+    if (!name.trim() || !permOk || saving) return;
     if (storedEas.length === 0) {
       setFormError('Create an expert advisor first (EXPERT ADVISER), then generate a key for it.');
       return;
@@ -359,19 +360,30 @@ function CreateKeysSection({
       return;
     }
     setFormError(null);
-    const result = await createKey({
-      user: name.trim(),
-      plan,
-      eaId: selectedEa.id,
-      eaName: selectedEa.name,
-    });
-    setGenerated(result.key.key);
-    setSavedOk(result.saved);
-    setFormError(
-      result.saved
-        ? null
-        : result.error || 'Could not save key to the shared cloud store. Try again.',
-    );
+    setGenerated(null);
+    setSavedOk(false);
+    setSaving(true);
+    try {
+      const result = await createKey({
+        user: name.trim(),
+        plan,
+        eaId: selectedEa.id,
+        eaName: selectedEa.name,
+      });
+      if (result.saved) {
+        setGenerated(result.key.key);
+        setSavedOk(true);
+        setFormError(null);
+      } else {
+        setGenerated(null);
+        setSavedOk(false);
+        setFormError(
+          result.error || 'Cloud save failed — key was NOT published. Try again.',
+        );
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -476,7 +488,7 @@ function CreateKeysSection({
         ) : null}
 
         <PrimaryBtn
-          label="Generate key"
+          label={saving ? 'Saving to cloud…' : 'Generate key'}
           icon="sparkles"
           onPress={generate}
           fontsReady={fontsReady}

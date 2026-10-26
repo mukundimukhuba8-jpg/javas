@@ -10,7 +10,7 @@ import {
 import { normalizeEmail } from '../access/types';
 import {
   attachCloudDebug,
-  fetchCloudStore,
+  fetchCloudPrimary,
   linkedEmailOf,
   mergeKeysCloud,
   pushActivationToCloud,
@@ -184,24 +184,12 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
 
   const applyCloud = useCallback(async () => {
     try {
-      const store = await fetchCloudStore();
-      // Merge cloud into whatever analytics/create already holds — never drop local keys
-      setKeys((prev) => {
-        memoryKeys = mergeKeysCloud(store.keys, mergeKeysCloud(prev, mergeKeysCloud(memoryKeys, loadKeysFromDisk())));
-        persistKeysToDisk(memoryKeys);
-        return memoryKeys;
-      });
-      const actMap = new Map<string, KeyActivation>();
-      for (const a of memoryActivations) {
-        actMap.set(`${a.email}::${normalizeLicenseKey(a.key)}`, a);
-      }
-      for (const a of loadActivationsFromDisk()) {
-        actMap.set(`${a.email}::${normalizeLicenseKey(a.key)}`, a);
-      }
-      for (const a of store.activations) {
-        actMap.set(`${a.email}::${normalizeLicenseKey(a.key)}`, a);
-      }
-      memoryActivations = Array.from(actMap.values());
+      // Primary only — Keys analytics must match what Activate reads
+      const store = await fetchCloudPrimary();
+      memoryKeys = mergeKeysCloud(store.keys, []);
+      persistKeysToDisk(memoryKeys);
+      setKeys(memoryKeys);
+      memoryActivations = store.activations.map((a) => ({ ...a, eaImageUri: null }));
       persistActivationsToDisk(memoryActivations);
       setActivations(memoryActivations);
       setCloudReady(true);
@@ -256,27 +244,37 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       });
       void input.eaImageUri;
 
-      // Optimistic local cache
-      const next = mergeKeysCloud([entry], readLicenseKeys());
-      persistKeysToDisk(next);
-      setKeys(memoryKeys);
-      attachDebug();
-
       try {
+        // Await confirmed primary cloud write + GET verification before success
         const cloud = await pushKeyToCloud(entry);
-        memoryKeys = mergeKeysCloud(cloud.keys, memoryKeys);
+        const code = normalizeLicenseKey(entry.key);
+        if (!cloud.keys.some((k) => normalizeLicenseKey(k.key) === code)) {
+          throw new Error('Key missing from cloud after write.');
+        }
+        memoryKeys = cloud.keys.map(toSlimKey);
         persistKeysToDisk(memoryKeys);
         setKeys(memoryKeys);
         setCloudReady(true);
         setCloudError(null);
+        attachDebug();
         return { key: entry, saved: true };
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Cloud save failed';
         setCloudError(msg);
+        // Do not keep an unsaved key in the shared catalog view
+        try {
+          const cloud = await fetchCloudPrimary();
+          memoryKeys = cloud.keys.map(toSlimKey);
+          persistKeysToDisk(memoryKeys);
+          setKeys(memoryKeys);
+        } catch {
+          /* keep prior */
+        }
+        attachDebug();
         return {
           key: entry,
           saved: false,
-          error: `Could not save key to the shared cloud store. ${msg}`,
+          error: `Cloud save failed — key was NOT published. ${msg}`,
         };
       }
     },
@@ -336,41 +334,28 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
         return { ok: false, reason: 'Enter a valid key (XXX-XXX-XXX-XXX).' };
       }
 
-      /**
-       * ONE shared catalog — same source Keys analytics reads (`keys` state),
-       * plus module memory, localStorage cache, then worldwide cloud.
-       * Never validate against an empty re-read while analytics still shows keys.
-       */
-      let catalog = mergeKeysCloud(keys, mergeKeysCloud(memoryKeys, readLicenseKeys()));
-
+      // Fresh primary cloud catalog on every Activate attempt (no stale cache / Pages merge)
+      let catalog: LicenseKey[] = [];
       try {
-        const store = await fetchCloudStore();
-        // Cloud wins on conflicts (esp. boundEmail) so a stale local link cannot
-        // block Activate after admin unlink / catalog reset.
-        catalog = mergeKeysCloud(store.keys, catalog);
+        const store = await fetchCloudPrimary();
+        catalog = store.keys.map(toSlimKey);
         memoryKeys = catalog;
         persistKeysToDisk(catalog);
-        const actMap = new Map<string, KeyActivation>();
-        for (const a of memoryActivations) {
-          actMap.set(`${a.email}::${normalizeLicenseKey(a.key)}`, a);
-        }
-        for (const a of store.activations) {
-          actMap.set(`${a.email}::${normalizeLicenseKey(a.key)}`, a);
-        }
-        memoryActivations = Array.from(actMap.values());
+        memoryActivations = store.activations.map((a) => ({ ...a, eaImageUri: null }));
         persistActivationsToDisk(memoryActivations);
         setActivations(memoryActivations);
+        setKeys(catalog);
         setCloudReady(true);
         setCloudError(null);
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Cloud unreachable';
         setCloudError(msg);
+        return {
+          ok: false,
+          catalogCount: 0,
+          reason: `Could not load the license catalog from the cloud. ${msg}`,
+        };
       }
-
-      // Keep React state in lockstep with the catalog Activate just used
-      memoryKeys = catalog;
-      persistKeysToDisk(catalog);
-      setKeys(catalog);
 
       const catalogCount = catalog.length;
       const found = catalog.find((k) => normalizeLicenseKey(k.key) === keyCode);

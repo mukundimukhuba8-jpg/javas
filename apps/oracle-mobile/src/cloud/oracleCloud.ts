@@ -1,4 +1,8 @@
-import { CLOUD_DOC_URL, CLOUD_FALLBACK_URLS, MAX_EA_IMAGE_CHARS } from './config';
+import {
+  CLOUD_DOC_URL,
+  CLOUD_FALLBACK_URLS,
+  MAX_EA_IMAGE_CHARS,
+} from './config';
 import type { ReactivatedEmail } from '../access/types';
 import type { ExpertAdvisor } from '../ea/types';
 import { normalizeLicenseKey, toSlimKey, type KeyActivation, type LicenseKey } from '../license/types';
@@ -129,32 +133,55 @@ function enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-export async function fetchCloudStore(): Promise<OracleCloudStore> {
-  const urls = resolveReadUrls();
-  const snapshots: OracleCloudStore[] = [];
-  const errors: string[] = [];
-  for (const url of urls) {
+/** Live catalog Activate/Create use — primary write URL only (no stale Pages merge). */
+export async function fetchCloudPrimary(): Promise<OracleCloudStore> {
+  const url = resolveWriteUrl();
+  let lastErr: Error | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      snapshots.push(normalizeStore(await fetchJson(url)));
+      return normalizeStore(await fetchJson(url));
     } catch (e) {
-      errors.push(e instanceof Error ? e.message : String(e));
+      lastErr = e instanceof Error ? e : new Error(String(e));
+      await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
     }
   }
-  if (snapshots.length === 0) {
+  throw lastErr || new Error('Cloud store unreachable');
+}
+
+/**
+ * Prefer primary. Fallbacks only if primary is completely down
+ * (so a stale Pages snapshot cannot hide newly written keys).
+ */
+export async function fetchCloudStore(): Promise<OracleCloudStore> {
+  try {
+    return await fetchCloudPrimary();
+  } catch (primaryErr) {
+    const errors: string[] = [
+      primaryErr instanceof Error ? primaryErr.message : String(primaryErr),
+    ];
+    for (const url of CLOUD_FALLBACK_URLS) {
+      try {
+        return normalizeStore(await fetchJson(url));
+      } catch (e) {
+        errors.push(e instanceof Error ? e.message : String(e));
+      }
+    }
     throw new Error(errors[0] || 'Cloud store unreachable');
   }
-  // Fallbacks first, primary (index 0 / write URL) last so it wins on conflicts
-  let merged = { ...EMPTY };
-  for (let i = snapshots.length - 1; i >= 0; i -= 1) {
-    merged = mergeStores(snapshots[i], merged);
-  }
-  return merged;
+}
+
+/** Treat blank / whitespace as unlinked. */
+export function linkedEmailOf(key: Pick<LicenseKey, 'boundEmail'> | null | undefined): string | null {
+  const raw = key?.boundEmail;
+  if (typeof raw !== 'string') return null;
+  const n = raw.trim().toLowerCase();
+  return n || null;
 }
 
 async function putCloudStore(store: OracleCloudStore): Promise<OracleCloudStore> {
   const url = resolveWriteUrl();
-  const payload = {
-    keys: store.keys.map(toSlimKey),
+  const payload: OracleCloudStore = {
+    keys: store.keys.map((k) => toSlimKey({ ...k, boundEmail: linkedEmailOf(k) })),
     reactivated: store.reactivated,
     eas: store.eas.map((e) => ({ ...e, imageUri: capImage(e.imageUri ?? null) })),
     activations: store.activations.map((a) => ({ ...a, eaImageUri: null })),
@@ -171,21 +198,15 @@ async function putCloudStore(store: OracleCloudStore): Promise<OracleCloudStore>
       if (!res.ok && res.status !== 200 && res.status !== 201 && res.status !== 204) {
         throw new Error(`Cloud store write failed (${res.status})`);
       }
-      return { ...payload };
+      // Confirm round-trip on primary — never trust PUT alone
+      const verified = await fetchCloudPrimary();
+      return verified;
     } catch (e) {
       lastErr = e instanceof Error ? e : new Error(String(e));
       await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
     }
   }
   throw lastErr || new Error('Cloud store write failed');
-}
-
-/** Treat blank / whitespace as unlinked. */
-export function linkedEmailOf(key: Pick<LicenseKey, 'boundEmail'> | null | undefined): string | null {
-  const raw = key?.boundEmail;
-  if (typeof raw !== 'string') return null;
-  const n = raw.trim().toLowerCase();
-  return n || null;
 }
 
 export function mergeKeysCloud(a: LicenseKey[], b: LicenseKey[]): LicenseKey[] {
@@ -247,42 +268,42 @@ export function mergeStores(local: Partial<OracleCloudStore>, remote: OracleClou
   };
 }
 
-/** Fetch remote, merge patch, write back (serialized). */
+/** Fetch primary, merge patch, write back, return verified primary snapshot. */
 export async function patchCloudStore(
   patch: Partial<OracleCloudStore>,
 ): Promise<OracleCloudStore> {
   return enqueueWrite(async () => {
     let remote = EMPTY;
     try {
-      remote = await fetchCloudStore();
+      remote = await fetchCloudPrimary();
     } catch {
       remote = EMPTY;
     }
-    const next = mergeStores(patch, remote);
-    // Prefer explicit patch arrays when provided (already merged by caller)
-    if (patch.keys) next.keys = mergeKeysCloud(patch.keys, remote.keys);
-    if (patch.reactivated) next.reactivated = mergeReactivated(patch.reactivated, remote.reactivated);
-    if (patch.eas) next.eas = mergeEas(patch.eas, remote.eas);
-    if (patch.activations) next.activations = mergeActivations(patch.activations, remote.activations);
-    try {
-      await putCloudStore(next);
-      return next;
-    } catch (e) {
-      // Retry once after fresh fetch
-      try {
-        const again = await fetchCloudStore();
-        const retry = mergeStores(next, again);
-        await putCloudStore(retry);
-        return retry;
-      } catch {
-        throw e;
-      }
-    }
+    const next: OracleCloudStore = {
+      keys: patch.keys ? mergeKeysCloud(patch.keys, remote.keys) : remote.keys,
+      reactivated: patch.reactivated
+        ? mergeReactivated(patch.reactivated, remote.reactivated)
+        : remote.reactivated,
+      eas: patch.eas ? mergeEas(patch.eas, remote.eas) : remote.eas,
+      activations: patch.activations
+        ? mergeActivations(patch.activations, remote.activations)
+        : remote.activations,
+      updatedAt: new Date().toISOString(),
+    };
+    return putCloudStore(next);
   });
 }
 
+/** Persist a new key and confirm it is present on the primary cloud document. */
 export async function pushKeyToCloud(key: LicenseKey): Promise<OracleCloudStore> {
-  return patchCloudStore({ keys: [toSlimKey(key)] });
+  const slim = toSlimKey({ ...key, boundEmail: null });
+  const store = await patchCloudStore({ keys: [slim] });
+  const code = normalizeLicenseKey(slim.key);
+  const found = store.keys.some((k) => normalizeLicenseKey(k.key) === code);
+  if (!found) {
+    throw new Error('Cloud write did not persist the new key (verification failed).');
+  }
+  return store;
 }
 
 export async function pushReactivatedToCloud(entry: ReactivatedEmail): Promise<OracleCloudStore> {
@@ -322,7 +343,7 @@ export async function replaceCloudStore(store: OracleCloudStore): Promise<Oracle
 /** Clear boundEmail + activations for one key code. */
 export async function unlinkKeyInCloud(keyCode: string): Promise<OracleCloudStore> {
   const code = normalizeLicenseKey(keyCode);
-  const remote = await fetchCloudStore();
+  const remote = await fetchCloudPrimary();
   const next: OracleCloudStore = {
     ...remote,
     keys: remote.keys.map((k) =>
@@ -339,9 +360,12 @@ export function attachCloudDebug() {
   (window as unknown as { __ORACLE_CLOUD?: object }).__ORACLE_CLOUD = {
     url: resolveWriteUrl(),
     readUrls: resolveReadUrls(),
-    fetch: fetchCloudStore,
+    fetch: fetchCloudPrimary,
+    fetchFallback: fetchCloudStore,
     patch: patchCloudStore,
+    pushKey: pushKeyToCloud,
   };
 }
 
 void stripId;
+void CLOUD_DOC_URL;
