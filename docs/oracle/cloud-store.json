@@ -1,6 +1,19 @@
 {
   "keys": [
     {
+      "id": "key-home-proof-1793030628846",
+      "key": "HB1-3OU-IMG-DEM",
+      "eaId": "ea-unlimited-bull",
+      "eaName": "UNLIMITED BULL",
+      "eaImageUri": null,
+      "ea": "UNLIMITED BULL",
+      "user": "Home Proof",
+      "plan": "90 days",
+      "status": "Active",
+      "createdAt": "2026-10-26T16:03:48.846Z",
+      "boundEmail": null
+    },
+    {
       "id": "key-home-proof-1793030467435",
       "key": "HB1-N57-IMG-DEM",
       "eaId": "ea-unlimited-bull",
@@ -11,7 +24,7 @@
       "plan": "90 days",
       "status": "Active",
       "createdAt": "2026-10-26T16:01:07.435Z",
-      "boundEmail": "home-proof-1793030467767@eatrade.test"
+      "boundEmail": null
     },
     {
       "id": "key-live-1793012627751",
@@ -24,7 +37,7 @@
       "plan": "90 days",
       "status": "Active",
       "createdAt": "2026-10-26T11:03:47.751Z",
-      "boundEmail": "activate-1793012640420@eatrade.test"
+      "boundEmail": null
     },
     {
       "id": "key-3er-user",
@@ -37,7 +50,7 @@
       "plan": "90 days",
       "status": "Active",
       "createdAt": "2026-10-26T11:00:00Z",
-      "boundEmail": "threeer-1793012676378@eatrade.test"
+      "boundEmail": null
     },
     {
       "id": "key-gx2",
@@ -81,6 +94,12 @@
   ],
   "reactivated": [
     {
+      "email": "home-proof-1793030629116@eatrade.test",
+      "paid": true,
+      "reactivatedAt": "2026-10-26T16:03:50.032Z",
+      "status": "active"
+    },
+    {
       "email": "home-proof-1793030467767@eatrade.test",
       "paid": true,
       "reactivatedAt": "2026-10-26T16:01:08.686Z",
@@ -108,31 +127,6 @@
       "createdAt": "2026-10-24T00:00:00Z"
     }
   ],
-  "activations": [
-    {
-      "email": "activate-1793012640420@eatrade.test",
-      "key": "LQ2-4FF-XSY-KJ2",
-      "activatedAt": "2026-10-26T11:04:09.735Z",
-      "eaId": "ea-unlimited-bull",
-      "eaName": "UNLIMITED BULL",
-      "eaImageUri": null
-    },
-    {
-      "email": "threeer-1793012676378@eatrade.test",
-      "key": "3ER-SUA-9PD-GW4",
-      "activatedAt": "2026-10-26T11:04:44.596Z",
-      "eaId": "ea-unlimited-bull",
-      "eaName": "UNLIMITED BULL",
-      "eaImageUri": null
-    },
-    {
-      "email": "home-proof-1793030467767@eatrade.test",
-      "key": "HB1-N57-IMG-DEM",
-      "activatedAt": "2026-10-26T16:01:10.81Z",
-      "eaId": "ea-unlimited-bull",
-      "eaName": "UNLIMITED BULL",
-      "eaImageUri": null
-    }
-  ],
-  "updatedAt": "2026-10-26T16:01:10.904Z"
+  "activations": [],
+  "updatedAt": "2026-10-26T16:10:15.844Z"
 }
