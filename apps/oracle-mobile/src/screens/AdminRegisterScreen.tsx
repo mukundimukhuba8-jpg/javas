@@ -60,11 +60,10 @@ export function AdminRegisterScreen({ onBackToSignIn }: Props) {
       !mentorName.trim() ||
       !email.trim() ||
       !whatsapp.trim() ||
-      !instagram.trim() ||
       !password ||
       !confirmPassword
     ) {
-      setError('All fields are required.');
+      setError('Name, mentor name, email, WhatsApp, and password are required.');
       return;
     }
     if (password !== confirmPassword) {
@@ -193,7 +192,7 @@ export function AdminRegisterScreen({ onBackToSignIn }: Props) {
               placeholder: '+27…',
               keyboardType: 'phone-pad',
             })}
-            {renderField('instagram', 'INSTAGRAM LINK', {
+            {renderField('instagram', 'INSTAGRAM LINK (OPTIONAL)', {
               placeholder: 'https://instagram.com/…',
               keyboardType: 'url',
             })}
