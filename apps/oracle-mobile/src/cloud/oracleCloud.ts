@@ -180,12 +180,21 @@ async function putCloudStore(store: OracleCloudStore): Promise<OracleCloudStore>
   throw lastErr || new Error('Cloud store write failed');
 }
 
+/** Treat blank / whitespace as unlinked. */
+export function linkedEmailOf(key: Pick<LicenseKey, 'boundEmail'> | null | undefined): string | null {
+  const raw = key?.boundEmail;
+  if (typeof raw !== 'string') return null;
+  const n = raw.trim().toLowerCase();
+  return n || null;
+}
+
 export function mergeKeysCloud(a: LicenseKey[], b: LicenseKey[]): LicenseKey[] {
   const byCode = new Map<string, LicenseKey>();
   for (const k of [...b, ...a].map(toSlimKey)) {
     const code = normalizeLicenseKey(k.key);
+    const slim = { ...k, boundEmail: linkedEmailOf(k) };
     const prev = byCode.get(code);
-    if (!prev || (k.createdAt || '') >= (prev.createdAt || '')) byCode.set(code, k);
+    if (!prev || (slim.createdAt || '') >= (prev.createdAt || '')) byCode.set(code, slim);
   }
   return Array.from(byCode.values()).sort((x, y) =>
     (y.createdAt || '').localeCompare(x.createdAt || ''),
@@ -291,8 +300,38 @@ export async function pushActivationToCloud(
 ): Promise<OracleCloudStore> {
   return patchCloudStore({
     activations: [{ ...activation, eaImageUri: null }],
-    keys: [toSlimKey(boundKey)],
+    keys: [toSlimKey({ ...boundKey, boundEmail: linkedEmailOf(boundKey) })],
   });
+}
+
+/** Full replace (no merge) — used to unlink keys / clear test bindings. */
+export async function replaceCloudStore(store: OracleCloudStore): Promise<OracleCloudStore> {
+  return enqueueWrite(async () => {
+    const payload: OracleCloudStore = {
+      keys: store.keys.map((k) => toSlimKey({ ...k, boundEmail: linkedEmailOf(k) })),
+      reactivated: store.reactivated,
+      eas: store.eas.map((e) => ({ ...e, imageUri: capImage(e.imageUri ?? null) })),
+      activations: store.activations.map((a) => ({ ...a, eaImageUri: null })),
+      updatedAt: new Date().toISOString(),
+    };
+    await putCloudStore(payload);
+    return payload;
+  });
+}
+
+/** Clear boundEmail + activations for one key code. */
+export async function unlinkKeyInCloud(keyCode: string): Promise<OracleCloudStore> {
+  const code = normalizeLicenseKey(keyCode);
+  const remote = await fetchCloudStore();
+  const next: OracleCloudStore = {
+    ...remote,
+    keys: remote.keys.map((k) =>
+      normalizeLicenseKey(k.key) === code ? { ...k, boundEmail: null } : k,
+    ),
+    activations: remote.activations.filter((a) => normalizeLicenseKey(a.key) !== code),
+    updatedAt: new Date().toISOString(),
+  };
+  return replaceCloudStore(next);
 }
 
 export function attachCloudDebug() {

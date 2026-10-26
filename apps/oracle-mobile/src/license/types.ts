@@ -58,8 +58,9 @@ export function generateLicenseKeyCode(): string {
   return `${chunk3()}-${chunk3()}-${chunk3()}-${chunk3()}`;
 }
 
-/** Strip images for safe persistence. */
+/** Strip images for safe persistence. Blank boundEmail ⇒ unlinked (null). */
 export function toSlimKey(k: LicenseKey): LicenseKey {
+  const raw = typeof k.boundEmail === 'string' ? k.boundEmail.trim().toLowerCase() : '';
   return {
     id: k.id,
     key: normalizeLicenseKey(k.key),
@@ -71,6 +72,6 @@ export function toSlimKey(k: LicenseKey): LicenseKey {
     plan: k.plan || '',
     status: k.status === 'Expired' ? 'Expired' : 'Active',
     createdAt: k.createdAt || new Date().toISOString(),
-    boundEmail: k.boundEmail ?? null,
+    boundEmail: raw || null,
   };
 }

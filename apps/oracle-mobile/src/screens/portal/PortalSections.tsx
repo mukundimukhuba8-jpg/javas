@@ -901,10 +901,11 @@ function KeysAnalyticsSection({
   onNavigate: (id: PortalSectionId) => void;
 }) {
   const f = useFf(fontsReady);
-  const { keys } = useLicenses();
+  const { keys, unlinkKey } = useLicenses();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'expired'>('all');
   const [copied, setCopied] = useState<string | null>(null);
+  const [unlinking, setUnlinking] = useState<string | null>(null);
 
   const activeCount = keys.filter((k) => k.status === 'Active').length;
   const expiredCount = keys.filter((k) => k.status === 'Expired').length;
@@ -1061,8 +1062,50 @@ function KeysAnalyticsSection({
                 <Ionicons name="calendar-outline" size={12} color={ea.textMuted} />
                 <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
                   {formatKeyDate(item.createdAt)} · {item.user}
-                  {item.boundEmail ? ` · ${item.boundEmail}` : ''}
                 </Text>
+              </View>
+              <View
+                style={{
+                  marginTop: 8,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                }}
+              >
+                <Text style={[styles.kpiSub, f && { fontFamily: f.uiMed }, { flex: 1 }]}>
+                  {item.boundEmail?.trim()
+                    ? `Linked to ${item.boundEmail.trim().toLowerCase()}`
+                    : 'Unassigned'}
+                </Text>
+                {item.boundEmail?.trim() ? (
+                  <Pressable
+                    disabled={unlinking === item.id}
+                    onPress={async () => {
+                      setUnlinking(item.id);
+                      await unlinkKey(item.key);
+                      setUnlinking(null);
+                    }}
+                    style={{
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: ea.orange,
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Unlink ${item.key}`}
+                  >
+                    <Text
+                      style={[
+                        { color: ea.orange, fontSize: 12, fontWeight: '700' },
+                        f && { fontFamily: f.uiBold },
+                      ]}
+                    >
+                      {unlinking === item.id ? '…' : 'Unlink'}
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             </View>
           ))

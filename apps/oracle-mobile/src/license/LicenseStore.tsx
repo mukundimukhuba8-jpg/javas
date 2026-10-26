@@ -11,9 +11,11 @@ import { normalizeEmail } from '../access/types';
 import {
   attachCloudDebug,
   fetchCloudStore,
+  linkedEmailOf,
   mergeKeysCloud,
   pushActivationToCloud,
   pushKeyToCloud,
+  unlinkKeyInCloud,
 } from '../cloud/oracleCloud';
 import {
   generateLicenseKeyCode,
@@ -54,6 +56,7 @@ type LicenseContextValue = {
     eaImageUri?: string | null;
   }) => Promise<CreateKeyResult>;
   activateKey: (email: string, rawKey: string) => Promise<ActivateKeyResult>;
+  unlinkKey: (keyCode: string) => Promise<{ ok: boolean; error?: string }>;
   hasActivatedKey: (email: string) => boolean;
   activationForEmail: (email: string) => KeyActivation | null;
   unlockedRobotsForEmail: (email: string) => UnlockedRobot[];
@@ -342,7 +345,9 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
 
       try {
         const store = await fetchCloudStore();
-        catalog = mergeKeysCloud(catalog, store.keys);
+        // Cloud wins on conflicts (esp. boundEmail) so a stale local link cannot
+        // block Activate after admin unlink / catalog reset.
+        catalog = mergeKeysCloud(store.keys, catalog);
         memoryKeys = catalog;
         persistKeysToDisk(catalog);
         const actMap = new Map<string, KeyActivation>();
@@ -390,7 +395,9 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
             'This key is not linked to an EA. Ask your admin to create the key against an expert advisor.',
         };
       }
-      if (found.boundEmail && found.boundEmail !== n) {
+      // Link only after successful Activate. Empty/null ⇒ unassigned (never "already linked").
+      const linked = linkedEmailOf(found);
+      if (linked && linked !== n) {
         return {
           ok: false,
           catalogCount,
@@ -398,10 +405,14 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
         };
       }
 
+      // Same email re-activating their own key succeeds.
       const already = memoryActivations.some(
         (a) => a.email === n && normalizeLicenseKey(a.key) === keyCode,
       );
-      if (already) return { ok: true, key: found, catalogCount };
+      if (already || linked === n) {
+        const selfBound = { ...found, boundEmail: n };
+        return { ok: true, key: selfBound, catalogCount };
+      }
 
       const activation: KeyActivation = {
         email: n,
@@ -420,6 +431,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       persistActivationsToDisk(nextActs);
       setActivations(nextActs);
 
+      // Bound only here — never on Create keys
       const bound = { ...found, boundEmail: n };
       const nextKeys = catalog.map((k) => (k.id === found.id ? bound : k));
       persistKeysToDisk(nextKeys);
@@ -437,6 +449,41 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     [keys],
   );
 
+  const unlinkKey = useCallback(async (keyCode: string) => {
+    const code = normalizeLicenseKey(keyCode);
+    try {
+      const store = await unlinkKeyInCloud(code);
+      memoryKeys = mergeKeysCloud(store.keys, memoryKeys).map((k) =>
+        normalizeLicenseKey(k.key) === code ? { ...k, boundEmail: null } : k,
+      );
+      // Force unbound on this code even if a stale fallback reintroduced a link
+      memoryKeys = memoryKeys.map((k) =>
+        normalizeLicenseKey(k.key) === code ? { ...k, boundEmail: null } : k,
+      );
+      memoryActivations = memoryActivations.filter((a) => normalizeLicenseKey(a.key) !== code);
+      persistKeysToDisk(memoryKeys);
+      persistActivationsToDisk(memoryActivations);
+      setKeys(memoryKeys);
+      setActivations(memoryActivations);
+      setCloudReady(true);
+      setCloudError(null);
+      return { ok: true };
+    } catch (e) {
+      // Local unlink even if cloud write fails
+      memoryKeys = memoryKeys.map((k) =>
+        normalizeLicenseKey(k.key) === code ? { ...k, boundEmail: null } : k,
+      );
+      memoryActivations = memoryActivations.filter((a) => normalizeLicenseKey(a.key) !== code);
+      persistKeysToDisk(memoryKeys);
+      persistActivationsToDisk(memoryActivations);
+      setKeys([...memoryKeys]);
+      setActivations([...memoryActivations]);
+      const msg = e instanceof Error ? e.message : 'Unlink failed';
+      setCloudError(msg);
+      return { ok: false, error: msg };
+    }
+  }, []);
+
   const value = useMemo(
     () => ({
       keys,
@@ -446,6 +493,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       refreshCloud: applyCloud,
       createKey,
       activateKey,
+      unlinkKey,
       hasActivatedKey,
       activationForEmail,
       unlockedRobotsForEmail,
@@ -458,6 +506,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       applyCloud,
       createKey,
       activateKey,
+      unlinkKey,
       hasActivatedKey,
       activationForEmail,
       unlockedRobotsForEmail,
