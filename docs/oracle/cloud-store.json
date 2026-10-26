@@ -1,45 +1,6 @@
 {
   "keys": [
     {
-      "id": "key-world-1792987988939",
-      "key": "WW1-XX2-YY3-ZZ4",
-      "eaId": "ea-unlimited-bull",
-      "eaName": "UNLIMITED BULL",
-      "eaImageUri": null,
-      "ea": "UNLIMITED BULL",
-      "user": "World Proof",
-      "plan": "90 days",
-      "status": "Active",
-      "createdAt": "2026-10-26T04:13:08.939Z",
-      "boundEmail": null
-    },
-    {
-      "id": "key-ctxa-1792987901451",
-      "key": "AA1-BB2-CC3-DD4",
-      "eaId": "ea-unlimited-bull",
-      "eaName": "UNLIMITED BULL",
-      "eaImageUri": null,
-      "ea": "UNLIMITED BULL",
-      "user": "Context A",
-      "plan": "90 days",
-      "status": "Active",
-      "createdAt": "2026-10-26T04:11:41.451Z",
-      "boundEmail": null
-    },
-    {
-      "id": "key-proof-1792987673350",
-      "key": "ZZ9-YY8-XX7-WW6",
-      "eaId": "ea-unlimited-bull",
-      "eaName": "UNLIMITED BULL",
-      "eaImageUri": null,
-      "ea": "UNLIMITED BULL",
-      "user": "Proof User",
-      "plan": "90 days",
-      "status": "Active",
-      "createdAt": "2026-10-26T04:07:53.35Z",
-      "boundEmail": null
-    },
-    {
       "id": "key-gx2",
       "key": "GX2-6W7-CBA-6R6",
       "eaId": "ea-unlimited-bull",
@@ -49,7 +10,7 @@
       "user": "Mukundi",
       "plan": "90 days",
       "status": "Active",
-      "createdAt": "2026-10-26T04:00:00Z",
+      "createdAt": "2026-10-26T04:00:00.000Z",
       "boundEmail": null
     },
     {
@@ -62,7 +23,7 @@
       "user": "Mukundi I",
       "plan": "90 days",
       "status": "Active",
-      "createdAt": "2026-10-26T03:50:00Z",
+      "createdAt": "2026-10-26T03:50:00.000Z",
       "boundEmail": null
     },
     {
@@ -75,27 +36,20 @@
       "user": "Mukundi",
       "plan": "90 days",
       "status": "Active",
-      "createdAt": "2026-10-25T12:00:00Z",
+      "createdAt": "2026-10-25T12:00:00.000Z",
       "boundEmail": null
     }
   ],
-  "reactivated": [
-    {
-      "email": "gx2-user@eatrade.test",
-      "paid": true,
-      "reactivatedAt": "2026-10-26T04:30:00.000Z",
-      "status": "active"
-    }
-  ],
+  "reactivated": [],
   "eas": [
     {
       "id": "ea-unlimited-bull",
       "name": "UNLIMITED BULL",
       "imageUri": null,
       "type": "Standard",
-      "createdAt": "2026-10-25T12:00:00Z"
+      "createdAt": "2026-10-25T12:00:00.000Z"
     }
   ],
   "activations": [],
-  "updatedAt": "2026-10-26T04:32:00.000Z"
+  "updatedAt": "2026-10-26T05:15:00.000Z"
 }
