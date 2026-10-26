@@ -655,8 +655,8 @@ export async function registerMentorWaiting(
   const email = input.email.trim().toLowerCase();
   const whatsapp = input.whatsapp.trim();
   const instagram = input.instagram.trim();
-  if (!name || !mentorName || !email || !whatsapp || !instagram) {
-    return { ok: false, reason: 'Fill in every field.' };
+  if (!name || !mentorName || !email || !whatsapp) {
+    return { ok: false, reason: 'Name, mentor name, email, and WhatsApp are required.' };
   }
   if (!email.includes('@')) {
     return { ok: false, reason: 'Enter a valid email.' };
@@ -681,7 +681,7 @@ export async function registerMentorWaiting(
         mentorName,
         email,
         whatsapp,
-        instagram,
+        ...(instagram ? { instagram } : {}),
         status: 'waiting',
         keysAllowed: 0,
         keysUsed: 0,
