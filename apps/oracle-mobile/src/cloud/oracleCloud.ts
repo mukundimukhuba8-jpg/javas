@@ -284,6 +284,17 @@ function mergeReactivated(a: ReactivatedEmail[], b: ReactivatedEmail[]): Reactiv
   return Array.from(map.values()).filter((e) => e.status === 'active');
 }
 
+function preferEaImage(a: string | null | undefined, b: string | null | undefined): string | null {
+  const A = capImage(a ?? null);
+  const B = capImage(b ?? null);
+  if (A && B) {
+    if (/^https?:\/\//i.test(A)) return A;
+    if (/^https?:\/\//i.test(B)) return B;
+    return A.length >= B.length ? A : B;
+  }
+  return A || B;
+}
+
 function mergeEas(a: ExpertAdvisor[], b: ExpertAdvisor[]): ExpertAdvisor[] {
   const map = new Map<string, ExpertAdvisor>();
   for (const e of [...b, ...a]) {
@@ -296,11 +307,11 @@ function mergeEas(a: ExpertAdvisor[], b: ExpertAdvisor[]): ExpertAdvisor[] {
     }
     const newer = (e.createdAt || '') >= (prev.createdAt || '') ? e : prev;
     const older = newer === e ? prev : e;
-    // Never let a null image overwrite a real uploaded picture
+    // Never let a null/tiny stub overwrite a real uploaded picture
     map.set(e.id, {
       ...newer,
       name: newer.name || older.name,
-      imageUri: capImage(newer.imageUri ?? null) || capImage(older.imageUri ?? null),
+      imageUri: preferEaImage(newer.imageUri, older.imageUri),
     });
   }
   return Array.from(map.values());

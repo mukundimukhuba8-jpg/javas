@@ -43,11 +43,16 @@ export function HomeScreen({
     const live =
       eas.find((e) => e.id === r.id) ||
       eas.find((e) => e.name.trim().toLowerCase() === r.name.trim().toLowerCase());
-    // Prefer live cloud/local EA upload; never fall back to built-in hero when EA has imageUri
-    const uploaded =
-      (typeof live?.imageUri === 'string' && live.imageUri.trim()) ||
-      (typeof r.imageUri === 'string' && r.imageUri.trim()) ||
-      null;
+    const a = typeof live?.imageUri === 'string' ? live.imageUri.trim() : '';
+    const b = typeof r.imageUri === 'string' ? r.imageUri.trim() : '';
+    let uploaded: string | null = null;
+    if (a && b) {
+      if (/^https?:\/\//i.test(a)) uploaded = a;
+      else if (/^https?:\/\//i.test(b)) uploaded = b;
+      else uploaded = a.length >= b.length ? a : b;
+    } else {
+      uploaded = a || b || null;
+    }
     return {
       ...r,
       name: (live?.name || r.name || '').trim() || r.name,

@@ -79,6 +79,18 @@ function persist(eas: ExpertAdvisor[], selectedId: string | null) {
   }
 }
 
+function preferImage(a: string | null | undefined, b: string | null | undefined): string | null {
+  const A = typeof a === 'string' && a.trim() ? a.trim() : null;
+  const B = typeof b === 'string' && b.trim() ? b.trim() : null;
+  if (A && B) {
+    if (/^https?:\/\//i.test(A)) return A;
+    if (/^https?:\/\//i.test(B)) return B;
+    // Prefer the richer upload (avoids a stale 1×1 placeholder beating a real photo)
+    return A.length >= B.length ? A : B;
+  }
+  return A || B;
+}
+
 function mergeEaLists(a: ExpertAdvisor[], b: ExpertAdvisor[]): ExpertAdvisor[] {
   const map = new Map<string, ExpertAdvisor>();
   for (const e of [...b, ...a]) {
@@ -88,12 +100,12 @@ function mergeEaLists(a: ExpertAdvisor[], b: ExpertAdvisor[]): ExpertAdvisor[] {
       map.set(e.id, e);
       continue;
     }
-    // Prefer newer metadata, but never drop a real uploaded image for null
+    // Prefer newer metadata, but never drop a real uploaded image for null / tiny stub
     const newer = (e.createdAt || '') >= (prev.createdAt || '') ? e : prev;
     const older = newer === e ? prev : e;
     map.set(e.id, {
       ...newer,
-      imageUri: newer.imageUri || older.imageUri || null,
+      imageUri: preferImage(newer.imageUri, older.imageUri),
       name: newer.name || older.name,
     });
   }
