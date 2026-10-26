@@ -1,1 +1,84 @@
-{"keys": [], "reactivated": [], "eas": []}
+{
+  "keys": [
+    {
+      "id": "key-proof-1792987673350",
+      "key": "ZZ9-YY8-XX7-WW6",
+      "eaId": "ea-unlimited-bull",
+      "eaName": "UNLIMITED BULL",
+      "eaImageUri": null,
+      "ea": "UNLIMITED BULL",
+      "user": "Proof User",
+      "plan": "90 days",
+      "status": "Active",
+      "createdAt": "2026-10-26T04:07:53.35Z",
+      "boundEmail": null
+    },
+    {
+      "id": "key-gx2",
+      "key": "GX2-6W7-CBA-6R6",
+      "eaId": "ea-unlimited-bull",
+      "eaName": "UNLIMITED BULL",
+      "eaImageUri": null,
+      "ea": "UNLIMITED BULL",
+      "user": "Mukundi",
+      "plan": "90 days",
+      "status": "Active",
+      "createdAt": "2026-10-26T04:00:00Z",
+      "boundEmail": "proof@eatrade.test"
+    },
+    {
+      "id": "key-s4a",
+      "key": "S4A-BR2-ZEL-3LF",
+      "eaId": "ea-unlimited-bull",
+      "eaName": "UNLIMITED BULL",
+      "eaImageUri": null,
+      "ea": "UNLIMITED BULL",
+      "user": "Mukundi I",
+      "plan": "90 days",
+      "status": "Active",
+      "createdAt": "2026-10-26T03:50:00Z",
+      "boundEmail": null
+    },
+    {
+      "id": "key-wq2",
+      "key": "WQ2-T34-TNC-KV3",
+      "eaId": "ea-unlimited-bull",
+      "eaName": "UNLIMITED BULL",
+      "eaImageUri": null,
+      "ea": "UNLIMITED BULL",
+      "user": "Mukundi",
+      "plan": "90 days",
+      "status": "Active",
+      "createdAt": "2026-10-25T12:00:00Z",
+      "boundEmail": null
+    }
+  ],
+  "reactivated": [
+    {
+      "email": "proof@eatrade.test",
+      "paid": true,
+      "reactivatedAt": "2026-10-26T04:10:00Z",
+      "status": "active"
+    }
+  ],
+  "eas": [
+    {
+      "id": "ea-unlimited-bull",
+      "name": "UNLIMITED BULL",
+      "imageUri": null,
+      "type": "Standard",
+      "createdAt": "2026-10-25T12:00:00Z"
+    }
+  ],
+  "activations": [
+    {
+      "email": "proof@eatrade.test",
+      "key": "GX2-6W7-CBA-6R6",
+      "activatedAt": "2026-10-26T04:08:05.081Z",
+      "eaId": "ea-unlimited-bull",
+      "eaName": "UNLIMITED BULL",
+      "eaImageUri": null
+    }
+  ],
+  "updatedAt": "2026-10-26T04:08:06.213Z"
+}

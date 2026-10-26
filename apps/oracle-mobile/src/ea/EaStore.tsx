@@ -121,7 +121,7 @@ export function EaProvider({ children }: { children: ReactNode }) {
     void pull();
     const id = setInterval(() => {
       void pull();
-    }, 20000);
+    }, 60000);
     return () => {
       cancelled = true;
       clearInterval(id);

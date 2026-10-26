@@ -1,4 +1,4 @@
-import { CLOUD_DOC_URL, MAX_EA_IMAGE_CHARS } from './config';
+import { CLOUD_DOC_URL, CLOUD_FALLBACK_URLS, MAX_EA_IMAGE_CHARS } from './config';
 import type { ReactivatedEmail } from '../access/types';
 import type { ExpertAdvisor } from '../ea/types';
 import { normalizeLicenseKey, toSlimKey, type KeyActivation, type LicenseKey } from '../license/types';
@@ -19,7 +19,7 @@ const EMPTY: OracleCloudStore = {
   updatedAt: new Date(0).toISOString(),
 };
 
-function resolveUrl(): string {
+function resolveWriteUrl(): string {
   if (typeof window !== 'undefined') {
     const w = window as unknown as { __ORACLE_CLOUD_URL?: string };
     if (w.__ORACLE_CLOUD_URL && typeof w.__ORACLE_CLOUD_URL === 'string') {
@@ -27,6 +27,22 @@ function resolveUrl(): string {
     }
   }
   return CLOUD_DOC_URL;
+}
+
+function resolveReadUrls(): string[] {
+  const primary = resolveWriteUrl();
+  const extras = CLOUD_FALLBACK_URLS.filter((u) => u !== primary);
+  return [primary, ...extras];
+}
+
+async function fetchJson(url: string): Promise<unknown> {
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error(`Cloud read failed (${res.status}) at ${url}`);
+  return res.json();
 }
 
 function stripId<T extends Record<string, unknown>>(obj: T): Omit<T, '_id'> {
@@ -114,21 +130,28 @@ function enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 export async function fetchCloudStore(): Promise<OracleCloudStore> {
-  const url = resolveUrl();
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-    cache: 'no-store',
-  });
-  if (!res.ok) {
-    throw new Error(`Cloud store read failed (${res.status})`);
+  const urls = resolveReadUrls();
+  let merged = { ...EMPTY };
+  let any = false;
+  const errors: string[] = [];
+  for (const url of urls) {
+    try {
+      const json = await fetchJson(url);
+      merged = mergeStores(normalizeStore(json), merged);
+      any = true;
+      // Prefer a successful primary write-target; still merge fallbacks for completeness
+    } catch (e) {
+      errors.push(e instanceof Error ? e.message : String(e));
+    }
   }
-  const json = await res.json();
-  return normalizeStore(json);
+  if (!any) {
+    throw new Error(errors[0] || 'Cloud store unreachable');
+  }
+  return merged;
 }
 
 async function putCloudStore(store: OracleCloudStore): Promise<OracleCloudStore> {
-  const url = resolveUrl();
+  const url = resolveWriteUrl();
   const payload = {
     keys: store.keys.map(toSlimKey),
     reactivated: store.reactivated,
@@ -136,18 +159,24 @@ async function putCloudStore(store: OracleCloudStore): Promise<OracleCloudStore>
     activations: store.activations.map((a) => ({ ...a, eaImageUri: null })),
     updatedAt: new Date().toISOString(),
   };
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-    // crudcrud PUT returns empty body on success sometimes
-    if (res.status !== 200 && res.status !== 201 && res.status !== 204) {
-      throw new Error(`Cloud store write failed (${res.status})`);
+  let lastErr: Error | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok && res.status !== 200 && res.status !== 201 && res.status !== 204) {
+        throw new Error(`Cloud store write failed (${res.status})`);
+      }
+      return { ...payload };
+    } catch (e) {
+      lastErr = e instanceof Error ? e : new Error(String(e));
+      await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
     }
   }
-  return { ...payload };
+  throw lastErr || new Error('Cloud store write failed');
 }
 
 export function mergeKeysCloud(a: LicenseKey[], b: LicenseKey[]): LicenseKey[] {
@@ -268,7 +297,8 @@ export async function pushActivationToCloud(
 export function attachCloudDebug() {
   if (typeof window === 'undefined') return;
   (window as unknown as { __ORACLE_CLOUD?: object }).__ORACLE_CLOUD = {
-    url: resolveUrl(),
+    url: resolveWriteUrl(),
+    readUrls: resolveReadUrls(),
     fetch: fetchCloudStore,
     patch: patchCloudStore,
   };

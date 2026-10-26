@@ -124,7 +124,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     void refreshCloudAccess();
     const id = setInterval(() => {
       void refreshCloudAccess();
-    }, 20000);
+    }, 60000);
     return () => clearInterval(id);
   }, [refreshCloudAccess]);
 

@@ -214,7 +214,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     void applyCloud();
     const id = setInterval(() => {
       void applyCloud();
-    }, 20000);
+    }, 60000);
     return () => clearInterval(id);
   }, [applyCloud]);
 
