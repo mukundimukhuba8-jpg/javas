@@ -1,0 +1,7 @@
+name = "oracle-ea-trade-store"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+[[kv_namespaces]]
+binding = "ORACLE_STORE"
+id = "24bfbe66baf140d6ac5766e30e78aee6"
