@@ -1465,10 +1465,8 @@ function ManageMentorsSection({ fontsReady }: { fontsReady: boolean }) {
       }
     };
     void pull();
-    const timer = setInterval(() => void pull(), 12_000);
     return () => {
       cancelled = true;
-      clearInterval(timer);
     };
   }, []);
 
