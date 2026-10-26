@@ -42,3 +42,4 @@ yarn-error.*
 
 dist-web/
 .expo/
+dist-web-pages/
