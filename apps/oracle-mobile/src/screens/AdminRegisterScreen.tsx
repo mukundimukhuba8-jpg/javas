@@ -76,6 +76,7 @@ export function AdminRegisterScreen({ onBackToSignIn }: Props) {
     }
 
     setBusy(true);
+    setError(null);
     try {
       const result = await registerMentorWaiting({
         name,
@@ -85,16 +86,18 @@ export function AdminRegisterScreen({ onBackToSignIn }: Props) {
         instagram,
       });
       if (!result.ok) {
-        setError(result.reason);
+        setError(result.reason || 'Could not save registration.');
+        setBusy(false);
         return;
       }
       setError(null);
       setSuccess('Registration submitted. Waiting for admin approval.');
       setFields(EMPTY);
+      setBusy(false);
       setTimeout(() => onBackToSignIn(), 1600);
-    } catch {
-      setError('Could not save registration. Try again.');
-    } finally {
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Could not save registration. Try again.';
+      setError(msg);
       setBusy(false);
     }
   };

@@ -8,7 +8,7 @@
  * Override at runtime: window.__ORACLE_CLOUD_URL
  */
 export const CLOUD_DOC_URL =
-  'https://crudcrud.com/api/d0beed68a3bf499a97e4dd1598fc9ff8/oracle/6adf7cf1286ff303e839ba7e';
+  'https://crudcrud.com/api/ae56a742c94a4577953e70db49d1dd60/oracle/6adf95db17adab03e8d8be8d';
 
 /** Same-origin / raw snapshots — last-resort reads only. */
 export const CLOUD_FALLBACK_URLS: string[] = [
