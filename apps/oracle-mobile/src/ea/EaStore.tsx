@@ -8,8 +8,9 @@ import {
   type ReactNode,
 } from 'react';
 import { Platform } from 'react-native';
+import { usePortalSession } from '../access/portalSession';
 import { fetchCloudPrimary, pushEaToCloud } from '../cloud/oracleCloud';
-import type { ExpertAdvisor } from './types';
+import { filterEasForMentor, type ExpertAdvisor } from './types';
 
 const STORAGE_KEY = 'oracle.eas.v1';
 const SELECTED_KEY = 'oracle.eas.selected.v1';
@@ -107,13 +108,19 @@ function mergeEaLists(a: ExpertAdvisor[], b: ExpertAdvisor[]): ExpertAdvisor[] {
       ...newer,
       imageUri: preferImage(newer.imageUri, older.imageUri),
       name: newer.name || older.name,
+      mentorId: newer.mentorId || older.mentorId || 'legacy',
     });
   }
   return Array.from(map.values());
 }
 
 export function EaProvider({ children }: { children: ReactNode }) {
-  const [eas, setEas] = useState<ExpertAdvisor[]>(() => loadEas());
+  const { scopeMentorId, session } = usePortalSession();
+  const [easAll, setEas] = useState<ExpertAdvisor[]>(() => loadEas());
+  const eas = useMemo(
+    () => filterEasForMentor(easAll, scopeMentorId),
+    [easAll, scopeMentorId],
+  );
   const [selectedId, setSelectedId] = useState<string | null>(() => loadSelectedId(loadEas()));
 
   useEffect(() => {
@@ -127,8 +134,8 @@ export function EaProvider({ children }: { children: ReactNode }) {
   }, [eas, selectedId]);
 
   useEffect(() => {
-    persist(eas, selectedId);
-  }, [eas, selectedId]);
+    persist(easAll, selectedId);
+  }, [easAll, selectedId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,7 +143,15 @@ export function EaProvider({ children }: { children: ReactNode }) {
       try {
         const store = await fetchCloudPrimary();
         if (cancelled) return;
-        setEas((prev) => mergeEaLists(store.eas, prev));
+        setEas((prev) =>
+          mergeEaLists(
+            store.eas.map((e) => ({
+              ...e,
+              mentorId: e.mentorId || 'legacy',
+            })),
+            prev,
+          ),
+        );
       } catch {
         /* keep local */
       }
@@ -162,12 +177,14 @@ export function EaProvider({ children }: { children: ReactNode }) {
       imageUri: string | null;
       type: 'Standard' | 'Self-host';
     }) => {
+      const mentorId = session?.mentorId || scopeMentorId || 'legacy';
       const entry: ExpertAdvisor = {
         id: `ea-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         name: input.name.trim(),
         imageUri: input.imageUri,
         type: input.type,
         createdAt: new Date().toISOString(),
+        mentorId,
       };
       setEas((prev) => [entry, ...prev]);
       setSelectedId(entry.id);
@@ -179,6 +196,7 @@ export function EaProvider({ children }: { children: ReactNode }) {
             ...entry,
             imageUri: cloudEa.imageUri || entry.imageUri,
             name: cloudEa.name || entry.name,
+            mentorId: cloudEa.mentorId || entry.mentorId,
           };
           setEas((prev) => mergeEaLists([synced], prev));
           return synced;
@@ -188,47 +206,65 @@ export function EaProvider({ children }: { children: ReactNode }) {
       }
       return entry;
     },
-    [],
+    [session?.mentorId, scopeMentorId],
   );
 
-  const updateEaImage = useCallback(async (id: string, imageUri: string | null) => {
-    const current = eas.find((e) => e.id === id);
-    const updated: ExpertAdvisor = current
-      ? { ...current, imageUri, createdAt: new Date().toISOString() }
-      : {
-          id,
-          name: 'EA',
-          imageUri,
-          type: 'Standard',
-          createdAt: new Date().toISOString(),
-        };
-    // Optimistic local preview
-    setEas((prev) => prev.map((e) => (e.id === id ? { ...e, imageUri } : e)));
-    setSelectedId(id);
-    const store = await pushEaToCloud(updated);
-    const cloudEa = store.eas.find((e) => e.id === id);
-    const persisted = cloudEa?.imageUri || imageUri;
-    setEas((prev) =>
-      prev.map((e) =>
-        e.id === id
-          ? { ...e, imageUri: persisted, name: cloudEa?.name || e.name }
-          : e,
-      ),
-    );
-  }, [eas]);
+  const updateEaImage = useCallback(
+    async (id: string, imageUri: string | null) => {
+      const current = easAll.find((e) => e.id === id);
+      if (scopeMentorId && current && (current.mentorId || 'legacy') !== scopeMentorId) {
+        throw new Error('You cannot edit another mentor’s EA.');
+      }
+      const updated: ExpertAdvisor = current
+        ? { ...current, imageUri, createdAt: new Date().toISOString() }
+        : {
+            id,
+            name: 'EA',
+            imageUri,
+            type: 'Standard',
+            createdAt: new Date().toISOString(),
+            mentorId: session?.mentorId || scopeMentorId || 'legacy',
+          };
+      setEas((prev) => prev.map((e) => (e.id === id ? { ...e, imageUri } : e)));
+      setSelectedId(id);
+      const store = await pushEaToCloud(updated);
+      const cloudEa = store.eas.find((e) => e.id === id);
+      const persisted = cloudEa?.imageUri || imageUri;
+      setEas((prev) =>
+        prev.map((e) =>
+          e.id === id
+            ? {
+                ...e,
+                imageUri: persisted,
+                name: cloudEa?.name || e.name,
+                mentorId: cloudEa?.mentorId || e.mentorId,
+              }
+            : e,
+        ),
+      );
+    },
+    [easAll, scopeMentorId, session?.mentorId],
+  );
 
   const getEaById = useCallback(
-    (id: string) => eas.find((e) => e.id === id) ?? null,
-    [eas],
+    (id: string) => easAll.find((e) => e.id === id) ?? null,
+    [easAll],
   );
 
-  const removeEa = useCallback((id: string) => {
-    setEas((prev) => {
-      const next = prev.filter((e) => e.id !== id);
-      setSelectedId((cur) => (cur === id ? next[0]?.id ?? null : cur));
-      return next;
-    });
-  }, []);
+  const removeEa = useCallback(
+    (id: string) => {
+      const target = easAll.find((e) => e.id === id);
+      if (scopeMentorId && target && (target.mentorId || 'legacy') !== scopeMentorId) {
+        return;
+      }
+      setEas((prev) => {
+        const next = prev.filter((e) => e.id !== id);
+        setSelectedId((cur) => (cur === id ? next[0]?.id ?? null : cur));
+        return next;
+      });
+    },
+    [easAll, scopeMentorId],
+  );
 
   const selectEa = useCallback((id: string) => {
     setSelectedId(id);

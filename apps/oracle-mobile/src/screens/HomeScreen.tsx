@@ -37,12 +37,14 @@ export function HomeScreen({
   const [robotsOpen, setRobotsOpen] = useState(false);
   const { sessionEmail, signOut } = useAccess();
   const { unlockedRobotsForEmail } = useLicenses();
-  const { eas } = useEas();
+  // getEaById reads the full catalog (not mentor-scoped portal filter)
+  const { eas, getEaById } = useEas();
 
   const robots = (sessionEmail ? unlockedRobotsForEmail(sessionEmail) : []).map((r) => {
     const live =
+      getEaById(r.id) ||
       eas.find((e) => e.id === r.id) ||
-      eas.find((e) => e.name.trim().toLowerCase() === r.name.trim().toLowerCase());
+      eas.find((e) => e.name.trim().toLowerCase() === (r.name || '').trim().toLowerCase());
     const a = typeof live?.imageUri === 'string' ? live.imageUri.trim() : '';
     const b = typeof r.imageUri === 'string' ? r.imageUri.trim() : '';
     let uploaded: string | null = null;

@@ -26,6 +26,8 @@ export type Mentor = {
   keysAllowed: number;
   keysUsed: number;
   registeredAt?: string;
+  /** SHA-256 hex of portal password — never plaintext in UI */
+  passwordHash?: string;
 };
 
 /** Paid subscription requests awaiting admin approval (before license keys). */
@@ -59,7 +61,7 @@ const EMPTY: OracleCloudStore = {
 
 function normalizeMentor(raw: unknown): Mentor | null {
   if (!raw || typeof raw !== 'object') return null;
-  const m = raw as Partial<Mentor>;
+  const m = raw as Partial<Mentor> & { passwordHash?: unknown };
   if (typeof m.id !== 'string' || !m.id) return null;
   const status = m.status === 'approved' ? 'approved' : 'waiting';
   return {
@@ -73,6 +75,7 @@ function normalizeMentor(raw: unknown): Mentor | null {
     keysAllowed: typeof m.keysAllowed === 'number' && m.keysAllowed >= 0 ? m.keysAllowed : 0,
     keysUsed: typeof m.keysUsed === 'number' && m.keysUsed >= 0 ? m.keysUsed : 0,
     registeredAt: typeof m.registeredAt === 'string' ? m.registeredAt : undefined,
+    passwordHash: typeof m.passwordHash === 'string' && m.passwordHash ? m.passwordHash : undefined,
   };
 }
 
@@ -80,7 +83,19 @@ function mergeMentors(a: Mentor[], b: Mentor[]): Mentor[] {
   const map = new Map<string, Mentor>();
   for (const m of [...b, ...a]) {
     if (!m?.id) continue;
-    map.set(m.id, m);
+    const prev = map.get(m.id);
+    if (!prev) {
+      map.set(m.id, m);
+      continue;
+    }
+    // Prefer richer record; never drop passwordHash when merging
+    map.set(m.id, {
+      ...prev,
+      ...m,
+      passwordHash: m.passwordHash || prev.passwordHash,
+      keysAllowed: Math.max(m.keysAllowed ?? 0, prev.keysAllowed ?? 0),
+      keysUsed: Math.max(m.keysUsed ?? 0, prev.keysUsed ?? 0),
+    });
   }
   return Array.from(map.values());
 }
@@ -748,6 +763,8 @@ export type MentorRegistrationInput = {
   email: string;
   whatsapp: string;
   instagram: string;
+  /** Plain password — hashed before cloud write */
+  password: string;
 };
 
 /** Append a public signup as status waiting — never auto-approves. */
@@ -759,14 +776,20 @@ export async function registerMentorWaiting(
   const email = input.email.trim().toLowerCase();
   const whatsapp = input.whatsapp.trim();
   const instagram = input.instagram.trim();
+  const password = input.password || '';
   if (!name || !mentorName || !email || !whatsapp) {
     return { ok: false, reason: 'Name, mentor name, email, and WhatsApp are required.' };
   }
   if (!email.includes('@')) {
     return { ok: false, reason: 'Enter a valid email.' };
   }
+  if (password.length < 6) {
+    return { ok: false, reason: 'Password must be at least 6 characters.' };
+  }
 
   try {
+    const { hashPortalPassword } = await import('../access/adminAuth');
+    const passwordHash = await hashPortalPassword(password);
     const mentor: Mentor = {
       id: `mentor_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
       name,
@@ -778,6 +801,7 @@ export async function registerMentorWaiting(
       keysAllowed: 0,
       keysUsed: 0,
       registeredAt: new Date().toISOString(),
+      passwordHash,
     };
     const store = await enqueueWrite(async () => {
       const remote = await fetchCloudPrimary();

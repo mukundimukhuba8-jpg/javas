@@ -12,9 +12,12 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { portalFonts, usePortalFonts } from '../../theme/portalFonts';
+import { usePortalSession } from '../../access/portalSession';
 import { PORTAL_MENU, type PortalSectionId } from './portalSections';
 import { PortalSectionBody } from './PortalSections';
 import { ea } from './eaTradeTheme';
+
+const SUPERADMIN_ONLY: PortalSectionId[] = ['manage-users', 'subscription'];
 
 type Props = {
   onExit: () => void;
@@ -59,8 +62,16 @@ export function PortalScreen({ onExit, initialSection = 'dashboard' }: Props) {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 960;
   const sidebarWidth = Math.min(288, Math.max(248, width * 0.78));
+  const { session, isSuperadmin, signOutPortal } = usePortalSession();
 
-  const [section, setSection] = useState<PortalSectionId>(initialSection);
+  const menu = PORTAL_MENU.filter(
+    (item) => isSuperadmin || !SUPERADMIN_ONLY.includes(item.id),
+  );
+
+  const [section, setSection] = useState<PortalSectionId>(() => {
+    if (!isSuperadmin && SUPERADMIN_ONLY.includes(initialSection)) return 'dashboard';
+    return initialSection;
+  });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [desktopBooted, setDesktopBooted] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -146,17 +157,25 @@ export function PortalScreen({ onExit, initialSection = 'dashboard' }: Props) {
 
       {menuOpen ? (
         <View style={styles.accountMenu}>
-          <Text style={[styles.accountEmail, f && { fontFamily: f.uiMed }]}>
-            eatrade@gmail.com
+          <Text
+            style={[styles.accountEmail, f && { fontFamily: f.uiMed }]}
+            testID="portal-session-email"
+          >
+            {session?.email || 'portal'}
+          </Text>
+          <Text style={[styles.accountEmail, f && { fontFamily: f.ui }, { opacity: 0.7, fontSize: 12 }]}>
+            {isSuperadmin ? 'Superadmin · all catalogs' : `Mentor · ${session?.name || 'scoped'}`}
           </Text>
           <Pressable
             onPress={() => {
               setMenuOpen(false);
+              signOutPortal();
               onExit();
             }}
             style={styles.accountExit}
             accessibilityRole="button"
             accessibilityLabel="Exit portal"
+            testID="portal-exit"
           >
             <Ionicons name="exit-outline" size={16} color={ea.text} />
             <Text style={[styles.accountExitText, f && { fontFamily: f.uiBold }]}>EXIT</Text>
@@ -209,7 +228,7 @@ export function PortalScreen({ onExit, initialSection = 'dashboard' }: Props) {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.navScroll}
           >
-            {PORTAL_MENU.map((item) => {
+            {menu.map((item) => {
               const selected = item.id === section;
               return (
                 <Pressable
@@ -219,6 +238,7 @@ export function PortalScreen({ onExit, initialSection = 'dashboard' }: Props) {
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
                   accessibilityLabel={item.title}
+                  testID={`portal-nav-${item.id}`}
                 >
                   <Ionicons
                     name={item.icon}

@@ -13,6 +13,7 @@ import { PortalScreen } from './src/screens/portal/PortalScreen';
 import { ThemeProvider } from './src/theme/ThemeContext';
 import { EaProvider } from './src/ea/EaStore';
 import { AccessProvider, useAccess } from './src/access/AccessStore';
+import { PortalSessionProvider } from './src/access/portalSession';
 import { LicenseProvider, useLicenses } from './src/license/LicenseStore';
 import type { TabKey } from './src/components/BottomNav';
 import type { PortalSectionId } from './src/screens/portal/portalSections';
@@ -145,12 +146,14 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <AccessProvider>
-          <LicenseProvider>
-            <EaProvider>
-              <StatusBar style="light" />
-              <AppShell />
-            </EaProvider>
-          </LicenseProvider>
+          <PortalSessionProvider>
+            <LicenseProvider>
+              <EaProvider>
+                <StatusBar style="light" />
+                <AppShell />
+              </EaProvider>
+            </LicenseProvider>
+          </PortalSessionProvider>
         </AccessProvider>
       </ThemeProvider>
     </SafeAreaProvider>

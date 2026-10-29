@@ -15,6 +15,8 @@ export type LicenseKey = {
   status: 'Active' | 'Expired';
   createdAt: string;
   boundEmail: string | null;
+  /** Owning mentor portal id — isolates catalogs per mentor */
+  mentorId: string;
 };
 
 export type KeyActivation = {
@@ -61,6 +63,8 @@ export function generateLicenseKeyCode(): string {
 /** Strip images for safe persistence. Blank boundEmail ⇒ unlinked (null). */
 export function toSlimKey(k: LicenseKey): LicenseKey {
   const raw = typeof k.boundEmail === 'string' ? k.boundEmail.trim().toLowerCase() : '';
+  const mentorId =
+    typeof k.mentorId === 'string' && k.mentorId.trim() ? k.mentorId.trim() : 'legacy';
   return {
     id: k.id,
     key: normalizeLicenseKey(k.key),
@@ -73,5 +77,15 @@ export function toSlimKey(k: LicenseKey): LicenseKey {
     status: k.status === 'Expired' ? 'Expired' : 'Active',
     createdAt: k.createdAt || new Date().toISOString(),
     boundEmail: raw || null,
+    mentorId,
   };
+}
+
+/** Portal list filter — superadmin (scope null) sees all. */
+export function filterKeysForMentor(
+  keys: LicenseKey[],
+  scopeMentorId: string | null,
+): LicenseKey[] {
+  if (!scopeMentorId) return keys;
+  return keys.filter((k) => (k.mentorId || 'legacy') === scopeMentorId);
 }
