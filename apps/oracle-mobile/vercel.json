@@ -2,8 +2,8 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "npm install --legacy-peer-deps",
-  "buildCommand": "VERCEL=1 EXPO_BASE_URL=/ npm run export:web",
-  "outputDirectory": "dist-web-pages",
+  "buildCommand": "cd ../.. && SKIP_MONOREPO_BUILD=1 node scripts/build-oracle-public.mjs",
+  "outputDirectory": "../../public",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],

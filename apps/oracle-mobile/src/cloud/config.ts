@@ -13,10 +13,7 @@ export const CLOUD_DOC_URL =
 /** Same-origin / raw snapshots — last-resort reads only. */
 export const CLOUD_FALLBACK_URLS: string[] = [
   'cloud-store.json',
-<<<<<<< HEAD
   '/cloud-store.json',
-=======
->>>>>>> origin/main
   '/javas/oracle/cloud-store.json',
   'https://raw.githubusercontent.com/mukundimukhuba8-jpg/javas/main/docs/oracle/cloud-store.json',
 ];

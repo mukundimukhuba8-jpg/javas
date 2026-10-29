@@ -10,8 +10,9 @@
   "scripts": {
     "zero": "pnpm build && tsx scripts/zero.ts",
     "preview:web": "pnpm --filter @zero/preview start",
-    "build": "pnpm -r --filter './packages/*' --filter './services/*' --filter './apps/*' run build",
-    "build:oracle-web": "cd apps/oracle-mobile && npm install --legacy-peer-deps && VERCEL=1 EXPO_BASE_URL=/ npm run export:web",
+    "build": "node scripts/build-oracle-public.mjs",
+    "build:packages": "pnpm -r --filter './packages/*' --filter './services/*' --filter './apps/*' run build",
+    "build:oracle-web": "SKIP_MONOREPO_BUILD=1 node scripts/build-oracle-public.mjs",
     "dev": "pnpm build && tsx scripts/zero.ts --dev",
     "typecheck": "pnpm -r --filter './packages/*' --filter './services/*' --filter './apps/*' run typecheck",
     "lint": "eslint . --max-warnings=0",
