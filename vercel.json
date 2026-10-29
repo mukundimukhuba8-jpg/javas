@@ -1,0 +1,18 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "cd apps/oracle-mobile && npm install --legacy-peer-deps",
+  "buildCommand": "cd apps/oracle-mobile && VERCEL=1 EXPO_BASE_URL=/ npm run export:web",
+  "outputDirectory": "apps/oracle-mobile/dist-web-pages",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/index.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+      ]
+    }
+  ]
+}

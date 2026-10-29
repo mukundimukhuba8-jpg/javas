@@ -31,7 +31,10 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "build": "tsc --noEmit",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "export:web": "node ./scripts/export-web.mjs",
+    "export:vercel": "VERCEL=1 EXPO_BASE_URL=/ node ./scripts/export-web.mjs",
+    "export:pages": "EXPO_BASE_URL=/javas/oracle node ./scripts/export-web.mjs"
   },
   "private": true
 }
