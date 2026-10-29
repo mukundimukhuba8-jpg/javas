@@ -37,6 +37,8 @@ export type SubscriptionPayment = {
   status: 'awaiting' | 'approved' | 'declined';
   paidAt: string;
   plan?: string;
+  /** e.g. whop — shown in portal Subscription list */
+  source?: string;
 };
 
 export type OracleCloudStore = {
@@ -113,6 +115,7 @@ function normalizeSubscription(raw: unknown): SubscriptionPayment | null {
     status,
     paidAt: typeof s.paidAt === 'string' ? s.paidAt : new Date().toISOString(),
     plan: typeof s.plan === 'string' ? s.plan : undefined,
+    source: typeof s.source === 'string' && s.source.trim() ? s.source.trim() : undefined,
   };
 }
 
@@ -843,6 +846,24 @@ export async function pushSubscriptionsToCloud(
     return putCloudStore({
       ...remote,
       subscriptions: subscriptions.map((s) => normalizeSubscription(s)!).filter(Boolean),
+    });
+  });
+}
+
+/** Upsert one subscription row (Whop paid → awaiting / approved). */
+export async function upsertSubscriptionPayment(
+  entry: SubscriptionPayment,
+): Promise<OracleCloudStore> {
+  return enqueueWrite(async () => {
+    const remote = await fetchCloudPrimary();
+    const email = entry.email.trim().toLowerCase();
+    const normalized = normalizeSubscription({ ...entry, email })!;
+    const others = (remote.subscriptions || []).filter(
+      (s) => (s.email || '').trim().toLowerCase() !== email,
+    );
+    return putCloudStore({
+      ...remote,
+      subscriptions: [normalized, ...others],
     });
   });
 }

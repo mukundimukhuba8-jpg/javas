@@ -44,3 +44,11 @@ Normalized tables (`license_keys`, `eas`, `mentors`, `subscriptions`, `reactivat
 ## Security note
 
 If a project secret was pasted into chat, rotate it in the Supabase dashboard (API Keys) after wiring.
+
+## Whop client payments
+
+Checkout: `https://whop.com/checkout/plan_HXXGXZqh48JQs`
+
+Flow: email → Whop (email prefilled) → return `?paid=1&email=…&status=success` → subscription **awaiting** + access unlock → Activate key.
+
+Hard verification needs a Whop webhook secret / Edge Function (not shipped; browser return is best-effort).

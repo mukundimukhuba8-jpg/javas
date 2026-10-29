@@ -1751,14 +1751,14 @@ function SubscriptionSection({ fontsReady }: { fontsReady: boolean }) {
       <View style={styles.pageIntro}>
         <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>Subscription</Text>
         <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
-          People who paid — approve them before they receive license keys.
+          Whop (and other) payments land here as Paid · awaiting approval. Approve to confirm.
         </Text>
       </View>
       <Card>
         <View style={styles.filterRow}>
           {(
             [
-              { id: 'awaiting' as const, label: 'Awaiting' },
+              { id: 'awaiting' as const, label: 'Paid · awaiting' },
               { id: 'approved' as const, label: 'Approved' },
               { id: 'declined' as const, label: 'Declined' },
             ] as const
@@ -1792,11 +1792,12 @@ function SubscriptionSection({ fontsReady }: { fontsReady: boolean }) {
           </Text>
         ) : (
           filtered.map((r) => (
-            <View key={r.id} style={styles.mentorCard}>
+            <View key={r.id} style={styles.mentorCard} testID={`subscription-row-${r.email}`}>
               <View style={{ gap: 4 }}>
                 <Text style={[styles.actionTitle, f && { fontFamily: f.uiBold }]}>{r.email}</Text>
                 <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
-                  {statusLabel}
+                  {tab === 'awaiting' ? 'Paid · awaiting approval' : statusLabel}
+                  {r.source ? ` · ${r.source}` : ''}
                   {r.plan ? ` · ${r.plan}` : ''}
                   {r.paidAt
                     ? ` · paid ${new Date(r.paidAt).toLocaleDateString()}`
@@ -1811,6 +1812,7 @@ function SubscriptionSection({ fontsReady }: { fontsReady: boolean }) {
                     style={[styles.newKeyBtn, { flex: 1 }]}
                     accessibilityRole="button"
                     accessibilityLabel={`Approve ${r.email}`}
+                    testID={`subscription-approve-${r.email}`}
                   >
                     <Text style={[styles.newKeyBtnText, f && { fontFamily: f.uiBold }]}>
                       {busyId === r.id ? '…' : 'Approve'}
