@@ -4,6 +4,12 @@ import {
   MAX_EA_IMAGE_CHARS,
   PREFER_HOST_CHARS,
 } from './config';
+import {
+  getSupabaseBackendMode,
+  supabaseConfigured,
+  supabaseFetchStore,
+  supabasePutStore,
+} from './supabaseBackend';
 import type { ReactivatedEmail } from '../access/types';
 import type { ExpertAdvisor } from '../ea/types';
 import { normalizeLicenseKey, toSlimKey, type KeyActivation, type LicenseKey } from '../license/types';
@@ -121,6 +127,16 @@ function resolveReadUrls(): string[] {
   const primary = resolveWriteUrl();
   const extras = CLOUD_FALLBACK_URLS.filter((u) => u !== primary);
   return [primary, ...extras];
+}
+
+function legacyUrlOverrideActive(): boolean {
+  if (typeof window === 'undefined') return false;
+  const w = window as unknown as { __ORACLE_CLOUD_URL?: string };
+  return Boolean(w.__ORACLE_CLOUD_URL && typeof w.__ORACLE_CLOUD_URL === 'string');
+}
+
+function useSupabasePrimary(): boolean {
+  return supabaseConfigured() && !legacyUrlOverrideActive();
 }
 
 async function readErrorBody(res: Response): Promise<string> {
@@ -388,6 +404,19 @@ function enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
 
 /** Live catalog Activate/Create use — primary write URL only (no stale Pages merge). */
 export async function fetchCloudPrimary(): Promise<OracleCloudStore> {
+  if (useSupabasePrimary()) {
+    let lastErr: Error | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return normalizeStore(await supabaseFetchStore());
+      } catch (e) {
+        lastErr = e instanceof Error ? e : new Error(String(e));
+        await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+      }
+    }
+    throw lastErr || new Error('Cloud store unreachable');
+  }
+
   const url = resolveWriteUrl();
   let lastErr: Error | null = null;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -450,12 +479,17 @@ function slimStoreForWrite(store: OracleCloudStore, stripInlineImages: boolean):
 }
 
 async function putCloudStore(store: OracleCloudStore): Promise<OracleCloudStore> {
-  const url = resolveWriteUrl();
   let lastErr: Error | null = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     const stripInlineImages = attempt > 0;
     const payload = slimStoreForWrite(store, stripInlineImages);
     try {
+      if (useSupabasePrimary()) {
+        const verified = normalizeStore(await supabasePutStore(payload));
+        return verified;
+      }
+
+      const url = resolveWriteUrl();
       let res: Response;
       try {
         res = await fetch(url, {
@@ -808,6 +842,8 @@ export function attachCloudDebug() {
   if (typeof window === 'undefined') return;
   (window as unknown as { __ORACLE_CLOUD?: object }).__ORACLE_CLOUD = {
     url: resolveWriteUrl(),
+    backend: useSupabasePrimary() ? 'supabase' : 'url',
+    supabaseMode: getSupabaseBackendMode,
     readUrls: resolveReadUrls(),
     fetch: fetchCloudPrimary,
     fetchFallback: fetchCloudStore,

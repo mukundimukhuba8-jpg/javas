@@ -37,3 +37,7 @@ coverage/
 
 # Electron
 apps/desktop/dist-electron/
+
+# Vercel local
+.vercel/
+

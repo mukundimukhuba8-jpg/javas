@@ -20,6 +20,55 @@ const repoRoot = path.resolve(appRoot, '../..');
 const outDir = path.join(appRoot, 'dist-web-pages');
 const appJsonPath = path.join(appRoot, 'app.json');
 
+function loadEnvFile(fp) {
+  if (!fs.existsSync(fp)) return;
+  for (const line of fs.readFileSync(fp, 'utf8').split('\n')) {
+    const t = line.trim();
+    if (!t || t.startsWith('#') || !t.includes('=')) continue;
+    const i = t.indexOf('=');
+    const k = t.slice(0, i).trim();
+    let v = t.slice(i + 1).trim();
+    if (
+      (v.startsWith('"') && v.endsWith('"')) ||
+      (v.startsWith("'") && v.endsWith("'"))
+    ) {
+      v = v.slice(1, -1);
+    }
+    if (!(k in process.env) || !process.env[k]) process.env[k] = v;
+  }
+}
+
+/** Load publishable Supabase env for Metro inlining. Never load secret into EXPO_PUBLIC_*. */
+function loadSupabasePublishableEnv() {
+  loadEnvFile(path.join(appRoot, '.env'));
+  loadEnvFile(path.join(repoRoot, '.env'));
+  loadEnvFile('/cursor/stores/self/internal/supabase-credentials.env');
+
+  const url = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+  const pub =
+    process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY ||
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
+    '';
+  const syncEmail =
+    process.env.EXPO_PUBLIC_ORACLE_SYNC_EMAIL || process.env.ORACLE_SYNC_EMAIL || '';
+  const syncPass =
+    process.env.EXPO_PUBLIC_ORACLE_SYNC_PASSWORD || process.env.ORACLE_SYNC_PASSWORD || '';
+
+  if (url) process.env.EXPO_PUBLIC_SUPABASE_URL = url;
+  if (pub) process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY = pub;
+  if (syncEmail) process.env.EXPO_PUBLIC_ORACLE_SYNC_EMAIL = syncEmail;
+  if (syncPass) process.env.EXPO_PUBLIC_ORACLE_SYNC_PASSWORD = syncPass;
+
+  // Hard guarantee: never promote secret → public
+  delete process.env.EXPO_PUBLIC_SUPABASE_SECRET_KEY;
+  delete process.env.EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY;
+
+  console.log(
+    `[export-web] supabase url=${process.env.EXPO_PUBLIC_SUPABASE_URL ? 'yes' : 'no'} publishable=${process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ? 'yes' : 'no'} sync=${process.env.EXPO_PUBLIC_ORACLE_SYNC_EMAIL ? 'yes' : 'no'}`,
+  );
+}
+
 function resolveBaseUrl() {
   const fromEnv = process.env.EXPO_BASE_URL || process.env.EXPO_PUBLIC_BASE;
   if (typeof fromEnv === 'string' && fromEnv.trim()) {
@@ -164,7 +213,27 @@ function copyCloudStoreFallback() {
   }
 }
 
+function assertNoSecretInBundle() {
+  const jsDirCandidates = [
+    path.join(outDir, 'expo/static/js/web'),
+    path.join(outDir, '_expo/static/js/web'),
+  ];
+  const needle = process.env.SUPABASE_SECRET_KEY || '';
+  if (!needle || needle.length < 12) return;
+  for (const jsDir of jsDirCandidates) {
+    if (!fs.existsSync(jsDir)) continue;
+    for (const name of fs.readdirSync(jsDir)) {
+      if (!name.endsWith('.js')) continue;
+      const js = fs.readFileSync(path.join(jsDir, name), 'utf8');
+      if (js.includes(needle)) {
+        throw new Error('Refusing to ship: SUPABASE_SECRET_KEY found in web bundle');
+      }
+    }
+  }
+}
+
 function main() {
+  loadSupabasePublishableEnv();
   const baseUrl = resolveBaseUrl();
   const forPages = baseUrl !== '/' && baseUrl.includes('/javas/');
   console.log(`[export-web] baseUrl=${baseUrl} host=${forPages ? 'pages' : 'vercel-root'}`);
@@ -177,6 +246,7 @@ function main() {
     patchIndexHtml(baseUrl, forPages);
     copyCloudStoreFallback();
     fs.writeFileSync(path.join(outDir, '.nojekyll'), '');
+    assertNoSecretInBundle();
 
     const indexHtml = path.join(outDir, 'index.html');
     if (!fs.existsSync(indexHtml)) {
