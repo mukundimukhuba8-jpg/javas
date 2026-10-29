@@ -10,6 +10,8 @@ export default tseslint.config(
       "memory/sqlite/**",
       "memory/vectors/**",
       "coverage/**",
+      // Expo app uses its own tooling / npm lockfile
+      "apps/oracle-mobile/**",
     ],
   },
   eslint.configs.recommended,
