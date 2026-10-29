@@ -1,1 +1,483 @@
-{"activations":[{"activatedAt":"2026-10-29T15:01:47.036Z","eaId":"ea_a_mvto7tom","eaImageUri":null,"eaName":"EA-Alpha-mvto7tom","email":"client.a.mvto7tom@mailinator.com","key":"AAA-MVT-O7T-OMX"},{"activatedAt":"2026-10-29T14:59:24.428Z","eaId":"ea_a_mvto4s3w","eaImageUri":null,"eaName":"EA-Alpha-mvto4s3w","email":"client.a.mvto4s3w@mailinator.com","key":"AAA-MVT-O4S-3WX"},{"activatedAt":"2026-10-29T14:58:04.887Z","eaId":"ea_a_mvto31oo","eaImageUri":null,"eaName":"EA-Alpha-mvto31oo","email":"client.a.mvto31oo@mailinator.com","key":"AAA-MVT-O31-OOX"}],"eas":[{"id":"ea_a_mvtoa51a","name":"EA-Alpha-mvtoa51a","imageUri":"https://example.com/ea-alpha-mvtoa51a.png","type":"Standard","createdAt":"2026-10-29T15:02:46.073Z","mentorId":"mentor_a_mvtoa51a"},{"id":"ea_b_mvtoa51a","name":"EA-Bravo-mvtoa51a","imageUri":"https://example.com/ea-bravo-mvtoa51a.png","type":"Standard","createdAt":"2026-10-29T15:02:46.073Z","mentorId":"mentor_b_mvtoa51a"},{"createdAt":"2026-10-29T15:00:58.190Z","id":"ea_a_mvto7tom","imageUri":"https://example.com/ea-alpha-mvtoa51a.png","mentorId":"mentor_a_mvto7tom","name":"EA-Alpha-mvto7tom","type":"Standard"},{"createdAt":"2026-10-29T15:00:58.190Z","id":"ea_b_mvto7tom","imageUri":"https://example.com/ea-bravo-mvtoa51a.png","mentorId":"mentor_b_mvto7tom","name":"EA-Bravo-mvto7tom","type":"Standard"},{"createdAt":"2026-10-29T14:58:36.279Z","id":"ea_a_mvto4s3w","imageUri":"https://example.com/ea-alpha-mvtoa51a.png","mentorId":"mentor_a_mvto4s3w","name":"EA-Alpha-mvto4s3w","type":"Standard"},{"createdAt":"2026-10-29T14:58:36.279Z","id":"ea_b_mvto4s3w","imageUri":"https://example.com/ea-bravo-mvtoa51a.png","mentorId":"mentor_b_mvto4s3w","name":"EA-Bravo-mvto4s3w","type":"Standard"},{"createdAt":"2026-10-29T14:57:15.559Z","id":"ea_a_mvto31oo","imageUri":"https://example.com/ea-alpha-mvtoa51a.png","mentorId":"mentor_a_mvto31oo","name":"EA-Alpha-mvto31oo","type":"Standard"},{"createdAt":"2026-10-29T14:57:15.559Z","id":"ea_b_mvto31oo","imageUri":"https://example.com/ea-bravo-mvtoa51a.png","mentorId":"mentor_b_mvto31oo","name":"EA-Bravo-mvto31oo","type":"Standard"},{"createdAt":"2026-10-29T14:56:12.520Z","id":"ea_a_mvto1om6","imageUri":"https://example.com/ea-alpha-mvtoa51a.png","mentorId":"mentor_a_mvto1om6","name":"EA-Alpha-mvto1om6","type":"Standard"},{"createdAt":"2026-10-29T14:56:12.520Z","id":"ea_b_mvto1om6","imageUri":"https://example.com/ea-bravo-mvtoa51a.png","mentorId":"mentor_b_mvto1om6","name":"EA-Bravo-mvto1om6","type":"Standard"}],"keys":[{"id":"key_a_mvtoa51a","key":"AAA-MVT-OA5-1AX","eaId":"ea_a_mvtoa51a","eaName":"EA-Alpha-mvtoa51a","eaImageUri":null,"ea":"EA-Alpha-mvtoa51a","user":"Client A","plan":"30 days","status":"Active","createdAt":"2026-10-29T15:02:46.074Z","boundEmail":null,"mentorId":"mentor_a_mvtoa51a"},{"id":"key_b_mvtoa51a","key":"BBB-MVT-OA5-1AX","eaId":"ea_b_mvtoa51a","eaName":"EA-Bravo-mvtoa51a","eaImageUri":null,"ea":"EA-Bravo-mvtoa51a","user":"Client B","plan":"30 days","status":"Active","createdAt":"2026-10-29T15:02:46.074Z","boundEmail":null,"mentorId":"mentor_b_mvtoa51a"},{"boundEmail":"client.a.mvto7tom@mailinator.com","createdAt":"2026-10-29T15:00:58.190Z","ea":"EA-Alpha-mvto7tom","eaId":"ea_a_mvto7tom","eaImageUri":null,"eaName":"EA-Alpha-mvto7tom","id":"key_a_mvto7tom","key":"AAA-MVT-O7T-OMX","mentorId":"mentor_a_mvto7tom","plan":"30 days","status":"Active","user":"Client A"},{"boundEmail":null,"createdAt":"2026-10-29T15:00:58.190Z","ea":"EA-Bravo-mvto7tom","eaId":"ea_b_mvto7tom","eaImageUri":null,"eaName":"EA-Bravo-mvto7tom","id":"key_b_mvto7tom","key":"BBB-MVT-O7T-OMX","mentorId":"mentor_b_mvto7tom","plan":"30 days","status":"Active","user":"Client B"},{"boundEmail":"client.a.mvto4s3w@mailinator.com","createdAt":"2026-10-29T14:58:36.279Z","ea":"EA-Alpha-mvto4s3w","eaId":"ea_a_mvto4s3w","eaImageUri":null,"eaName":"EA-Alpha-mvto4s3w","id":"key_a_mvto4s3w","key":"AAA-MVT-O4S-3WX","mentorId":"mentor_a_mvto4s3w","plan":"30 days","status":"Active","user":"Client A"},{"boundEmail":null,"createdAt":"2026-10-29T14:58:36.279Z","ea":"EA-Bravo-mvto4s3w","eaId":"ea_b_mvto4s3w","eaImageUri":null,"eaName":"EA-Bravo-mvto4s3w","id":"key_b_mvto4s3w","key":"BBB-MVT-O4S-3WX","mentorId":"mentor_b_mvto4s3w","plan":"30 days","status":"Active","user":"Client B"},{"boundEmail":"client.a.mvto31oo@mailinator.com","createdAt":"2026-10-29T14:57:15.559Z","ea":"EA-Alpha-mvto31oo","eaId":"ea_a_mvto31oo","eaImageUri":null,"eaName":"EA-Alpha-mvto31oo","id":"key_a_mvto31oo","key":"AAA-MVT-O31-OOX","mentorId":"mentor_a_mvto31oo","plan":"30 days","status":"Active","user":"Client A"},{"boundEmail":null,"createdAt":"2026-10-29T14:57:15.559Z","ea":"EA-Bravo-mvto31oo","eaId":"ea_b_mvto31oo","eaImageUri":null,"eaName":"EA-Bravo-mvto31oo","id":"key_b_mvto31oo","key":"BBB-MVT-O31-OOX","mentorId":"mentor_b_mvto31oo","plan":"30 days","status":"Active","user":"Client B"},{"boundEmail":null,"createdAt":"2026-10-29T14:56:12.520Z","ea":"EA-Alpha-mvto1om6","eaId":"ea_a_mvto1om6","eaImageUri":null,"eaName":"EA-Alpha-mvto1om6","id":"key_a_mvto1om6","key":"AAA-MVT-O1O-M6X","mentorId":"mentor_a_mvto1om6","plan":"30 days","status":"Active","user":"Client A"},{"boundEmail":null,"createdAt":"2026-10-29T14:56:12.520Z","ea":"EA-Bravo-mvto1om6","eaId":"ea_b_mvto1om6","eaImageUri":null,"eaName":"EA-Bravo-mvto1om6","id":"key_b_mvto1om6","key":"BBB-MVT-O1O-M6X","mentorId":"mentor_b_mvto1om6","plan":"30 days","status":"Active","user":"Client B"},{"boundEmail":null,"createdAt":"2026-10-29T09:29:01.563Z","ea":"","eaId":"","eaImageUri":null,"eaName":"","id":"key_mvtccyqj","key":"ORA-CLE-PRO-VEM-VTC-CYG-R","mentorId":"legacy","plan":"","status":"Active","user":""},{"boundEmail":null,"createdAt":"2026-10-29T00:00:00.000Z","ea":"","eaId":"","eaImageUri":null,"eaName":"","id":"key_clear","key":"ORA-CLE-CLE-AR1","mentorId":"legacy","plan":"","status":"Active","user":""}],"mentors":[{"id":"mentor_a_mvtoa51a","name":"Mentor Alpha","mentorName":"Alpha","email":"mentor.a.mvtoa51a@mailinator.com","whatsapp":"+11111111111","status":"approved","keysAllowed":50,"keysUsed":1,"registeredAt":"2026-10-29T15:02:46.074Z","passwordHash":"1a947dc94fc1c1a0e4c2e94c03344fce4373462b556935db4538e16882fb0864"},{"id":"mentor_b_mvtoa51a","name":"Mentor Bravo","mentorName":"Bravo","email":"mentor.b.mvtoa51a@mailinator.com","whatsapp":"+22222222222","status":"approved","keysAllowed":50,"keysUsed":1,"registeredAt":"2026-10-29T15:02:46.074Z","passwordHash":"8b5f91fe1f1908630c4be8ca091e3e1b25775b386993ab72bb70458e5860f629"},{"email":"mentor.a.mvto7tom@mailinator.com","id":"mentor_a_mvto7tom","keysAllowed":50,"keysUsed":1,"mentorName":"Alpha","name":"Mentor Alpha","passwordHash":"1a947dc94fc1c1a0e4c2e94c03344fce4373462b556935db4538e16882fb0864","registeredAt":"2026-10-29T15:00:58.190Z","status":"approved","whatsapp":"+11111111111"},{"email":"mentor.b.mvto7tom@mailinator.com","id":"mentor_b_mvto7tom","keysAllowed":50,"keysUsed":1,"mentorName":"Bravo","name":"Mentor Bravo","passwordHash":"8b5f91fe1f1908630c4be8ca091e3e1b25775b386993ab72bb70458e5860f629","registeredAt":"2026-10-29T15:00:58.190Z","status":"approved","whatsapp":"+22222222222"},{"email":"mentor.a.mvto4s3w@mailinator.com","id":"mentor_a_mvto4s3w","keysAllowed":50,"keysUsed":1,"mentorName":"Alpha","name":"Mentor Alpha","passwordHash":"1a947dc94fc1c1a0e4c2e94c03344fce4373462b556935db4538e16882fb0864","registeredAt":"2026-10-29T14:58:36.279Z","status":"approved","whatsapp":"+11111111111"},{"email":"mentor.b.mvto4s3w@mailinator.com","id":"mentor_b_mvto4s3w","keysAllowed":50,"keysUsed":1,"mentorName":"Bravo","name":"Mentor Bravo","passwordHash":"8b5f91fe1f1908630c4be8ca091e3e1b25775b386993ab72bb70458e5860f629","registeredAt":"2026-10-29T14:58:36.279Z","status":"approved","whatsapp":"+22222222222"},{"email":"mentor.a.mvto31oo@mailinator.com","id":"mentor_a_mvto31oo","keysAllowed":50,"keysUsed":1,"mentorName":"Alpha","name":"Mentor Alpha","passwordHash":"1a947dc94fc1c1a0e4c2e94c03344fce4373462b556935db4538e16882fb0864","registeredAt":"2026-10-29T14:57:15.559Z","status":"approved","whatsapp":"+11111111111"},{"email":"mentor.b.mvto31oo@mailinator.com","id":"mentor_b_mvto31oo","keysAllowed":50,"keysUsed":1,"mentorName":"Bravo","name":"Mentor Bravo","passwordHash":"8b5f91fe1f1908630c4be8ca091e3e1b25775b386993ab72bb70458e5860f629","registeredAt":"2026-10-29T14:57:15.559Z","status":"approved","whatsapp":"+22222222222"},{"email":"mentor.a.mvto1om6@mailinator.com","id":"mentor_a_mvto1om6","keysAllowed":50,"keysUsed":1,"mentorName":"Alpha","name":"Mentor Alpha","passwordHash":"1a947dc94fc1c1a0e4c2e94c03344fce4373462b556935db4538e16882fb0864","registeredAt":"2026-10-29T14:56:12.520Z","status":"approved","whatsapp":"+11111111111"},{"email":"mentor.b.mvto1om6@mailinator.com","id":"mentor_b_mvto1om6","keysAllowed":50,"keysUsed":1,"mentorName":"Bravo","name":"Mentor Bravo","passwordHash":"8b5f91fe1f1908630c4be8ca091e3e1b25775b386993ab72bb70458e5860f629","registeredAt":"2026-10-29T14:56:12.520Z","status":"approved","whatsapp":"+22222222222"},{"email":"prove.1793266141915@example.com","id":"mentor_prove_mvtccygr","keysAllowed":0,"keysUsed":0,"mentorName":"Prove","name":"Prove Mentor","registeredAt":"2026-10-29T09:29:01.563Z","status":"waiting","whatsapp":"+10000000000"},{"email":"clear@example.com","id":"mentor_clear","keysAllowed":0,"keysUsed":0,"mentorName":"Clear","name":"Clear","registeredAt":"2026-10-29T00:00:00.000Z","status":"waiting","whatsapp":"+1"}],"reactivated":[{"email":"client.a.mvtoa51a@mailinator.com","paid":true,"reactivatedAt":"2026-10-29T15:02:46.074Z","status":"active"},{"email":"client.a.mvto7tom@mailinator.com","paid":true,"reactivatedAt":"2026-10-29T15:00:58.190Z","status":"active"},{"email":"client.a.mvto4s3w@mailinator.com","paid":true,"reactivatedAt":"2026-10-29T14:58:36.279Z","status":"active"},{"email":"client.a.mvto31oo@mailinator.com","paid":true,"reactivatedAt":"2026-10-29T14:57:15.559Z","status":"active"},{"email":"client.a.mvto1om6@mailinator.com","paid":true,"reactivatedAt":"2026-10-29T14:56:12.520Z","status":"active"}],"subscriptions":[],"updatedAt":"2026-10-29T15:02:46.074Z"}
+{
+  "activations": [
+    {
+      "activatedAt": "2026-10-29T15:03:35.001Z",
+      "eaId": "ea_a_mvtoa51a",
+      "eaImageUri": null,
+      "eaName": "EA-Alpha-mvtoa51a",
+      "email": "client.a.mvtoa51a@mailinator.com",
+      "key": "AAA-MVT-OA5-1AX"
+    },
+    {
+      "activatedAt": "2026-10-29T15:01:47.036Z",
+      "eaId": "ea_a_mvto7tom",
+      "eaImageUri": null,
+      "eaName": "EA-Alpha-mvto7tom",
+      "email": "client.a.mvto7tom@mailinator.com",
+      "key": "AAA-MVT-O7T-OMX"
+    },
+    {
+      "activatedAt": "2026-10-29T14:59:24.428Z",
+      "eaId": "ea_a_mvto4s3w",
+      "eaImageUri": null,
+      "eaName": "EA-Alpha-mvto4s3w",
+      "email": "client.a.mvto4s3w@mailinator.com",
+      "key": "AAA-MVT-O4S-3WX"
+    },
+    {
+      "activatedAt": "2026-10-29T14:58:04.887Z",
+      "eaId": "ea_a_mvto31oo",
+      "eaImageUri": null,
+      "eaName": "EA-Alpha-mvto31oo",
+      "email": "client.a.mvto31oo@mailinator.com",
+      "key": "AAA-MVT-O31-OOX"
+    }
+  ],
+  "eas": [
+    {
+      "createdAt": "2026-10-29T15:02:46.073Z",
+      "id": "ea_a_mvtoa51a",
+      "imageUri": "https://example.com/ea-alpha-mvtoa51a.png",
+      "mentorId": "mentor_a_mvtoa51a",
+      "name": "EA-Alpha-mvtoa51a",
+      "type": "Standard"
+    },
+    {
+      "createdAt": "2026-10-29T15:02:46.073Z",
+      "id": "ea_b_mvtoa51a",
+      "imageUri": "https://example.com/ea-bravo-mvtoa51a.png",
+      "mentorId": "mentor_b_mvtoa51a",
+      "name": "EA-Bravo-mvtoa51a",
+      "type": "Standard"
+    },
+    {
+      "createdAt": "2026-10-29T15:00:58.190Z",
+      "id": "ea_a_mvto7tom",
+      "imageUri": "https://example.com/ea-alpha-mvtoa51a.png",
+      "mentorId": "mentor_a_mvto7tom",
+      "name": "EA-Alpha-mvto7tom",
+      "type": "Standard"
+    },
+    {
+      "createdAt": "2026-10-29T15:00:58.190Z",
+      "id": "ea_b_mvto7tom",
+      "imageUri": "https://example.com/ea-bravo-mvtoa51a.png",
+      "mentorId": "mentor_b_mvto7tom",
+      "name": "EA-Bravo-mvto7tom",
+      "type": "Standard"
+    },
+    {
+      "createdAt": "2026-10-29T14:58:36.279Z",
+      "id": "ea_a_mvto4s3w",
+      "imageUri": "https://example.com/ea-alpha-mvtoa51a.png",
+      "mentorId": "mentor_a_mvto4s3w",
+      "name": "EA-Alpha-mvto4s3w",
+      "type": "Standard"
+    },
+    {
+      "createdAt": "2026-10-29T14:58:36.279Z",
+      "id": "ea_b_mvto4s3w",
+      "imageUri": "https://example.com/ea-bravo-mvtoa51a.png",
+      "mentorId": "mentor_b_mvto4s3w",
+      "name": "EA-Bravo-mvto4s3w",
+      "type": "Standard"
+    },
+    {
+      "createdAt": "2026-10-29T14:57:15.559Z",
+      "id": "ea_a_mvto31oo",
+      "imageUri": "https://example.com/ea-alpha-mvtoa51a.png",
+      "mentorId": "mentor_a_mvto31oo",
+      "name": "EA-Alpha-mvto31oo",
+      "type": "Standard"
+    },
+    {
+      "createdAt": "2026-10-29T14:57:15.559Z",
+      "id": "ea_b_mvto31oo",
+      "imageUri": "https://example.com/ea-bravo-mvtoa51a.png",
+      "mentorId": "mentor_b_mvto31oo",
+      "name": "EA-Bravo-mvto31oo",
+      "type": "Standard"
+    },
+    {
+      "createdAt": "2026-10-29T14:56:12.520Z",
+      "id": "ea_a_mvto1om6",
+      "imageUri": "https://example.com/ea-alpha-mvtoa51a.png",
+      "mentorId": "mentor_a_mvto1om6",
+      "name": "EA-Alpha-mvto1om6",
+      "type": "Standard"
+    },
+    {
+      "createdAt": "2026-10-29T14:56:12.520Z",
+      "id": "ea_b_mvto1om6",
+      "imageUri": "https://example.com/ea-bravo-mvtoa51a.png",
+      "mentorId": "mentor_b_mvto1om6",
+      "name": "EA-Bravo-mvto1om6",
+      "type": "Standard"
+    }
+  ],
+  "keys": [
+    {
+      "boundEmail": "client.a.mvtoa51a@mailinator.com",
+      "createdAt": "2026-10-29T15:02:46.074Z",
+      "ea": "EA-Alpha-mvtoa51a",
+      "eaId": "ea_a_mvtoa51a",
+      "eaImageUri": null,
+      "eaName": "EA-Alpha-mvtoa51a",
+      "id": "key_a_mvtoa51a",
+      "key": "AAA-MVT-OA5-1AX",
+      "mentorId": "mentor_a_mvtoa51a",
+      "plan": "30 days",
+      "status": "Active",
+      "user": "Client A"
+    },
+    {
+      "boundEmail": null,
+      "createdAt": "2026-10-29T15:02:46.074Z",
+      "ea": "EA-Bravo-mvtoa51a",
+      "eaId": "ea_b_mvtoa51a",
+      "eaImageUri": null,
+      "eaName": "EA-Bravo-mvtoa51a",
+      "id": "key_b_mvtoa51a",
+      "key": "BBB-MVT-OA5-1AX",
+      "mentorId": "mentor_b_mvtoa51a",
+      "plan": "30 days",
+      "status": "Active",
+      "user": "Client B"
+    },
+    {
+      "boundEmail": "client.a.mvto7tom@mailinator.com",
+      "createdAt": "2026-10-29T15:00:58.190Z",
+      "ea": "EA-Alpha-mvto7tom",
+      "eaId": "ea_a_mvto7tom",
+      "eaImageUri": null,
+      "eaName": "EA-Alpha-mvto7tom",
+      "id": "key_a_mvto7tom",
+      "key": "AAA-MVT-O7T-OMX",
+      "mentorId": "mentor_a_mvto7tom",
+      "plan": "30 days",
+      "status": "Active",
+      "user": "Client A"
+    },
+    {
+      "boundEmail": null,
+      "createdAt": "2026-10-29T15:00:58.190Z",
+      "ea": "EA-Bravo-mvto7tom",
+      "eaId": "ea_b_mvto7tom",
+      "eaImageUri": null,
+      "eaName": "EA-Bravo-mvto7tom",
+      "id": "key_b_mvto7tom",
+      "key": "BBB-MVT-O7T-OMX",
+      "mentorId": "mentor_b_mvto7tom",
+      "plan": "30 days",
+      "status": "Active",
+      "user": "Client B"
+    },
+    {
+      "boundEmail": "client.a.mvto4s3w@mailinator.com",
+      "createdAt": "2026-10-29T14:58:36.279Z",
+      "ea": "EA-Alpha-mvto4s3w",
+      "eaId": "ea_a_mvto4s3w",
+      "eaImageUri": null,
+      "eaName": "EA-Alpha-mvto4s3w",
+      "id": "key_a_mvto4s3w",
+      "key": "AAA-MVT-O4S-3WX",
+      "mentorId": "mentor_a_mvto4s3w",
+      "plan": "30 days",
+      "status": "Active",
+      "user": "Client A"
+    },
+    {
+      "boundEmail": null,
+      "createdAt": "2026-10-29T14:58:36.279Z",
+      "ea": "EA-Bravo-mvto4s3w",
+      "eaId": "ea_b_mvto4s3w",
+      "eaImageUri": null,
+      "eaName": "EA-Bravo-mvto4s3w",
+      "id": "key_b_mvto4s3w",
+      "key": "BBB-MVT-O4S-3WX",
+      "mentorId": "mentor_b_mvto4s3w",
+      "plan": "30 days",
+      "status": "Active",
+      "user": "Client B"
+    },
+    {
+      "boundEmail": "client.a.mvto31oo@mailinator.com",
+      "createdAt": "2026-10-29T14:57:15.559Z",
+      "ea": "EA-Alpha-mvto31oo",
+      "eaId": "ea_a_mvto31oo",
+      "eaImageUri": null,
+      "eaName": "EA-Alpha-mvto31oo",
+      "id": "key_a_mvto31oo",
+      "key": "AAA-MVT-O31-OOX",
+      "mentorId": "mentor_a_mvto31oo",
+      "plan": "30 days",
+      "status": "Active",
+      "user": "Client A"
+    },
+    {
+      "boundEmail": null,
+      "createdAt": "2026-10-29T14:57:15.559Z",
+      "ea": "EA-Bravo-mvto31oo",
+      "eaId": "ea_b_mvto31oo",
+      "eaImageUri": null,
+      "eaName": "EA-Bravo-mvto31oo",
+      "id": "key_b_mvto31oo",
+      "key": "BBB-MVT-O31-OOX",
+      "mentorId": "mentor_b_mvto31oo",
+      "plan": "30 days",
+      "status": "Active",
+      "user": "Client B"
+    },
+    {
+      "boundEmail": null,
+      "createdAt": "2026-10-29T14:56:12.520Z",
+      "ea": "EA-Alpha-mvto1om6",
+      "eaId": "ea_a_mvto1om6",
+      "eaImageUri": null,
+      "eaName": "EA-Alpha-mvto1om6",
+      "id": "key_a_mvto1om6",
+      "key": "AAA-MVT-O1O-M6X",
+      "mentorId": "mentor_a_mvto1om6",
+      "plan": "30 days",
+      "status": "Active",
+      "user": "Client A"
+    },
+    {
+      "boundEmail": null,
+      "createdAt": "2026-10-29T14:56:12.520Z",
+      "ea": "EA-Bravo-mvto1om6",
+      "eaId": "ea_b_mvto1om6",
+      "eaImageUri": null,
+      "eaName": "EA-Bravo-mvto1om6",
+      "id": "key_b_mvto1om6",
+      "key": "BBB-MVT-O1O-M6X",
+      "mentorId": "mentor_b_mvto1om6",
+      "plan": "30 days",
+      "status": "Active",
+      "user": "Client B"
+    },
+    {
+      "boundEmail": null,
+      "createdAt": "2026-10-29T09:29:01.563Z",
+      "ea": "",
+      "eaId": "",
+      "eaImageUri": null,
+      "eaName": "",
+      "id": "key_mvtccyqj",
+      "key": "ORA-CLE-PRO-VEM-VTC-CYG-R",
+      "mentorId": "legacy",
+      "plan": "",
+      "status": "Active",
+      "user": ""
+    },
+    {
+      "boundEmail": null,
+      "createdAt": "2026-10-29T00:00:00.000Z",
+      "ea": "",
+      "eaId": "",
+      "eaImageUri": null,
+      "eaName": "",
+      "id": "key_clear",
+      "key": "ORA-CLE-CLE-AR1",
+      "mentorId": "legacy",
+      "plan": "",
+      "status": "Active",
+      "user": ""
+    }
+  ],
+  "mentors": [
+    {
+      "email": "mentor.a.mvtoa51a@mailinator.com",
+      "id": "mentor_a_mvtoa51a",
+      "keysAllowed": 50,
+      "keysUsed": 1,
+      "mentorName": "Alpha",
+      "name": "Mentor Alpha",
+      "passwordHash": "1a947dc94fc1c1a0e4c2e94c03344fce4373462b556935db4538e16882fb0864",
+      "registeredAt": "2026-10-29T15:02:46.074Z",
+      "status": "approved",
+      "whatsapp": "+11111111111"
+    },
+    {
+      "email": "mentor.b.mvtoa51a@mailinator.com",
+      "id": "mentor_b_mvtoa51a",
+      "keysAllowed": 50,
+      "keysUsed": 1,
+      "mentorName": "Bravo",
+      "name": "Mentor Bravo",
+      "passwordHash": "8b5f91fe1f1908630c4be8ca091e3e1b25775b386993ab72bb70458e5860f629",
+      "registeredAt": "2026-10-29T15:02:46.074Z",
+      "status": "approved",
+      "whatsapp": "+22222222222"
+    },
+    {
+      "email": "mentor.a.mvto7tom@mailinator.com",
+      "id": "mentor_a_mvto7tom",
+      "keysAllowed": 50,
+      "keysUsed": 1,
+      "mentorName": "Alpha",
+      "name": "Mentor Alpha",
+      "passwordHash": "1a947dc94fc1c1a0e4c2e94c03344fce4373462b556935db4538e16882fb0864",
+      "registeredAt": "2026-10-29T15:00:58.190Z",
+      "status": "approved",
+      "whatsapp": "+11111111111"
+    },
+    {
+      "email": "mentor.b.mvto7tom@mailinator.com",
+      "id": "mentor_b_mvto7tom",
+      "keysAllowed": 50,
+      "keysUsed": 1,
+      "mentorName": "Bravo",
+      "name": "Mentor Bravo",
+      "passwordHash": "8b5f91fe1f1908630c4be8ca091e3e1b25775b386993ab72bb70458e5860f629",
+      "registeredAt": "2026-10-29T15:00:58.190Z",
+      "status": "approved",
+      "whatsapp": "+22222222222"
+    },
+    {
+      "email": "mentor.a.mvto4s3w@mailinator.com",
+      "id": "mentor_a_mvto4s3w",
+      "keysAllowed": 50,
+      "keysUsed": 1,
+      "mentorName": "Alpha",
+      "name": "Mentor Alpha",
+      "passwordHash": "1a947dc94fc1c1a0e4c2e94c03344fce4373462b556935db4538e16882fb0864",
+      "registeredAt": "2026-10-29T14:58:36.279Z",
+      "status": "approved",
+      "whatsapp": "+11111111111"
+    },
+    {
+      "email": "mentor.b.mvto4s3w@mailinator.com",
+      "id": "mentor_b_mvto4s3w",
+      "keysAllowed": 50,
+      "keysUsed": 1,
+      "mentorName": "Bravo",
+      "name": "Mentor Bravo",
+      "passwordHash": "8b5f91fe1f1908630c4be8ca091e3e1b25775b386993ab72bb70458e5860f629",
+      "registeredAt": "2026-10-29T14:58:36.279Z",
+      "status": "approved",
+      "whatsapp": "+22222222222"
+    },
+    {
+      "email": "mentor.a.mvto31oo@mailinator.com",
+      "id": "mentor_a_mvto31oo",
+      "keysAllowed": 50,
+      "keysUsed": 1,
+      "mentorName": "Alpha",
+      "name": "Mentor Alpha",
+      "passwordHash": "1a947dc94fc1c1a0e4c2e94c03344fce4373462b556935db4538e16882fb0864",
+      "registeredAt": "2026-10-29T14:57:15.559Z",
+      "status": "approved",
+      "whatsapp": "+11111111111"
+    },
+    {
+      "email": "mentor.b.mvto31oo@mailinator.com",
+      "id": "mentor_b_mvto31oo",
+      "keysAllowed": 50,
+      "keysUsed": 1,
+      "mentorName": "Bravo",
+      "name": "Mentor Bravo",
+      "passwordHash": "8b5f91fe1f1908630c4be8ca091e3e1b25775b386993ab72bb70458e5860f629",
+      "registeredAt": "2026-10-29T14:57:15.559Z",
+      "status": "approved",
+      "whatsapp": "+22222222222"
+    },
+    {
+      "email": "mentor.a.mvto1om6@mailinator.com",
+      "id": "mentor_a_mvto1om6",
+      "keysAllowed": 50,
+      "keysUsed": 1,
+      "mentorName": "Alpha",
+      "name": "Mentor Alpha",
+      "passwordHash": "1a947dc94fc1c1a0e4c2e94c03344fce4373462b556935db4538e16882fb0864",
+      "registeredAt": "2026-10-29T14:56:12.520Z",
+      "status": "approved",
+      "whatsapp": "+11111111111"
+    },
+    {
+      "email": "mentor.b.mvto1om6@mailinator.com",
+      "id": "mentor_b_mvto1om6",
+      "keysAllowed": 50,
+      "keysUsed": 1,
+      "mentorName": "Bravo",
+      "name": "Mentor Bravo",
+      "passwordHash": "8b5f91fe1f1908630c4be8ca091e3e1b25775b386993ab72bb70458e5860f629",
+      "registeredAt": "2026-10-29T14:56:12.520Z",
+      "status": "approved",
+      "whatsapp": "+22222222222"
+    },
+    {
+      "email": "prove.1793266141915@example.com",
+      "id": "mentor_prove_mvtccygr",
+      "keysAllowed": 0,
+      "keysUsed": 0,
+      "mentorName": "Prove",
+      "name": "Prove Mentor",
+      "registeredAt": "2026-10-29T09:29:01.563Z",
+      "status": "waiting",
+      "whatsapp": "+10000000000"
+    },
+    {
+      "email": "clear@example.com",
+      "id": "mentor_clear",
+      "keysAllowed": 0,
+      "keysUsed": 0,
+      "mentorName": "Clear",
+      "name": "Clear",
+      "registeredAt": "2026-10-29T00:00:00.000Z",
+      "status": "waiting",
+      "whatsapp": "+1"
+    }
+  ],
+  "reactivated": [
+    {
+      "email": "client.a.mvtoa51a@mailinator.com",
+      "paid": true,
+      "reactivatedAt": "2026-10-29T15:02:46.074Z",
+      "status": "active"
+    },
+    {
+      "email": "client.a.mvto7tom@mailinator.com",
+      "paid": true,
+      "reactivatedAt": "2026-10-29T15:00:58.190Z",
+      "status": "active"
+    },
+    {
+      "email": "client.a.mvto4s3w@mailinator.com",
+      "paid": true,
+      "reactivatedAt": "2026-10-29T14:58:36.279Z",
+      "status": "active"
+    },
+    {
+      "email": "client.a.mvto31oo@mailinator.com",
+      "paid": true,
+      "reactivatedAt": "2026-10-29T14:57:15.559Z",
+      "status": "active"
+    },
+    {
+      "email": "client.a.mvto1om6@mailinator.com",
+      "paid": true,
+      "reactivatedAt": "2026-10-29T14:56:12.520Z",
+      "status": "active"
+    }
+  ],
+  "subscriptions": [
+    {
+      "email": "mukundimukhuba@gmail.com",
+      "id": "whop_mvtrtyg1_yltlg",
+      "paidAt": "2026-10-29T16:42:08.929Z",
+      "plan": "Whop · plan_HXXGXZqh48JQs",
+      "source": "whop",
+      "status": "declined"
+    },
+    {
+      "email": "whop.client.mvtonbz8@mailinator.com",
+      "id": "whop_mvtonfak_0owk3",
+      "paidAt": "2026-10-29T15:13:05.324Z",
+      "plan": "Whop · plan_HXXGXZqh48JQs",
+      "source": "whop",
+      "status": "declined"
+    }
+  ],
+  "updatedAt": "2026-10-29T16:48:19.246Z"
+}

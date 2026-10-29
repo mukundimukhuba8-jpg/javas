@@ -17,6 +17,7 @@ import { useAccess } from '../access/AccessStore';
 import {
   buildAppReturnUrl,
   buildWhopCheckoutUrl,
+  peekPendingCheckoutEmail,
   stashPendingCheckoutEmail,
   WHOP_CHECKOUT_PLAN_URL,
 } from '../access/whop';
@@ -32,16 +33,24 @@ type Step = 'email' | 'pay';
 export function EmailGateScreen({ onOpenAdminPortal }: Props) {
   useDarkWebShell('oracle-member-auth-shell');
   const insets = useSafeAreaInsets();
-  const { tryEnter, recordWhopPaid, whopReturnHandled } = useAccess();
+  const { tryEnter, whopReturnHandled, whopReturnError, clearWhopReturnError } = useAccess();
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [step, setStep] = useState<Step>('email');
   const [busy, setBusy] = useState(false);
 
+  // Invalid / forged Whop return → stay on Payment with an error (never unlock)
   useEffect(() => {
-    if (!whopReturnHandled) return;
-  }, [whopReturnHandled]);
+    if (!whopReturnHandled || !whopReturnError) return;
+    setStep('pay');
+    setError(whopReturnError);
+    setInfo(null);
+    if (!email.trim()) {
+      const pending = peekPendingCheckoutEmail();
+      if (pending) setEmail(pending);
+    }
+  }, [whopReturnHandled, whopReturnError, email]);
 
   const onContinueEmail = async () => {
     const n = email.trim().toLowerCase();
@@ -114,21 +123,6 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
       await Linking.openURL(url);
     } catch {
       setError(`Could not open Whop. Open manually: ${WHOP_CHECKOUT_PLAN_URL}`);
-    }
-  };
-
-  const onConfirmPaid = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await recordWhopPaid(email);
-      if (!result.ok) {
-        setError(result.reason);
-        return;
-      }
-      setInfo('Payment saved. Continue to activate your license key.');
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -270,8 +264,8 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
                   {email.trim().toLowerCase()}
                 </Text>
                 <Text style={styles.payHint}>
-                  You will open Whop checkout. After paying, return here — we save your email as paid
-                  on the Subscription list (awaiting approval) and unlock Activate.
+                  Open Whop checkout to pay. After a successful payment, Whop returns you here and
+                  unlocks Activate. Claiming payment without Whop will not work.
                 </Text>
 
                 {error ? (
@@ -282,7 +276,10 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
                 {info ? <Text style={authStyles.info}>{info}</Text> : null}
 
                 <Pressable
-                  onPress={() => void openWhopCheckout()}
+                  onPress={() => {
+                    clearWhopReturnError();
+                    void openWhopCheckout();
+                  }}
                   style={styles.whopBtn}
                   accessibilityRole="button"
                   accessibilityLabel="Pay with Whop"
@@ -292,25 +289,11 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
                 </Pressable>
 
                 <Pressable
-                  onPress={() => void onConfirmPaid()}
-                  style={[authStyles.continue, busy && { opacity: 0.7 }]}
-                  accessibilityRole="button"
-                  accessibilityLabel="I have paid continue"
-                  testID="whop-confirm-paid"
-                  disabled={busy}
-                >
-                  {busy ? (
-                    <ActivityIndicator color="#0A0A0A" />
-                  ) : (
-                    <Text style={authStyles.continueText}>I&apos;ve paid — continue</Text>
-                  )}
-                </Pressable>
-
-                <Pressable
                   onPress={() => {
                     setStep('email');
                     setError(null);
                     setInfo(null);
+                    clearWhopReturnError();
                   }}
                   testID="whop-back-email"
                 >

@@ -1751,7 +1751,7 @@ function SubscriptionSection({ fontsReady }: { fontsReady: boolean }) {
       <View style={styles.pageIntro}>
         <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>Subscription</Text>
         <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
-          Whop (and other) payments land here as Paid · awaiting approval. Approve to confirm.
+          Verified Whop returns land here as Paid · awaiting approval. Unverified client claims are declined.
         </Text>
       </View>
       <Card>

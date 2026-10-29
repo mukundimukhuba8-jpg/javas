@@ -2,13 +2,14 @@
  * Whop hosted checkout for Oracle client payments.
  *
  * Checkout: https://whop.com/checkout/plan_HXXGXZqh48JQs
- * Prefill: ?email=…&email.disabled=1 (Whop branding docs)
+ * Prefill: ?email=…&email.disabled=1
  *
- * Return (best-effort — no webhook secret provided):
- *   {appBase}?paid=1&email={email}&status=success
- * Also accepts Whop-style ?status=succeeded|success with email.
+ * Soft-verified return (no webhook secret yet):
+ *   {appBase}?paid=1&email={email}&status=success&source=whop
  *
- * Hard verification needs a Whop webhook + API secret in a server/Edge Function.
+ * Unlock requires ALL of: paid=1, success status, source=whop.
+ * Client-only “I've paid” claims are never honored.
+ * Hard verification needs a Whop webhook + API secret (server/Edge).
  */
 
 export const WHOP_CHECKOUT_PLAN_URL = 'https://whop.com/checkout/plan_HXXGXZqh48JQs';
@@ -20,7 +21,6 @@ function appOriginAndBase(): { origin: string; basePath: string } {
     return { origin: 'https://mukundimukhuba8-jpg.github.io', basePath: '/javas/oracle' };
   }
   const origin = window.location.origin;
-  // Expo web may be at / or /javas/oracle/
   const path = window.location.pathname || '/';
   if (path.startsWith('/javas/oracle')) {
     return { origin, basePath: '/javas/oracle' };
@@ -32,7 +32,6 @@ function appOriginAndBase(): { origin: string; basePath: string } {
 export function buildAppReturnUrl(email: string): string {
   const { origin, basePath } = appOriginAndBase();
   const u = new URL(`${origin}${basePath || '/'}`);
-  // Keep path trailing slash friendly for Pages
   if (basePath && !u.pathname.endsWith('/')) {
     u.pathname = `${u.pathname}/`;
   }
@@ -51,40 +50,66 @@ export function buildWhopCheckoutUrl(email: string): string {
     u.searchParams.set('email', n);
     u.searchParams.set('email.disabled', '1');
   }
-  // Some Whop setups honor redirect; harmless if ignored
   u.searchParams.set('redirect', buildAppReturnUrl(n));
   return u.toString();
 }
 
 export type WhopReturnParams = {
+  /** True only when return URL satisfies soft verify rules. */
   paid: boolean;
   email: string | null;
   status: string | null;
+  source: string | null;
   paymentId: string | null;
+  /** Query looked like a payment return but failed verification. */
+  forgedOrIncomplete: boolean;
 };
 
-/** Parse current location (or given search) for Whop / mock paid return. */
-export function parseWhopReturn(search?: string): WhopReturnParams {
+function readSearchParams(search?: string): URLSearchParams {
   const raw =
-    search ??
-    (typeof window !== 'undefined' ? window.location.search : '') ??
-    '';
-  const q = new URLSearchParams(raw.startsWith('?') ? raw.slice(1) : raw);
+    search ?? (typeof window !== 'undefined' ? window.location.search : '') ?? '';
+  return new URLSearchParams(raw.startsWith('?') ? raw.slice(1) : raw);
+}
+
+/** True if the URL has any Whop/payment-related query keys. */
+export function isWhopReturnAttempt(search?: string): boolean {
+  const q = readSearchParams(search);
+  return (
+    q.has('paid') ||
+    q.has('status') ||
+    q.has('payment') ||
+    q.has('payment_id') ||
+    (q.get('source') || '').toLowerCase() === 'whop'
+  );
+}
+
+/**
+ * Parse current location (or given search) for Whop return.
+ * Requires paid=1 + success|succeeded|ok|complete + source=whop.
+ */
+export function parseWhopReturn(search?: string): WhopReturnParams {
+  const q = readSearchParams(search);
   const emailRaw = q.get('email') || q.get('buyer_email');
   const email = emailRaw ? emailRaw.trim().toLowerCase() : null;
   const status = (q.get('status') || '').toLowerCase() || null;
+  const source = (q.get('source') || '').toLowerCase() || null;
   const paidFlag = q.get('paid') === '1' || q.get('paid') === 'true';
   const statusOk =
     status === 'success' ||
     status === 'succeeded' ||
     status === 'ok' ||
     status === 'complete';
+  const sourceOk = source === 'whop';
   const paymentId = q.get('payment') || q.get('payment_id') || null;
+  const attempt = isWhopReturnAttempt(search);
+  const paid = paidFlag && statusOk && sourceOk;
   return {
-    paid: paidFlag || statusOk,
+    paid,
     email,
     status,
+    source,
     paymentId,
+    forgedOrIncomplete: attempt && !paid,
   };
 }
 
@@ -119,6 +144,16 @@ export function takePendingCheckoutEmail(): string | null {
   try {
     const v = localStorage.getItem(PENDING_KEY);
     localStorage.removeItem(PENDING_KEY);
+    return v ? v.trim().toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function peekPendingCheckoutEmail(): string | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const v = localStorage.getItem(PENDING_KEY);
     return v ? v.trim().toLowerCase() : null;
   } catch {
     return null;

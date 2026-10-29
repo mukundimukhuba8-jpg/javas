@@ -30,6 +30,9 @@ export type Mentor = {
   passwordHash?: string;
 };
 
+/** How a Whop (or other) payment was verified before unlock. */
+export type SubscriptionVerifiedVia = 'whop_return' | 'webhook' | 'admin';
+
 /** Paid subscription requests awaiting admin approval (before license keys). */
 export type SubscriptionPayment = {
   id: string;
@@ -39,6 +42,9 @@ export type SubscriptionPayment = {
   plan?: string;
   /** e.g. whop — shown in portal Subscription list */
   source?: string;
+  /** Required for source=whop unlock — never trust client-only claims */
+  verifiedVia?: SubscriptionVerifiedVia;
+  paymentId?: string;
 };
 
 export type OracleCloudStore = {
@@ -109,6 +115,19 @@ function normalizeSubscription(raw: unknown): SubscriptionPayment | null {
   if (typeof s.email !== 'string' || !s.email.trim()) return null;
   const status =
     s.status === 'approved' ? 'approved' : s.status === 'declined' ? 'declined' : 'awaiting';
+  const verifiedRaw =
+    typeof (s as { verifiedVia?: unknown }).verifiedVia === 'string'
+      ? String((s as { verifiedVia: string }).verifiedVia)
+      : '';
+  const verifiedVia: SubscriptionVerifiedVia | undefined =
+    verifiedRaw === 'whop_return' || verifiedRaw === 'webhook' || verifiedRaw === 'admin'
+      ? verifiedRaw
+      : undefined;
+  const paymentId =
+    typeof (s as { paymentId?: unknown }).paymentId === 'string' &&
+    (s as { paymentId: string }).paymentId.trim()
+      ? (s as { paymentId: string }).paymentId.trim()
+      : undefined;
   return {
     id: s.id,
     email: s.email.trim().toLowerCase(),
@@ -116,6 +135,51 @@ function normalizeSubscription(raw: unknown): SubscriptionPayment | null {
     paidAt: typeof s.paidAt === 'string' ? s.paidAt : new Date().toISOString(),
     plan: typeof s.plan === 'string' ? s.plan : undefined,
     source: typeof s.source === 'string' && s.source.trim() ? s.source.trim() : undefined,
+    verifiedVia,
+    paymentId,
+  };
+}
+
+/** Whop rows without verifiedVia were created by the removed “I've paid” button. */
+export function isVerifiedSubscription(s: SubscriptionPayment): boolean {
+  if ((s.source || '').toLowerCase() !== 'whop') return true;
+  return (
+    s.verifiedVia === 'whop_return' ||
+    s.verifiedVia === 'webhook' ||
+    s.verifiedVia === 'admin'
+  );
+}
+
+/** Demote unverified Whop paid rows; strip matching reactivated unlocks. */
+export function scrubUnverifiedWhopPayments(store: OracleCloudStore): {
+  store: OracleCloudStore;
+  demotedEmails: string[];
+  changed: boolean;
+} {
+  const demotedEmails: string[] = [];
+  const subscriptions = (store.subscriptions || []).map((s) => {
+    if ((s.source || '').toLowerCase() !== 'whop') return s;
+    if (isVerifiedSubscription(s)) return s;
+    if (s.status === 'declined') return s;
+    demotedEmails.push(s.email.trim().toLowerCase());
+    return { ...s, status: 'declined' as const };
+  });
+  const demoted = new Set(demotedEmails);
+  const reactivated = (store.reactivated || []).filter((e) => {
+    const email = (e.email || '').trim().toLowerCase();
+    return !demoted.has(email);
+  });
+  const changed =
+    demotedEmails.length > 0 || reactivated.length !== (store.reactivated || []).length;
+  return {
+    changed,
+    demotedEmails: Array.from(demoted),
+    store: {
+      ...store,
+      subscriptions,
+      reactivated,
+      updatedAt: changed ? new Date().toISOString() : store.updatedAt,
+    },
   };
 }
 
@@ -899,6 +963,24 @@ export async function upsertSubscriptionPayment(
       ...remote,
       subscriptions: [normalized, ...others],
     });
+  });
+}
+
+/**
+ * One-shot / refresh: demote Whop rows that lack verifiedVia (fake “I've paid”),
+ * and drop matching reactivated unlocks. Full replace so demoted emails stay out.
+ */
+export async function scrubUnverifiedWhopInCloud(): Promise<{
+  demotedEmails: string[];
+  changed: boolean;
+  store: OracleCloudStore;
+}> {
+  return enqueueWrite(async () => {
+    const remote = await fetchCloudPrimary();
+    const { store, demotedEmails, changed } = scrubUnverifiedWhopPayments(remote);
+    if (!changed) return { demotedEmails: [], changed: false, store: remote };
+    const written = await putCloudStore(store);
+    return { demotedEmails, changed: true, store: written };
   });
 }
 
