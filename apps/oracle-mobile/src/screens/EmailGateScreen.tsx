@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -11,26 +13,103 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAccess } from '../access/AccessStore';
+import {
+  buildAppReturnUrl,
+  buildWhopCheckoutUrl,
+  stashPendingCheckoutEmail,
+  WHOP_CHECKOUT_PLAN_URL,
+} from '../access/whop';
 import { EaTradeLogoMark } from '../components/EaTradeBrand';
 
 type Props = {
   onOpenAdminPortal: () => void;
 };
 
+type Step = 'email' | 'pay';
+
 export function EmailGateScreen({ onOpenAdminPortal }: Props) {
   const insets = useSafeAreaInsets();
-  const { tryEnter } = useAccess();
+  const { tryEnter, recordWhopPaid, whopReturnHandled } = useAccess();
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [step, setStep] = useState<Step>('email');
+  const [busy, setBusy] = useState(false);
 
-  const onContinue = async () => {
-    const result = await tryEnter(email);
-    if (!result.ok) {
+  // After Whop return, AccessProvider unlocks session — show brief note while settling
+  useEffect(() => {
+    if (!whopReturnHandled) return;
+  }, [whopReturnHandled]);
+
+  const onContinueEmail = async () => {
+    setBusy(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const result = await tryEnter(email);
+      if (result.ok) {
+        setBusy(false);
+        return;
+      }
+      if (result.needsPayment) {
+        setStep('pay');
+        setError(null);
+        setInfo('Complete payment on Whop, then you can enter your license key.');
+        setBusy(false);
+        return;
+      }
       setError(result.reason ?? 'Access denied.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openWhopCheckout = async () => {
+    const n = email.trim().toLowerCase();
+    if (!n.includes('@')) {
+      setError('Enter a valid email first.');
+      setStep('email');
       return;
     }
-    setError(null);
+    stashPendingCheckoutEmail(n);
+    const url = buildWhopCheckoutUrl(n);
+    setInfo(`Return URL (configure in Whop if needed): ${buildAppReturnUrl(n)}`);
+    try {
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.location.assign(url);
+        return;
+      }
+      await Linking.openURL(url);
+    } catch {
+      setError(`Could not open Whop. Open manually: ${WHOP_CHECKOUT_PLAN_URL}`);
+    }
   };
+
+  /** Best-effort: client confirms payment (mock / Whop return without redirect). */
+  const onConfirmPaid = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await recordWhopPaid(email);
+      if (!result.ok) {
+        setError(result.reason);
+        setBusy(false);
+        return;
+      }
+      setInfo('Payment saved. Continue to activate your license key.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!whopReturnHandled) {
+    return (
+      <View style={[styles.root, styles.centerBoot]} testID="whop-return-boot">
+        <ActivityIndicator color="#fff" />
+        <Text style={styles.bootText}>Checking payment…</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -55,6 +134,13 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
           accessibilityRole="button"
           accessibilityLabel="Back"
           hitSlop={8}
+          onPress={() => {
+            if (step === 'pay') {
+              setStep('email');
+              setError(null);
+              setInfo(null);
+            }
+          }}
         >
           <View style={styles.backArrow} />
         </Pressable>
@@ -70,39 +156,111 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
           </Pressable>
 
           <Text style={styles.brandLabel}>EA TRADE</Text>
-          <Text style={styles.title}>Sign in</Text>
-          <Text style={styles.sub}>Use the email linked to your membership</Text>
+          <Text style={styles.title}>{step === 'pay' ? 'Payment' : 'Sign in'}</Text>
+          <Text style={styles.sub}>
+            {step === 'pay'
+              ? 'Pay on Whop to unlock Activate license key for this email.'
+              : 'Use the email linked to your membership'}
+          </Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>EMAIL</Text>
-          <TextInput
-            value={email}
-            onChangeText={(v) => {
-              setEmail(v);
-              setError(null);
-            }}
-            placeholder="you@email.com"
-            placeholderTextColor="#6B7280"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            testID="member-email-input"
-            style={styles.input}
-            onSubmitEditing={onContinue}
-          />
+          {step === 'email' ? (
+            <>
+              <Text style={styles.label}>EMAIL</Text>
+              <TextInput
+                value={email}
+                onChangeText={(v) => {
+                  setEmail(v);
+                  setError(null);
+                }}
+                placeholder="you@email.com"
+                placeholderTextColor="#6B7280"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                testID="member-email-input"
+                style={styles.input}
+                onSubmitEditing={() => void onContinueEmail()}
+              />
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+              {error ? (
+                <Text style={styles.error} testID="member-email-error">
+                  {error}
+                </Text>
+              ) : null}
+              {info ? <Text style={styles.info}>{info}</Text> : null}
 
-          <Pressable
-            onPress={onContinue}
-            style={styles.continue}
-            accessibilityRole="button"
-            accessibilityLabel="Continue"
-            testID="member-email-continue"
-          >
-            <Text style={styles.continueText}>Continue</Text>
-          </Pressable>
+              <Pressable
+                onPress={() => void onContinueEmail()}
+                style={[styles.continue, busy && { opacity: 0.7 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Continue"
+                testID="member-email-continue"
+                disabled={busy}
+              >
+                {busy ? (
+                  <ActivityIndicator color="#0A0A0A" />
+                ) : (
+                  <Text style={styles.continueText}>Continue</Text>
+                )}
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Text style={styles.label}>EMAIL</Text>
+              <Text style={[styles.input, styles.emailReadonly]} testID="member-pay-email">
+                {email.trim().toLowerCase()}
+              </Text>
+              <Text style={styles.payHint}>
+                You will open Whop checkout. After paying, return here — we save your email as paid
+                on the Subscription list (awaiting approval) and unlock Activate.
+              </Text>
+
+              {error ? (
+                <Text style={styles.error} testID="member-pay-error">
+                  {error}
+                </Text>
+              ) : null}
+              {info ? <Text style={styles.info}>{info}</Text> : null}
+
+              <Pressable
+                onPress={() => void openWhopCheckout()}
+                style={styles.whopBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Pay with Whop"
+                testID="whop-checkout-open"
+              >
+                <Text style={styles.whopBtnText}>Pay with Whop</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={() => void onConfirmPaid()}
+                style={[styles.continue, busy && { opacity: 0.7 }]}
+                accessibilityRole="button"
+                accessibilityLabel="I have paid continue"
+                testID="whop-confirm-paid"
+                disabled={busy}
+              >
+                {busy ? (
+                  <ActivityIndicator color="#0A0A0A" />
+                ) : (
+                  <Text style={styles.continueText}>I&apos;ve paid — continue</Text>
+                )}
+              </Pressable>
+
+              <Pressable
+                onPress={() => {
+                  setStep('email');
+                  setError(null);
+                  setInfo(null);
+                }}
+                testID="whop-back-email"
+              >
+                <Text style={styles.backLink}>Use a different email</Text>
+              </Pressable>
+            </>
+          )}
         </View>
 
         <Pressable
@@ -123,6 +281,15 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: '#000000',
+  },
+  centerBoot: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  bootText: {
+    color: '#9CA3AF',
+    fontSize: 14,
   },
   content: {
     flex: 1,
@@ -173,7 +340,7 @@ const styles = StyleSheet.create({
     fontWeight: '400',
     textAlign: 'center',
     lineHeight: 22,
-    maxWidth: 280,
+    maxWidth: 300,
   },
   card: {
     backgroundColor: '#14161C',
@@ -204,10 +371,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
   },
+  emailReadonly: {
+    paddingVertical: 14,
+  },
+  payHint: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    lineHeight: 19,
+  },
   error: {
     color: '#F87171',
     fontSize: 13,
     lineHeight: 18,
+  },
+  info: {
+    color: '#93C5FD',
+    fontSize: 12,
+    lineHeight: 17,
   },
   continue: {
     backgroundColor: '#FFFFFF',
@@ -220,6 +400,23 @@ const styles = StyleSheet.create({
     color: '#0A0A0A',
     fontWeight: '700',
     fontSize: 16,
+  },
+  whopBtn: {
+    backgroundColor: '#3B82F6',
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  whopBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  backLink: {
+    color: 'rgba(156,163,175,0.8)',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 4,
   },
   adminLink: {
     alignSelf: 'center',
