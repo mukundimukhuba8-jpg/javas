@@ -36,7 +36,12 @@ const SYNC_PASS =
 
 function isVerified(s) {
   if ((s.source || '').toLowerCase() !== 'whop') return true;
-  return s.verifiedVia === 'whop_return' || s.verifiedVia === 'webhook' || s.verifiedVia === 'admin';
+  return (
+    s.verifiedVia === 'whop_return' ||
+    s.verifiedVia === 'webhook' ||
+    s.verifiedVia === 'api' ||
+    s.verifiedVia === 'admin'
+  );
 }
 
 async function api(method, pathName, { key, token, body, headers } = {}) {

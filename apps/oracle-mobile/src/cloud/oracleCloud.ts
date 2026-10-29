@@ -31,7 +31,7 @@ export type Mentor = {
 };
 
 /** How a Whop (or other) payment was verified before unlock. */
-export type SubscriptionVerifiedVia = 'whop_return' | 'webhook' | 'admin';
+export type SubscriptionVerifiedVia = 'whop_return' | 'webhook' | 'api' | 'admin';
 
 /** Paid subscription requests awaiting admin approval (before license keys). */
 export type SubscriptionPayment = {
@@ -120,7 +120,10 @@ function normalizeSubscription(raw: unknown): SubscriptionPayment | null {
       ? String((s as { verifiedVia: string }).verifiedVia)
       : '';
   const verifiedVia: SubscriptionVerifiedVia | undefined =
-    verifiedRaw === 'whop_return' || verifiedRaw === 'webhook' || verifiedRaw === 'admin'
+    verifiedRaw === 'whop_return' ||
+    verifiedRaw === 'webhook' ||
+    verifiedRaw === 'api' ||
+    verifiedRaw === 'admin'
       ? verifiedRaw
       : undefined;
   const paymentId =
@@ -146,6 +149,7 @@ export function isVerifiedSubscription(s: SubscriptionPayment): boolean {
   return (
     s.verifiedVia === 'whop_return' ||
     s.verifiedVia === 'webhook' ||
+    s.verifiedVia === 'api' ||
     s.verifiedVia === 'admin'
   );
 }

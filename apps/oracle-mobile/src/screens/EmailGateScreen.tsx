@@ -33,12 +33,19 @@ type Step = 'email' | 'pay';
 export function EmailGateScreen({ onOpenAdminPortal }: Props) {
   useDarkWebShell('oracle-member-auth-shell');
   const insets = useSafeAreaInsets();
-  const { tryEnter, whopReturnHandled, whopReturnError, clearWhopReturnError } = useAccess();
+  const {
+    tryEnter,
+    whopReturnHandled,
+    whopReturnError,
+    clearWhopReturnError,
+    checkWhopPayment,
+  } = useAccess();
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [step, setStep] = useState<Step>('email');
   const [busy, setBusy] = useState(false);
+  const [checkingPay, setCheckingPay] = useState(false);
 
   // Invalid / forged Whop return → stay on Payment with an error (never unlock)
   useEffect(() => {
@@ -114,7 +121,9 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
     }
     stashPendingCheckoutEmail(n);
     const url = buildWhopCheckoutUrl(n);
-    setInfo(`Return URL (configure in Whop if needed): ${buildAppReturnUrl(n)}`);
+    setInfo(
+      `After paying, Whop should return you here. Configure redirect to: ${buildAppReturnUrl(n)}`,
+    );
     try {
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         window.location.assign(url);
@@ -123,6 +132,43 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
       await Linking.openURL(url);
     } catch {
       setError(`Could not open Whop. Open manually: ${WHOP_CHECKOUT_PLAN_URL}`);
+    }
+  };
+
+  /** Poll Whop via server API (when keys configured) — auto-unlocks Activate if paid. */
+  const onCheckPayment = async () => {
+    const n = email.trim().toLowerCase();
+    if (!n.includes('@')) {
+      setError('Enter a valid email first.');
+      return;
+    }
+    setCheckingPay(true);
+    setError(null);
+    setInfo('Checking Whop for payment…');
+    clearWhopReturnError();
+    try {
+      const result = await checkWhopPayment(n);
+      if (result.paid) {
+        setInfo('Payment confirmed. Opening Activate…');
+        return;
+      }
+      if (!result.configured) {
+        setInfo(
+          'Live Whop verify is not configured yet (API key). Finish checkout so Whop redirects back with a success return URL.',
+        );
+        return;
+      }
+      setError(
+        result.reason === 'no_membership'
+          ? 'Whop has no paid membership for this email on this plan yet.'
+          : 'Payment not confirmed on Whop yet. Finish checkout, then check again.',
+      );
+      setInfo(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not check Whop.');
+      setInfo(null);
+    } finally {
+      setCheckingPay(false);
     }
   };
 
@@ -264,8 +310,9 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
                   {email.trim().toLowerCase()}
                 </Text>
                 <Text style={styles.payHint}>
-                  Open Whop checkout to pay. After a successful payment, Whop returns you here and
-                  unlocks Activate. Claiming payment without Whop will not work.
+                  Open Whop checkout to pay. After a successful payment you return here and Activate
+                  unlocks automatically when Whop confirms (API/webhook) or via the verified return
+                  URL. There is no manual “I paid” unlock.
                 </Text>
 
                 {error ? (
@@ -286,6 +333,21 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
                   testID="whop-checkout-open"
                 >
                   <Text style={styles.whopBtnText}>Pay with Whop</Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => void onCheckPayment()}
+                  style={[styles.checkBtn, checkingPay && { opacity: 0.7 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Check payment status"
+                  testID="whop-check-payment"
+                  disabled={checkingPay || busy}
+                >
+                  {checkingPay ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.checkBtnText}>Check payment status</Text>
+                  )}
                 </Pressable>
 
                 <Pressable
@@ -346,6 +408,19 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 16,
+  },
+  checkBtn: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  checkBtnText: {
+    color: '#E5E7EB',
+    fontWeight: '600',
+    fontSize: 15,
   },
   backLink: {
     color: 'rgba(156,163,175,0.8)',
