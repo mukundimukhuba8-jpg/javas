@@ -18,3 +18,23 @@ The app is the committed Expo web export in **`public/`**.
 ## Working backup
 
 https://mukundimukhuba8-jpg.github.io/javas/oracle/
+
+## Whop webhook (server secrets)
+
+Set on this Vercel project (Production):
+
+- `WHOP_WEBHOOK_SECRET` — from Whop Developer → Webhooks (`ws_…`). **Never** put in `EXPO_PUBLIC_*` or git.
+- `WHOP_PLAN_ID=plan_HXXGXZqh48JQs`
+- Supabase sync vars used by `/api/whop/webhook` to write Paid subscriptions:
+  `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` / `ORACLE_SYNC_EMAIL` / `ORACLE_SYNC_PASSWORD`
+  (or the matching `EXPO_PUBLIC_*` names already used for Oracle).
+
+Optional poll verify: `WHOP_API_KEY`, `WHOP_COMPANY_ID` (`biz_…`).
+
+Whop dashboard webhook URL:
+
+`https://<production-host>/api/whop/webhook`
+
+Health (booleans only): `https://<production-host>/api/whop/status`
+
+See `docs/oracle/WHOP.md`.
