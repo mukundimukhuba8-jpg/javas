@@ -310,26 +310,39 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     [reactivate],
   );
 
-  // Handle Whop / mock return URL once on mount
+  // Handle Whop / mock return URL once on mount — never block Sign in forever
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') {
       setWhopReturnHandled(true);
       return;
     }
     let cancelled = false;
-    const run = async () => {
-      const parsed = parseWhopReturn();
-      const pending = takePendingCheckoutEmail();
-      const email = parsed.email || pending;
-      if (parsed.paid && email) {
-        await recordWhopPaid(email, { paymentId: parsed.paymentId });
-        clearWhopReturnFromUrl();
-      }
+    const safety = setTimeout(() => {
       if (!cancelled) setWhopReturnHandled(true);
+    }, 5_000);
+    const run = async () => {
+      try {
+        const parsed = parseWhopReturn();
+        const pending = takePendingCheckoutEmail();
+        const email = parsed.email || pending;
+        if (parsed.paid && email) {
+          await Promise.race([
+            recordWhopPaid(email, { paymentId: parsed.paymentId }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('whop return timeout')), 8_000)),
+          ]);
+          clearWhopReturnFromUrl();
+        }
+      } catch {
+        /* still unblock UI */
+      } finally {
+        if (!cancelled) setWhopReturnHandled(true);
+        clearTimeout(safety);
+      }
     };
     void run();
     return () => {
       cancelled = true;
+      clearTimeout(safety);
     };
   }, [recordWhopPaid]);
 
@@ -339,19 +352,11 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       if (!n || !n.includes('@')) {
         return { ok: false, reason: 'Enter a valid email address.' };
       }
-      try {
-        const store = await fetchCloudStore();
-        const next = mergeReactivated(store.reactivated, reactivated);
-        setReactivated(next);
-        persistList(next);
-        setSubscriptions(store.subscriptions || []);
 
-        const active = next.some((e) => e.email === n && e.status === 'active');
+      const decide = (storeSubs: SubscriptionPayment[], list: ReactivatedEmail[]): TryEnterResult => {
+        const active = list.some((e) => e.email === n && e.status === 'active');
         const paid =
-          active ||
-          paidEmails.has(n) ||
-          subscriptionGrantsAccess(store.subscriptions || [], n);
-
+          active || paidEmails.has(n) || subscriptionGrantsAccess(storeSubs, n);
         if (paid) {
           setPaidEmails((prev) => {
             const s = new Set(prev);
@@ -367,15 +372,31 @@ export function AccessProvider({ children }: { children: ReactNode }) {
           needsPayment: true,
           reason: 'Payment required before you can activate a license key.',
         };
-      } catch {
+      };
+
+      try {
+        const store = await Promise.race([
+          fetchCloudStore(),
+          new Promise<never>((_, rej) =>
+            setTimeout(() => rej(new Error('Cloud check timed out')), 10_000),
+          ),
+        ]);
+        const next = mergeReactivated(store.reactivated, reactivated);
+        setReactivated(next);
+        persistList(next);
+        setSubscriptions(store.subscriptions || []);
+        return decide(store.subscriptions || [], next);
+      } catch (e) {
+        // Local / offline fallback — never leave the user stuck on Sign in
         if (hasPaidAccess(n)) {
           setSessionEmail(n);
           return { ok: true };
         }
+        const msg = e instanceof Error ? e.message : 'Cloud unreachable';
         return {
           ok: false,
           needsPayment: true,
-          reason: 'Payment required before you can activate a license key.',
+          reason: `Could not verify membership (${msg}). Continue to payment to unlock Activate.`,
         };
       }
     },
