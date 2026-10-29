@@ -24,8 +24,52 @@ type Session = { access_token: string; refresh_token?: string; expires_at?: numb
 let cachedSession: Session | null = null;
 let backendMode: 'table' | 'auth_metadata' | null = null;
 
+const FETCH_MS = 8_000;
+
 function configured(): boolean {
   return Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
+
+async function fetchJsonTimed(
+  url: string,
+  init: RequestInit | undefined,
+  label: string,
+): Promise<Response> {
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer =
+    ctrl &&
+    setTimeout(() => {
+      try {
+        ctrl.abort();
+      } catch {
+        /* ignore */
+      }
+    }, FETCH_MS);
+  try {
+    return await withTimeout(
+      fetch(url, { ...(init || {}), signal: ctrl?.signal, cache: 'no-store' }),
+      FETCH_MS + 500,
+      label,
+    );
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function restHeaders(token?: string): Record<string, string> {
@@ -55,11 +99,15 @@ async function ensureSession(): Promise<Session> {
   if (!ORACLE_SYNC_EMAIL || !ORACLE_SYNC_PASSWORD) {
     throw new Error('Supabase sync account is not configured');
   }
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-    method: 'POST',
-    headers: restHeaders(),
-    body: JSON.stringify({ email: ORACLE_SYNC_EMAIL, password: ORACLE_SYNC_PASSWORD }),
-  });
+  const res = await fetchJsonTimed(
+    `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
+    {
+      method: 'POST',
+      headers: restHeaders(),
+      body: JSON.stringify({ email: ORACLE_SYNC_EMAIL, password: ORACLE_SYNC_PASSWORD }),
+    },
+    'Supabase auth',
+  );
   if (!res.ok) {
     throw new Error(`Supabase auth failed (${res.status}): ${await readError(res)}`);
   }
@@ -90,9 +138,10 @@ function emptyPayload(): OracleCloudStore {
 }
 
 async function fetchFromTable(): Promise<OracleCloudStore | null> {
-  const res = await fetch(
+  const res = await fetchJsonTimed(
     `${SUPABASE_URL}/rest/v1/oracle_catalog?id=eq.main&select=payload,updated_at`,
-    { method: 'GET', headers: restHeaders(), cache: 'no-store' },
+    { method: 'GET', headers: restHeaders() },
+    'Supabase table read',
   );
   if (res.status === 404 || res.status === 406) return null;
   if (!res.ok) {
@@ -144,11 +193,11 @@ async function putToTable(store: OracleCloudStore): Promise<boolean> {
 
 async function fetchFromAuthMetadata(): Promise<OracleCloudStore> {
   const session = await ensureSession();
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    method: 'GET',
-    headers: restHeaders(session.access_token),
-    cache: 'no-store',
-  });
+  const res = await fetchJsonTimed(
+    `${SUPABASE_URL}/auth/v1/user`,
+    { method: 'GET', headers: restHeaders(session.access_token) },
+    'Supabase metadata read',
+  );
   if (!res.ok) {
     throw new Error(`Supabase metadata read failed (${res.status}): ${await readError(res)}`);
   }
@@ -161,11 +210,15 @@ async function fetchFromAuthMetadata(): Promise<OracleCloudStore> {
 
 async function putToAuthMetadata(store: OracleCloudStore): Promise<void> {
   const session = await ensureSession();
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    method: 'PUT',
-    headers: restHeaders(session.access_token),
-    body: JSON.stringify({ data: { oracle_store: store } }),
-  });
+  const res = await fetchJsonTimed(
+    `${SUPABASE_URL}/auth/v1/user`,
+    {
+      method: 'PUT',
+      headers: restHeaders(session.access_token),
+      body: JSON.stringify({ data: { oracle_store: store } }),
+    },
+    'Supabase metadata write',
+  );
   if (!res.ok) {
     throw new Error(`Supabase metadata write failed (${res.status}): ${await readError(res)}`);
   }
@@ -175,11 +228,11 @@ async function putToAuthMetadata(store: OracleCloudStore): Promise<void> {
 async function fetchFromStoragePublic(): Promise<OracleCloudStore | null> {
   if (!STORAGE_CATALOG_URL) return null;
   try {
-    const res = await fetch(STORAGE_CATALOG_URL, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      cache: 'no-store',
-    });
+    const res = await fetchJsonTimed(
+      STORAGE_CATALOG_URL,
+      { method: 'GET', headers: { Accept: 'application/json' } },
+      'Supabase storage read',
+    );
     if (!res.ok) return null;
     const json = await res.json();
     if (json && typeof json === 'object') return json as OracleCloudStore;
@@ -222,24 +275,25 @@ export function getSupabaseBackendMode(): string | null {
 export async function supabaseFetchStore(): Promise<OracleCloudStore> {
   if (!configured()) throw new Error('Supabase is not configured');
 
-  // Prefer table when available
-  try {
-    const fromTable = await fetchFromTable();
-    if (fromTable) return fromTable;
-  } catch (e) {
-    // continue to auth metadata
-    if (e instanceof Error && !/PGRST205|table/i.test(e.message)) {
-      // non-missing-table errors still try auth path
+  const run = async () => {
+    // Prefer table when available
+    try {
+      const fromTable = await fetchFromTable();
+      if (fromTable) return fromTable;
+    } catch {
+      /* try auth / storage */
     }
-  }
 
-  try {
-    return await fetchFromAuthMetadata();
-  } catch (authErr) {
-    const fromStorage = await fetchFromStoragePublic();
-    if (fromStorage) return fromStorage;
-    throw authErr instanceof Error ? authErr : new Error(String(authErr));
-  }
+    try {
+      return await fetchFromAuthMetadata();
+    } catch (authErr) {
+      const fromStorage = await fetchFromStoragePublic();
+      if (fromStorage) return fromStorage;
+      throw authErr instanceof Error ? authErr : new Error(String(authErr));
+    }
+  };
+
+  return withTimeout(run(), 12_000, 'Supabase catalog fetch');
 }
 
 /** Auth JWTs embed user_metadata — keep catalog lean (https images only). */

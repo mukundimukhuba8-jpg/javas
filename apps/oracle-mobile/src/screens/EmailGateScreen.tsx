@@ -42,23 +42,54 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
   }, [whopReturnHandled]);
 
   const onContinueEmail = async () => {
+    const n = email.trim().toLowerCase();
+    setEmail(n);
+    if (!n || !n.includes('@')) {
+      setError('Enter a valid email address.');
+      return;
+    }
     setBusy(true);
     setError(null);
-    setInfo(null);
+    setInfo('Checking access…');
     try {
-      const result = await tryEnter(email);
+      const result = await Promise.race([
+        tryEnter(n),
+        new Promise<{ ok: false; needsPayment: true; reason: string }>((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                ok: false,
+                needsPayment: true,
+                reason: 'Cloud check took too long. Continue to payment to unlock Activate.',
+              }),
+            12_000,
+          ),
+        ),
+      ]);
       if (result.ok) {
-        setBusy(false);
+        setInfo(null);
         return;
       }
       if (result.needsPayment) {
         setStep('pay');
         setError(null);
-        setInfo('Complete payment on Whop, then you can enter your license key.');
-        setBusy(false);
+        setInfo(
+          result.reason ||
+            'Complete payment on Whop, then you can enter your license key.',
+        );
         return;
       }
       setError(result.reason ?? 'Access denied.');
+      setInfo(null);
+    } catch (e) {
+      // Never hang — valid email always advances to payment on unexpected errors
+      setStep('pay');
+      setError(null);
+      setInfo(
+        e instanceof Error
+          ? `${e.message} — continue to payment.`
+          : 'Continue to payment to unlock Activate.',
+      );
     } finally {
       setBusy(false);
     }
@@ -173,14 +204,17 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
                 onChangeText={(v) => {
                   setEmail(v);
                   setError(null);
+                  setInfo(null);
                 }}
                 placeholder="you@email.com"
                 placeholderTextColor="#6B7280"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
+                autoComplete="email"
                 testID="member-email-input"
                 style={styles.input}
+                editable={!busy}
                 onSubmitEditing={() => void onContinueEmail()}
               />
 
@@ -189,7 +223,11 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
                   {error}
                 </Text>
               ) : null}
-              {info ? <Text style={styles.info}>{info}</Text> : null}
+              {info ? (
+                <Text style={styles.info} testID="member-email-info">
+                  {info}
+                </Text>
+              ) : null}
 
               <Pressable
                 onPress={() => void onContinueEmail()}
@@ -200,7 +238,7 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
                 disabled={busy}
               >
                 {busy ? (
-                  <ActivityIndicator color="#0A0A0A" />
+                  <ActivityIndicator color="#0A0A0A" testID="member-email-busy" />
                 ) : (
                   <Text style={styles.continueText}>Continue</Text>
                 )}

@@ -193,17 +193,32 @@ function isTransientStatus(status: number): boolean {
 
 async function fetchJson(url: string): Promise<unknown> {
   let lastErr: Error | null = null;
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
     let res: Response;
     try {
-      res = await fetch(url, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        cache: 'no-store',
-      });
+      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer =
+        ctrl &&
+        setTimeout(() => {
+          try {
+            ctrl.abort();
+          } catch {
+            /* ignore */
+          }
+        }, 8_000);
+      try {
+        res = await fetch(url, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          cache: 'no-store',
+          signal: ctrl?.signal,
+        });
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
     } catch (e) {
       lastErr = normalizeNetworkError(e, 'Cloud read failed');
-      await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+      await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
       continue;
     }
     if (!res.ok) {
@@ -420,32 +435,51 @@ function enqueueWrite<T>(fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
+function withOverallTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
+
 /** Live catalog Activate/Create use — primary write URL only (no stale Pages merge). */
 export async function fetchCloudPrimary(): Promise<OracleCloudStore> {
-  if (useSupabasePrimary()) {
+  const run = async () => {
+    if (useSupabasePrimary()) {
+      let lastErr: Error | null = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          return normalizeStore(await supabaseFetchStore());
+        } catch (e) {
+          lastErr = e instanceof Error ? e : new Error(String(e));
+          await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+        }
+      }
+      throw lastErr || new Error('Cloud store unreachable');
+    }
+
+    const url = resolveWriteUrl();
     let lastErr: Error | null = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        return normalizeStore(await supabaseFetchStore());
+        return normalizeStore(await fetchJson(url));
       } catch (e) {
         lastErr = e instanceof Error ? e : new Error(String(e));
-        await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+        await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
       }
     }
     throw lastErr || new Error('Cloud store unreachable');
-  }
-
-  const url = resolveWriteUrl();
-  let lastErr: Error | null = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      return normalizeStore(await fetchJson(url));
-    } catch (e) {
-      lastErr = e instanceof Error ? e : new Error(String(e));
-      await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
-    }
-  }
-  throw lastErr || new Error('Cloud store unreachable');
+  };
+  return withOverallTimeout(run(), 14_000, 'Cloud primary fetch');
 }
 
 /**
