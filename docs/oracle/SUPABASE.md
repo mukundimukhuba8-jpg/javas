@@ -2,6 +2,14 @@
 
 Worldwide catalog (license keys, EAs, mentors, subscriptions, reactivated emails) syncs through Supabase.
 
+## Mentor isolation
+
+Catalog rows (`keys`, `eas`) carry `mentorId`. Portal sessions:
+
+- **Superadmin** (`eatrade@gmail.com`) — sees all catalogs; Manage mentors / Subscription.
+- **Approved mentor** — sees/edits only rows stamped with their `mentorId`.
+- **Clients** activate any valid key; Home shows that key’s EA only (not other mentors’ catalogs).
+
 ## Client env (publishable only)
 
 ```bash

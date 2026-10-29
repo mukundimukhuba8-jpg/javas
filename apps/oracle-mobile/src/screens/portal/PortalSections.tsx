@@ -773,6 +773,7 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
                 style={styles.tableRow}
                 onPress={() => selectEa(item.id)}
                 accessibilityRole="button"
+                testID={`portal-ea-row-${item.name}`}
               >
                 <Pressable
                   onPress={() => onEditRowImage(item.id)}
@@ -1492,7 +1493,14 @@ function ManageMentorsSection({ fontsReady }: { fontsReady: boolean }) {
     try {
       await persist(
         mentors.map((m) =>
-          m.id === id ? { ...m, status: 'approved' as const, keysAllowed: m.keysAllowed || 0 } : m,
+          m.id === id
+            ? {
+                ...m,
+                status: 'approved' as const,
+                // Default quota so newly approved mentors can issue keys immediately
+                keysAllowed: m.keysAllowed > 0 ? m.keysAllowed : 50,
+              }
+            : m,
         ),
       );
       setTab('approved');

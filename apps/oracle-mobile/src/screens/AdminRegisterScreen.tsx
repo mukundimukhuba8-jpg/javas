@@ -84,6 +84,7 @@ export function AdminRegisterScreen({ onBackToSignIn }: Props) {
         email,
         whatsapp,
         instagram,
+        password,
       });
       if (!result.ok) {
         setError(result.reason || 'Could not save registration.');
@@ -126,6 +127,7 @@ export function AdminRegisterScreen({ onBackToSignIn }: Props) {
         }
         autoCorrect={false}
         style={authStyles.input}
+        testID={`portal-register-${key}`}
       />
     </View>
   );
@@ -217,6 +219,7 @@ export function AdminRegisterScreen({ onBackToSignIn }: Props) {
               style={[authStyles.continue, busy ? { opacity: 0.7 } : null]}
               accessibilityRole="button"
               accessibilityLabel="Submit registration"
+              testID="portal-register-submit"
             >
               {busy ? (
                 <ActivityIndicator color="#0A0A0A" />

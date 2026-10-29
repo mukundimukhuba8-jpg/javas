@@ -87,6 +87,7 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            testID="member-email-input"
             style={styles.input}
             onSubmitEditing={onContinue}
           />
@@ -98,6 +99,7 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
             style={styles.continue}
             accessibilityRole="button"
             accessibilityLabel="Continue"
+            testID="member-email-continue"
           >
             <Text style={styles.continueText}>Continue</Text>
           </Pressable>
@@ -108,6 +110,7 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
           style={styles.adminLink}
           accessibilityRole="button"
           accessibilityLabel="Admin"
+          testID="open-admin-portal"
         >
           <Text style={styles.adminLinkText}>Admin</Text>
         </Pressable>

@@ -82,9 +82,14 @@ export function ActivateRobotScreen() {
             autoCorrect={false}
             style={styles.input}
             onSubmitEditing={onActivate}
+            testID="activate-robot-key"
           />
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? (
+            <Text style={styles.error} testID="activate-robot-error">
+              {error}
+            </Text>
+          ) : null}
 
           <Pressable
             onPress={onActivate}
@@ -92,6 +97,7 @@ export function ActivateRobotScreen() {
             style={[styles.primary, busy && { opacity: 0.7 }]}
             accessibilityRole="button"
             accessibilityLabel="Activate"
+            testID="activate-robot-submit"
           >
             <Text style={styles.primaryText}>{busy ? 'Checking…' : 'Activate'}</Text>
           </Pressable>

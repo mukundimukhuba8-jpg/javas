@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -11,7 +12,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EaTradeLogoMark } from '../components/EaTradeBrand';
-import { verifyAdminCredentials } from '../access/adminAuth';
+import { authenticatePortal } from '../access/adminAuth';
+import { usePortalSession } from '../access/portalSession';
 import { AUTH_DARK, authStyles, useDarkWebShell } from './authDarkShell';
 
 type Props = {
@@ -23,23 +25,35 @@ type Props = {
 export function AdminSignInScreen({ onSuccess, onBackToMember, onOpenRegister }: Props) {
   useDarkWebShell('oracle-admin-signin-shell');
   const insets = useSafeAreaInsets();
+  const { signInPortal } = usePortalSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const onSignIn = () => {
+  const onSignIn = async () => {
     setInfo(null);
     if (!email.trim() || !password) {
       setError('Enter email and password.');
       return;
     }
-    if (!verifyAdminCredentials(email, password)) {
-      setError('Wrong email or password.');
-      return;
-    }
+    setBusy(true);
     setError(null);
-    onSuccess();
+    try {
+      const result = await authenticatePortal(email, password);
+      if (!result.ok) {
+        setError(result.reason);
+        setBusy(false);
+        return;
+      }
+      signInPortal(result.session);
+      setBusy(false);
+      onSuccess();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Sign in failed.');
+      setBusy(false);
+    }
   };
 
   return (
@@ -73,7 +87,6 @@ export function AdminSignInScreen({ onSuccess, onBackToMember, onOpenRegister }:
           bounces
           {...(Platform.OS === 'web'
             ? ({
-                // Help web hit-test + CSS target for overflow-y:auto
                 dataSet: { authScroll: '1' },
               } as object)
             : null)}
@@ -85,6 +98,7 @@ export function AdminSignInScreen({ onSuccess, onBackToMember, onOpenRegister }:
               accessibilityRole="button"
               accessibilityLabel="Back to member sign in"
               hitSlop={8}
+              testID="portal-signin-back"
             >
               <View style={authStyles.backArrow} />
             </Pressable>
@@ -115,6 +129,7 @@ export function AdminSignInScreen({ onSuccess, onBackToMember, onOpenRegister }:
               autoComplete="email"
               textContentType="emailAddress"
               style={authStyles.input}
+              testID="portal-signin-email"
             />
 
             <Text style={[authStyles.label, { marginTop: 4 }]}>PASSWORD</Text>
@@ -132,19 +147,30 @@ export function AdminSignInScreen({ onSuccess, onBackToMember, onOpenRegister }:
               autoComplete="password"
               textContentType="password"
               style={authStyles.input}
-              onSubmitEditing={onSignIn}
+              onSubmitEditing={() => void onSignIn()}
+              testID="portal-signin-password"
             />
 
-            {error ? <Text style={authStyles.error}>{error}</Text> : null}
+            {error ? (
+              <Text style={authStyles.error} testID="portal-signin-error">
+                {error}
+              </Text>
+            ) : null}
             {info ? <Text style={authStyles.info}>{info}</Text> : null}
 
             <Pressable
-              onPress={onSignIn}
-              style={authStyles.continue}
+              onPress={() => void onSignIn()}
+              style={[authStyles.continue, busy && { opacity: 0.7 }]}
               accessibilityRole="button"
               accessibilityLabel="Signin"
+              disabled={busy}
+              testID="portal-signin-submit"
             >
-              <Text style={authStyles.continueText}>Signin</Text>
+              {busy ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={authStyles.continueText}>Signin</Text>
+              )}
             </Pressable>
           </View>
 
@@ -168,6 +194,7 @@ export function AdminSignInScreen({ onSuccess, onBackToMember, onOpenRegister }:
               }}
               accessibilityRole="button"
               accessibilityLabel="Dont have account register"
+              testID="portal-open-register"
             >
               <Text style={authStyles.linkText}>Dont have account register</Text>
             </Pressable>
@@ -176,4 +203,4 @@ export function AdminSignInScreen({ onSuccess, onBackToMember, onOpenRegister }:
       </KeyboardAvoidingView>
     </View>
   );
-}
+};
