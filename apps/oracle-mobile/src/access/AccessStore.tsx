@@ -25,6 +25,8 @@ import {
   takePendingCheckoutEmail,
   WHOP_PLAN_LABEL,
 } from './whop';
+import { verifyWhopPaidOnServer } from './whopVerifyClient';
+import type { SubscriptionVerifiedVia } from '../cloud/oracleCloud';
 
 const LIST_KEY = 'oracle.access.reactivated.v1';
 const SESSION_KEY = 'oracle.access.sessionEmail.v1';
@@ -49,6 +51,13 @@ type AccessContextValue = {
   /** Set when return URL was present but failed soft verify */
   whopReturnError: string | null;
   clearWhopReturnError: () => void;
+  /**
+   * Ask Whop (via Vercel /api/whop/verify) whether email paid.
+   * Unlocks Activate when the API confirms. No-op unlock if API not configured.
+   */
+  checkWhopPayment: (
+    email: string,
+  ) => Promise<{ ok: true; paid: boolean; configured: boolean; reason?: string }>;
 };
 
 const AccessContext = createContext<AccessContextValue | null>(null);
@@ -284,14 +293,18 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  /** Only called from verified Whop return URL handling — never from a client button. */
+  /** Unlock only after Whop return soft-verify, API confirm, or webhook write. */
   const recordVerifiedWhopPaid = useCallback(
-    async (email: string, opts?: { paymentId?: string | null }) => {
+    async (
+      email: string,
+      opts?: { paymentId?: string | null; verifiedVia?: SubscriptionVerifiedVia },
+    ) => {
       const n = normalizeEmail(email);
       if (!n || !n.includes('@')) {
         return { ok: false as const, reason: 'Enter a valid email address.' };
       }
       const paidAt = new Date().toISOString();
+      const verifiedVia: SubscriptionVerifiedVia = opts?.verifiedVia || 'whop_return';
       const sub: SubscriptionPayment = {
         id: `whop_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
         email: n,
@@ -299,7 +312,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
         paidAt,
         plan: WHOP_PLAN_LABEL,
         source: 'whop',
-        verifiedVia: 'whop_return',
+        verifiedVia,
         paymentId: opts?.paymentId || undefined,
       };
       try {
@@ -324,7 +337,29 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     [reactivated],
   );
 
-  // Handle Whop return URL once on mount — never honor client-only claims
+  const checkWhopPayment = useCallback(
+    async (email: string) => {
+      const n = normalizeEmail(email);
+      const api = await verifyWhopPaidOnServer(n);
+      if (api.configured && api.paid) {
+        await recordVerifiedWhopPaid(n, {
+          paymentId: api.paymentId || api.membershipId,
+          verifiedVia: 'api',
+        });
+        setWhopReturnError(null);
+        return { ok: true as const, paid: true, configured: true };
+      }
+      return {
+        ok: true as const,
+        paid: false,
+        configured: !!api.configured,
+        reason: api.reason,
+      };
+    },
+    [recordVerifiedWhopPaid],
+  );
+
+  // Handle Whop return URL once on mount — prefer API verify when configured
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') {
       setWhopReturnHandled(true);
@@ -333,16 +368,45 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const safety = setTimeout(() => {
       if (!cancelled) setWhopReturnHandled(true);
-    }, 5_000);
+    }, 12_000);
     const run = async () => {
       try {
         const parsed = parseWhopReturn();
         const pending = peekPendingCheckoutEmail();
         const email = parsed.email || pending;
+
+        // Always try live Whop API when we have an email (return or pending checkout)
+        if (email && (parsed.paid || parsed.forgedOrIncomplete || pending)) {
+          const api = await verifyWhopPaidOnServer(email);
+          if (api.configured && api.paid) {
+            takePendingCheckoutEmail();
+            await recordVerifiedWhopPaid(email, {
+              paymentId: api.paymentId || api.membershipId || parsed.paymentId,
+              verifiedVia: 'api',
+            });
+            clearWhopReturnFromUrl();
+            setWhopReturnError(null);
+            return;
+          }
+          // API configured but unpaid — never soft-unlock even with pretty return params
+          if (api.configured && !api.paid && (parsed.paid || parsed.forgedOrIncomplete)) {
+            if (email) stashPendingCheckoutEmail(email);
+            setWhopReturnError(
+              'Whop has not confirmed payment for this email yet. Finish checkout, then tap Check payment status.',
+            );
+            clearWhopReturnFromUrl();
+            return;
+          }
+        }
+
+        // Soft return only when API is not configured (GitHub Pages / no keys yet)
         if (parsed.paid && email) {
           takePendingCheckoutEmail();
           await Promise.race([
-            recordVerifiedWhopPaid(email, { paymentId: parsed.paymentId }),
+            recordVerifiedWhopPaid(email, {
+              paymentId: parsed.paymentId,
+              verifiedVia: 'whop_return',
+            }),
             new Promise((_, rej) =>
               setTimeout(() => rej(new Error('whop return timeout')), 8_000),
             ),
@@ -350,7 +414,6 @@ export function AccessProvider({ children }: { children: ReactNode }) {
           clearWhopReturnFromUrl();
           setWhopReturnError(null);
         } else if (parsed.forgedOrIncomplete) {
-          // Keep email for Payment UI; never unlock
           if (email) stashPendingCheckoutEmail(email);
           setWhopReturnError(
             'Payment not verified. Complete checkout on Whop, then return here with a successful payment redirect.',
@@ -404,11 +467,36 @@ export function AccessProvider({ children }: { children: ReactNode }) {
         setReactivated(next);
         persistList(next);
         setSubscriptions(store.subscriptions || []);
-        return decide(store.subscriptions || [], next);
+        const first = decide(store.subscriptions || [], next);
+        if (first.ok) return first;
+
+        // Live Whop membership check (when Vercel API + keys are configured)
+        const api = await verifyWhopPaidOnServer(n);
+        if (api.configured && api.paid) {
+          await recordVerifiedWhopPaid(n, {
+            paymentId: api.paymentId || api.membershipId,
+            verifiedVia: 'api',
+          });
+          return { ok: true };
+        }
+        return first;
       } catch (e) {
         if (hasPaidAccess(n)) {
           setSessionEmail(n);
           return { ok: true };
+        }
+        // Still try Whop API on cloud failure
+        try {
+          const api = await verifyWhopPaidOnServer(n);
+          if (api.configured && api.paid) {
+            await recordVerifiedWhopPaid(n, {
+              paymentId: api.paymentId || api.membershipId,
+              verifiedVia: 'api',
+            });
+            return { ok: true };
+          }
+        } catch {
+          /* ignore */
         }
         const msg = e instanceof Error ? e.message : 'Cloud unreachable';
         return {
@@ -418,7 +506,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
         };
       }
     },
-    [reactivated, hasPaidAccess],
+    [reactivated, hasPaidAccess, recordVerifiedWhopPaid],
   );
 
   const signOut = useCallback(() => {
@@ -444,6 +532,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       whopReturnHandled,
       whopReturnError,
       clearWhopReturnError,
+      checkWhopPayment,
     }),
     [
       reactivated,
@@ -459,6 +548,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       whopReturnHandled,
       whopReturnError,
       clearWhopReturnError,
+      checkWhopPayment,
     ],
   );
 
