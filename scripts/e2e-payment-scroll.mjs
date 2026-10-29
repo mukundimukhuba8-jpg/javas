@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Prove Payment step scrolls on mobile viewport — both Whop + I've paid reachable.
+ * Prove Payment step scrolls on mobile viewport — Pay with Whop + back link reachable.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -120,36 +120,30 @@ async function main() {
 
     whopOk = await page.getByTestId('whop-checkout-open').isVisible();
 
-    // Scroll the auth ScrollView to bottom so "I've paid" enters the viewport
+    // Scroll the auth ScrollView to bottom so Admin / different-email links are reachable
     await page.evaluate(() => {
       const el = document.querySelector('[data-auth-scroll="1"]');
       if (el) el.scrollTop = el.scrollHeight;
     });
     await page.waitForTimeout(400);
 
-    // Also try Playwright scrollIntoView for the confirm button
-    const paid = page.getByTestId('whop-confirm-paid');
-    await paid.scrollIntoViewIfNeeded().catch(() => {});
+    const back = page.getByTestId('whop-back-email');
+    await back.scrollIntoViewIfNeeded().catch(() => {});
     await page.waitForTimeout(200);
 
     const before = await page.evaluate(() => {
       const el = document.querySelector('[data-auth-scroll="1"]');
       return el ? el.scrollTop : -1;
     });
-    scrolled = before > 0 || (await paid.isVisible().catch(() => false));
-
-    paidOk = await paid.isVisible();
-    // Bounding box must intersect viewport after scroll
-    const box = await paid.boundingBox();
+    paidOk = await back.isVisible();
+    scrolled = before > 0 || paidOk;
+    const box = await back.boundingBox();
     const inViewport =
       !!box && box.y + box.height > 0 && box.y < 667 && box.x + box.width > 0 && box.x < 375;
 
     bottomShot = path.join(mediaDir, `payment-scroll-bottom-${stamp}.png`);
     await page.screenshot({ path: bottomShot, fullPage: false });
-
-    // Also save a stable named proof the user asked for
     fs.copyFileSync(bottomShot, path.join(mediaDir, 'payment-scroll-fixed.jpg'));
-    // Playwright saves png; also keep png alias
     fs.copyFileSync(bottomShot, path.join(mediaDir, 'payment-scroll-fixed.png'));
 
     results.push({
@@ -164,9 +158,9 @@ async function main() {
       shot: topShot,
     });
     results.push({
-      id: 'scroll_reaches_paid',
+      id: 'scroll_reaches_footer',
       pass: scrolled && paidOk && inViewport,
-      detail: `scrollTop=${before} paidVisible=${paidOk} inViewport=${inViewport}`,
+      detail: `scrollTop=${before} backVisible=${paidOk} inViewport=${inViewport}`,
       shot: bottomShot,
     });
   } finally {
@@ -193,7 +187,7 @@ ${results.map((r) => `| ${r.id} | ${r.pass ? 'yes' : 'NO'} | ${r.detail} |`).joi
 
 ## Screenshots
 - top: \`${topShot}\`
-- bottom (I've paid reachable): \`${bottomShot}\`
+- bottom (footer reachable): \`${bottomShot}\`
 - alias: \`/cursor/stores/self/media/payment-scroll-fixed.png\`
 `;
   fs.writeFileSync(report, md);

@@ -10,7 +10,9 @@ import {
 import { Platform } from 'react-native';
 import {
   fetchCloudStore,
+  isVerifiedSubscription,
   pushReactivatedToCloud,
+  scrubUnverifiedWhopInCloud,
   upsertSubscriptionPayment,
   type SubscriptionPayment,
 } from '../cloud/oracleCloud';
@@ -18,6 +20,8 @@ import { normalizeEmail, type ReactivatedEmail } from './types';
 import {
   clearWhopReturnFromUrl,
   parseWhopReturn,
+  peekPendingCheckoutEmail,
+  stashPendingCheckoutEmail,
   takePendingCheckoutEmail,
   WHOP_PLAN_LABEL,
 } from './whop';
@@ -37,16 +41,14 @@ type AccessContextValue = {
   reactivate: (email: string, paid: boolean) => Promise<ReactivatedEmail>;
   removeReactivated: (email: string) => void;
   tryEnter: (email: string) => Promise<TryEnterResult>;
-  /** Record Whop (or mock) payment → subscription awaiting + access unlock */
-  recordWhopPaid: (
-    email: string,
-    opts?: { paymentId?: string | null },
-  ) => Promise<{ ok: true } | { ok: false; reason: string }>;
   hasPaidAccess: (email: string) => boolean;
   signOut: () => void;
   isEmailActive: (email: string) => boolean;
   refreshCloudAccess: () => Promise<void>;
   whopReturnHandled: boolean;
+  /** Set when return URL was present but failed soft verify */
+  whopReturnError: string | null;
+  clearWhopReturnError: () => void;
 };
 
 const AccessContext = createContext<AccessContextValue | null>(null);
@@ -135,8 +137,31 @@ function subscriptionGrantsAccess(subs: SubscriptionPayment[], email: string): b
     (s) =>
       normalizeEmail(s.email) === n &&
       (s.status === 'awaiting' || s.status === 'approved') &&
-      !!s.paidAt,
+      !!s.paidAt &&
+      isVerifiedSubscription(s),
   );
+}
+
+function rebuildPaidSet(
+  list: ReactivatedEmail[],
+  subs: SubscriptionPayment[],
+): Set<string> {
+  const next = new Set<string>();
+  for (const e of list) {
+    if (e.status === 'active' && e.email) next.add(normalizeEmail(e.email));
+  }
+  for (const s of subs) {
+    if (
+      (s.status === 'awaiting' || s.status === 'approved') &&
+      s.paidAt &&
+      s.email &&
+      isVerifiedSubscription(s)
+    ) {
+      next.add(normalizeEmail(s.email));
+    }
+  }
+  persistPaidEmails(next);
+  return next;
 }
 
 export function AccessProvider({ children }: { children: ReactNode }) {
@@ -144,14 +169,13 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   const [paidEmails, setPaidEmails] = useState<Set<string>>(() => loadPaidEmails());
   const [subscriptions, setSubscriptions] = useState<SubscriptionPayment[]>([]);
   const [whopReturnHandled, setWhopReturnHandled] = useState(false);
+  const [whopReturnError, setWhopReturnError] = useState<string | null>(null);
   const [sessionEmail, setSessionEmail] = useState<string | null>(() => {
     const email = loadSession();
     if (!email) return null;
     const list = loadList();
-    const paid = loadPaidEmails();
-    if (list.some((e) => e.email === email && e.status === 'active') || paid.has(email)) {
-      return email;
-    }
+    // Do not restore session from paidEmails alone — may be a stale fake unlock
+    if (list.some((e) => e.email === email && e.status === 'active')) return email;
     return null;
   });
 
@@ -177,28 +201,18 @@ export function AccessProvider({ children }: { children: ReactNode }) {
 
   const refreshCloudAccess = useCallback(async () => {
     try {
+      // Demote fake Whop “I've paid” rows before trusting cloud paid state
+      try {
+        await scrubUnverifiedWhopInCloud();
+      } catch {
+        /* continue with fetch */
+      }
       const store = await fetchCloudStore();
-      setReactivated((prev) => {
-        const next = mergeReactivated(store.reactivated, prev);
-        persistList(next);
-        return next;
-      });
+      const nextList = mergeReactivated(store.reactivated, []);
+      setReactivated(nextList);
+      persistList(nextList);
       setSubscriptions(store.subscriptions || []);
-      // Mirror paid subscription emails into local paid set
-      setPaidEmails((prev) => {
-        const next = new Set(prev);
-        for (const s of store.subscriptions || []) {
-          if (
-            (s.status === 'awaiting' || s.status === 'approved') &&
-            s.paidAt &&
-            s.email
-          ) {
-            next.add(normalizeEmail(s.email));
-          }
-        }
-        persistPaidEmails(next);
-        return next;
-      });
+      setPaidEmails(rebuildPaidSet(nextList, store.subscriptions || []));
     } catch {
       /* keep local */
     }
@@ -224,11 +238,11 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     (email: string) => {
       const n = normalizeEmail(email);
       if (!n) return false;
-      if (paidEmails.has(n)) return true;
+      // Admin/mentor reactivated list (not the fake Whop button)
       if (isEmailActive(n)) return true;
       return subscriptionGrantsAccess(subscriptions, n);
     },
-    [paidEmails, isEmailActive, subscriptions],
+    [isEmailActive, subscriptions],
   );
 
   const reactivate = useCallback(async (email: string, paid: boolean) => {
@@ -270,7 +284,8 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const recordWhopPaid = useCallback(
+  /** Only called from verified Whop return URL handling — never from a client button. */
+  const recordVerifiedWhopPaid = useCallback(
     async (email: string, opts?: { paymentId?: string | null }) => {
       const n = normalizeEmail(email);
       if (!n || !n.includes('@')) {
@@ -284,33 +299,32 @@ export function AccessProvider({ children }: { children: ReactNode }) {
         paidAt,
         plan: WHOP_PLAN_LABEL,
         source: 'whop',
+        verifiedVia: 'whop_return',
+        paymentId: opts?.paymentId || undefined,
       };
       try {
         const store = await upsertSubscriptionPayment(sub);
         setSubscriptions(store.subscriptions || []);
-      } catch (e) {
-        // Still unlock locally so the client is not stuck if cloud lags
+        setPaidEmails(rebuildPaidSet(store.reactivated || reactivated, store.subscriptions || []));
+      } catch {
         setSubscriptions((prev) => {
           const others = prev.filter((s) => normalizeEmail(s.email) !== n);
           return [sub, ...others];
         });
-        void e;
+        setPaidEmails((prev) => {
+          const next = new Set(prev);
+          next.add(n);
+          persistPaidEmails(next);
+          return next;
+        });
       }
-      await reactivate(n, true);
-      setPaidEmails((prev) => {
-        const next = new Set(prev);
-        next.add(n);
-        persistPaidEmails(next);
-        return next;
-      });
       setSessionEmail(n);
-      void opts?.paymentId;
       return { ok: true as const };
     },
-    [reactivate],
+    [reactivated],
   );
 
-  // Handle Whop / mock return URL once on mount — never block Sign in forever
+  // Handle Whop return URL once on mount — never honor client-only claims
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') {
       setWhopReturnHandled(true);
@@ -323,13 +337,24 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     const run = async () => {
       try {
         const parsed = parseWhopReturn();
-        const pending = takePendingCheckoutEmail();
+        const pending = peekPendingCheckoutEmail();
         const email = parsed.email || pending;
         if (parsed.paid && email) {
+          takePendingCheckoutEmail();
           await Promise.race([
-            recordWhopPaid(email, { paymentId: parsed.paymentId }),
-            new Promise((_, rej) => setTimeout(() => rej(new Error('whop return timeout')), 8_000)),
+            recordVerifiedWhopPaid(email, { paymentId: parsed.paymentId }),
+            new Promise((_, rej) =>
+              setTimeout(() => rej(new Error('whop return timeout')), 8_000),
+            ),
           ]);
+          clearWhopReturnFromUrl();
+          setWhopReturnError(null);
+        } else if (parsed.forgedOrIncomplete) {
+          // Keep email for Payment UI; never unlock
+          if (email) stashPendingCheckoutEmail(email);
+          setWhopReturnError(
+            'Payment not verified. Complete checkout on Whop, then return here with a successful payment redirect.',
+          );
           clearWhopReturnFromUrl();
         }
       } catch {
@@ -344,7 +369,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       clearTimeout(safety);
     };
-  }, [recordWhopPaid]);
+  }, [recordVerifiedWhopPaid]);
 
   const tryEnter = useCallback(
     async (email: string): Promise<TryEnterResult> => {
@@ -355,15 +380,9 @@ export function AccessProvider({ children }: { children: ReactNode }) {
 
       const decide = (storeSubs: SubscriptionPayment[], list: ReactivatedEmail[]): TryEnterResult => {
         const active = list.some((e) => e.email === n && e.status === 'active');
-        const paid =
-          active || paidEmails.has(n) || subscriptionGrantsAccess(storeSubs, n);
+        const paid = active || subscriptionGrantsAccess(storeSubs, n);
         if (paid) {
-          setPaidEmails((prev) => {
-            const s = new Set(prev);
-            s.add(n);
-            persistPaidEmails(s);
-            return s;
-          });
+          setPaidEmails(rebuildPaidSet(list, storeSubs));
           setSessionEmail(n);
           return { ok: true };
         }
@@ -387,7 +406,6 @@ export function AccessProvider({ children }: { children: ReactNode }) {
         setSubscriptions(store.subscriptions || []);
         return decide(store.subscriptions || [], next);
       } catch (e) {
-        // Local / offline fallback — never leave the user stuck on Sign in
         if (hasPaidAccess(n)) {
           setSessionEmail(n);
           return { ok: true };
@@ -400,12 +418,14 @@ export function AccessProvider({ children }: { children: ReactNode }) {
         };
       }
     },
-    [reactivated, paidEmails, hasPaidAccess],
+    [reactivated, hasPaidAccess],
   );
 
   const signOut = useCallback(() => {
     setSessionEmail(null);
   }, []);
+
+  const clearWhopReturnError = useCallback(() => setWhopReturnError(null), []);
 
   const isAllowed = !!sessionEmail && hasPaidAccess(sessionEmail);
 
@@ -417,12 +437,13 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       reactivate,
       removeReactivated,
       tryEnter,
-      recordWhopPaid,
       hasPaidAccess,
       signOut,
       isEmailActive,
       refreshCloudAccess,
       whopReturnHandled,
+      whopReturnError,
+      clearWhopReturnError,
     }),
     [
       reactivated,
@@ -431,12 +452,13 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       reactivate,
       removeReactivated,
       tryEnter,
-      recordWhopPaid,
       hasPaidAccess,
       signOut,
       isEmailActive,
       refreshCloudAccess,
       whopReturnHandled,
+      whopReturnError,
+      clearWhopReturnError,
     ],
   );
 
