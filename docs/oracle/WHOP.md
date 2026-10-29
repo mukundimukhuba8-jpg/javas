@@ -2,47 +2,69 @@
 
 Checkout plan: [`plan_HXXGXZqh48JQs`](https://whop.com/checkout/plan_HXXGXZqh48JQs)
 
-## What works today (no API key)
+## What works today
 
+### Soft return (no API key)
 1. Client opens hosted checkout with email prefilled.
-2. Soft return URL: `?paid=1&email=…&status=success&source=whop` unlocks Activate and writes a **verified** subscription (`verifiedVia: whop_return`).
-3. There is **no** “I've paid” button. Forged query params stay on Payment.
+2. Soft return URL: `?paid=1&email=…&status=success&source=whop` unlocks Activate (`verifiedVia: whop_return`).
+3. No “I've paid” button. Forged query params stay on Payment.
 
-GitHub Pages can only do this soft path (static hosting cannot hold secrets).
+GitHub Pages can only do soft return (static hosting cannot hold secrets).
 
-## Hard verify (needs secrets on Vercel)
+### Webhook unlock (needs `WHOP_WEBHOOK_SECRET` on Vercel)
+Whop POSTs to `/api/whop/webhook` → signature verify → write paid subscription (`verifiedVia: webhook`) → client **Check payment status** / Sign in Continue / Payment auto-poll pulls cloud and opens Activate.
 
-| Secret | Where | Purpose |
-|--------|--------|---------|
-| `WHOP_API_KEY` | Vercel env | Bearer token — list members/memberships (`member:basic:read`, `member:email:read`) |
-| `WHOP_COMPANY_ID` (`biz_…`) | Vercel env | Company / account id (alias: `WHOP_ACCOUNT_ID`) |
-| `WHOP_PLAN_ID` | Vercel env | Default `plan_HXXGXZqh48JQs` |
-| `WHOP_WEBHOOK_SECRET` (`ws_…`) | Vercel env | Verify `payment.succeeded` / `membership.activated` |
+### Poll verify (needs API key + company id)
+`GET /api/whop/verify?email=` lists Whop members for the plan. Optional once `WHOP_API_KEY` + `WHOP_COMPANY_ID` are set.
 
-Endpoints (this repo → Vercel):
+## Vercel environment (do not put secrets in Expo / git)
 
-- `GET /api/whop/verify?email=` — poll Whop; used on Sign in Continue, return, and **Check payment status**
-- `POST /api/whop/webhook` — Whop dashboard webhook URL; unlocks catalog with `verifiedVia: webhook`
+In the Vercel project that deploys this repo (team **sfiso-mkhondo** / project **javas**):
 
-When `WHOP_API_KEY` is set, soft return alone is **not** enough — the API must confirm payment.
+**Settings → Environment Variables → Production** (and Preview if useful):
 
-### GitHub Pages + Vercel API
+| Name | Required for | Notes |
+|------|----------------|-------|
+| `WHOP_WEBHOOK_SECRET` | webhook unlock | `ws_…` from Whop → Developer → Webhooks (already in agent store; paste into Vercel) |
+| `WHOP_PLAN_ID` | both | `plan_HXXGXZqh48JQs` |
+| `SUPABASE_URL` or `EXPO_PUBLIC_SUPABASE_URL` | webhook catalog write | same project as Oracle sync |
+| `SUPABASE_PUBLISHABLE_KEY` or `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | webhook | |
+| `ORACLE_SYNC_EMAIL` / `ORACLE_SYNC_PASSWORD` (or `EXPO_PUBLIC_*`) | webhook | sync account that owns `oracle_store` |
+| `WHOP_API_KEY` | poll verify only | Account API key |
+| `WHOP_COMPANY_ID` | poll verify only | `biz_…` |
 
-Set in the Expo web export:
+Redeploy after saving env vars.
 
-```bash
-EXPO_PUBLIC_WHOP_VERIFY_URL=https://YOUR_VERCEL_APP.vercel.app/api/whop/verify
+### Whop dashboard webhook URL
+
+Point the Whop webhook at your **production** Vercel host:
+
+```text
+https://<YOUR-PRODUCTION-HOST>/api/whop/webhook
 ```
 
-### Whop dashboard setup
+Events: `payment.succeeded`, `membership.activated` (optional: `membership.updated`).
 
-1. Developer → API keys → create account key → paste as `WHOP_API_KEY`
-2. Copy company id `biz_…` → `WHOP_COMPANY_ID`
-3. Developer → Webhooks → Create → URL `https://YOUR_VERCEL_APP.vercel.app/api/whop/webhook`  
-   Events: `payment.succeeded`, `membership.activated`  
-   Copy signing secret → `WHOP_WEBHOOK_SECRET`
-4. On the plan/checkout, set redirect / return to the Oracle app URL with success params (or rely on API poll after Pay with Whop)
+Confirm wiring (booleans only):
+
+```text
+https://<YOUR-PRODUCTION-HOST>/api/whop/status
+```
+
+Expect `webhookReady: true` once secret + Supabase sync env are set.
+
+> This agent has **no Vercel API token**, so the secret cannot be pushed from here. Paste `WHOP_WEBHOOK_SECRET` in the Vercel UI (or run `vercel env add WHOP_WEBHOOK_SECRET` locally with a token). Never commit it.
+
+### GitHub Pages + poll verify
+
+Only after you know the production host:
+
+```bash
+EXPO_PUBLIC_WHOP_VERIFY_URL=https://<YOUR-PRODUCTION-HOST>/api/whop/verify
+```
+
+Leave unset until the host is confirmed — Pages soft-return still works without it.
 
 ## Auto-open Activate
 
-After verified payment (API, webhook, or soft return when API unset), `AccessStore` sets the session and App routes to **Activate robot**. Portal Subscription shows Paid · awaiting for `verifiedVia` rows.
+After webhook/API/soft verify, `AccessStore` sets the session and the app routes to **Activate robot**. Portal Subscription shows Paid · awaiting for verified rows. On Payment, the client polls cloud every ~8s for webhook unlocks.

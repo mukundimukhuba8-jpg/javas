@@ -59,6 +59,31 @@ export function EmailGateScreen({ onOpenAdminPortal }: Props) {
     }
   }, [whopReturnHandled, whopReturnError, email]);
 
+  // After Pay with Whop, poll cloud/webhook unlock every few seconds on Payment
+  useEffect(() => {
+    if (step !== 'pay') return;
+    const n = email.trim().toLowerCase();
+    if (!n.includes('@')) return;
+    let cancelled = false;
+    const tick = async () => {
+      if (cancelled || checkingPay) return;
+      try {
+        const result = await checkWhopPayment(n);
+        if (!cancelled && result.paid) {
+          setInfo('Payment confirmed. Opening Activate…');
+          setError(null);
+        }
+      } catch {
+        /* ignore transient */
+      }
+    };
+    const id = setInterval(() => void tick(), 8_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [step, email, checkWhopPayment, checkingPay]);
+
   const onContinueEmail = async () => {
     const n = email.trim().toLowerCase();
     setEmail(n);

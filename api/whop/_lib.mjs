@@ -219,22 +219,26 @@ export async function unlockOraclePaid(email, { paymentId, verifiedVia = 'webhoo
   };
 
   const paidAt = new Date().toISOString();
+  const existing = (store.subscriptions || []).find(
+    (s) =>
+      normalizeEmail(s.email) === n &&
+      (s.verifiedVia === 'webhook' || s.verifiedVia === 'api' || s.verifiedVia === 'whop_return') &&
+      (s.status === 'awaiting' || s.status === 'approved'),
+  );
   const sub = {
-    id: `whop_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+    id: existing?.id || `whop_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
     email: n,
-    status: 'awaiting',
-    paidAt,
-    plan: `Whop · ${WHOP_PLAN_ID}`,
+    status: existing?.status === 'approved' ? 'approved' : 'awaiting',
+    paidAt: existing?.paidAt || paidAt,
+    plan: existing?.plan || `Whop · ${WHOP_PLAN_ID}`,
     source: 'whop',
     verifiedVia,
-    paymentId: paymentId || undefined,
+    paymentId: paymentId || existing?.paymentId || undefined,
   };
-  const others = (store.subscriptions || []).filter(
-    (s) => normalizeEmail(s.email) !== n || s.status === 'declined',
-  );
+  const others = (store.subscriptions || []).filter((s) => normalizeEmail(s.email) !== n);
   const next = {
     ...store,
-    subscriptions: [sub, ...others.filter((s) => normalizeEmail(s.email) !== n)],
+    subscriptions: [sub, ...others],
     updatedAt: paidAt,
   };
 
@@ -261,13 +265,36 @@ export function extractEmailFromWhopEvent(event) {
     d.email,
     d.member?.user?.email,
     d.membership?.user?.email,
+    d.buyer?.email,
+    d.customer?.email,
     d.buyer_email,
+    d.user_email,
     d.metadata?.email,
     d.metadata?.customer_email,
+    d.metadata?.customer_id, // sometimes the checkout email is stuffed here
+    d.checkout_configuration?.metadata?.email,
   ];
   for (const c of candidates) {
     const n = normalizeEmail(c);
     if (n.includes('@')) return n;
   }
   return null;
+}
+
+/** Booleans only — never returns secret values. */
+export function whopServerStatus() {
+  return {
+    webhookSecret: !!process.env.WHOP_WEBHOOK_SECRET,
+    apiKey: !!process.env.WHOP_API_KEY,
+    companyId: !!(process.env.WHOP_COMPANY_ID || process.env.WHOP_ACCOUNT_ID),
+    planId: WHOP_PLAN_ID,
+    supabaseUrl: !!(process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL),
+    supabasePublishable: !!(
+      process.env.SUPABASE_PUBLISHABLE_KEY || process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+    ),
+    syncAccount: !!(
+      (process.env.ORACLE_SYNC_EMAIL || process.env.EXPO_PUBLIC_ORACLE_SYNC_EMAIL) &&
+      (process.env.ORACLE_SYNC_PASSWORD || process.env.EXPO_PUBLIC_ORACLE_SYNC_PASSWORD)
+    ),
+  };
 }

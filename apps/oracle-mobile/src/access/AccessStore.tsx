@@ -340,6 +340,31 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   const checkWhopPayment = useCallback(
     async (email: string) => {
       const n = normalizeEmail(email);
+
+      // 1) Webhook may already have written a verified subscription — pull cloud first
+      try {
+        await refreshCloudAccess();
+        const store = await fetchCloudStore();
+        setSubscriptions(store.subscriptions || []);
+        const nextList = mergeReactivated(store.reactivated, reactivated);
+        setReactivated(nextList);
+        persistList(nextList);
+        if (subscriptionGrantsAccess(store.subscriptions || [], n)) {
+          setPaidEmails(rebuildPaidSet(nextList, store.subscriptions || []));
+          setSessionEmail(n);
+          setWhopReturnError(null);
+          return {
+            ok: true as const,
+            paid: true,
+            configured: true,
+            reason: 'cloud_webhook_or_verified',
+          };
+        }
+      } catch {
+        /* continue to API poll */
+      }
+
+      // 2) Live Whop membership poll (needs WHOP_API_KEY + WHOP_COMPANY_ID on Vercel)
       const api = await verifyWhopPaidOnServer(n);
       if (api.configured && api.paid) {
         await recordVerifiedWhopPaid(n, {
@@ -353,10 +378,10 @@ export function AccessProvider({ children }: { children: ReactNode }) {
         ok: true as const,
         paid: false,
         configured: !!api.configured,
-        reason: api.reason,
+        reason: api.reason || 'waiting_for_whop_webhook_or_api',
       };
     },
-    [recordVerifiedWhopPaid],
+    [recordVerifiedWhopPaid, refreshCloudAccess, reactivated],
   );
 
   // Handle Whop return URL once on mount — prefer API verify when configured
