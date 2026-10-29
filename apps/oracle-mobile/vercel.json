@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "installCommand": "npm install --legacy-peer-deps",
-  "buildCommand": "cd ../.. && SKIP_MONOREPO_BUILD=1 node scripts/build-oracle-public.mjs",
+  "installCommand": null,
+  "buildCommand": null,
   "outputDirectory": "../../public",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }

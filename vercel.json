@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "installCommand": "pnpm install --frozen-lockfile=false && cd apps/oracle-mobile && npm install --legacy-peer-deps",
-  "buildCommand": "SKIP_MONOREPO_BUILD=1 node scripts/build-oracle-public.mjs",
+  "installCommand": "",
+  "buildCommand": "",
   "outputDirectory": "public",
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
