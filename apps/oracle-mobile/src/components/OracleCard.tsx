@@ -93,12 +93,20 @@ export function OracleCard({
 
   return (
     <NeonBorder radius={radii.card} fill={colors.actionRow} style={styles.card}>
-      <View style={styles.heroWrap}>
+      <View
+        style={styles.heroWrap}
+        testID="home-robot-card"
+        // Web E2E markers (RN Image may drop dataSet)
+        {...(hasCustomImage
+          ? ({ dataSet: { customEaImage: '1' }, testID: 'home-robot-card-custom' } as object)
+          : ({ dataSet: { defaultOracleHero: '1' }, testID: 'home-robot-card-default' } as object))}
+      >
         <Image
           source={heroSource}
           style={styles.hero}
           resizeMode="cover"
           accessibilityLabel={title}
+          testID="home-robot-image"
         />
         <LinearGradient
           colors={['transparent', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.72)']}
@@ -106,7 +114,7 @@ export function OracleCard({
           style={styles.heroFade}
         />
         <View style={styles.titleRow}>
-          <View style={styles.titleCol} accessibilityLabel={title}>
+          <View style={styles.titleCol} accessibilityLabel={title} testID="home-robot-title">
             {lines.map((line) => (
               <Text
                 key={line}

@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { Platform } from 'react-native';
 import { usePortalSession } from '../access/portalSession';
-import { fetchCloudPrimary, pushEaToCloud } from '../cloud/oracleCloud';
+import { fetchCloudPrimary, pushEaToCloud, updateEaInCloud } from '../cloud/oracleCloud';
 import { filterEasForMentor, type ExpertAdvisor } from './types';
 
 const STORAGE_KEY = 'oracle.eas.v1';
@@ -28,9 +28,15 @@ type EaContextValue = {
     type: 'Standard' | 'Self-host';
   }) => Promise<ExpertAdvisor>;
   updateEaImage: (id: string, imageUri: string | null) => Promise<void>;
+  /** Rename EA (and optional image) — syncs cloud + linked key eaName snapshots. */
+  updateEa: (
+    id: string,
+    patch: { name?: string; imageUri?: string | null },
+  ) => Promise<ExpertAdvisor>;
   getEaById: (id: string) => ExpertAdvisor | null;
   removeEa: (id: string) => void;
   selectEa: (id: string) => void;
+  refreshEas: () => Promise<void>;
 };
 
 const EaContext = createContext<EaContextValue | null>(null);
@@ -246,6 +252,59 @@ export function EaProvider({ children }: { children: ReactNode }) {
     [easAll, scopeMentorId, session?.mentorId],
   );
 
+  const updateEa = useCallback(
+    async (id: string, patch: { name?: string; imageUri?: string | null }) => {
+      const current = easAll.find((e) => e.id === id);
+      if (!current) throw new Error('EA not found.');
+      if (scopeMentorId && (current.mentorId || 'legacy') !== scopeMentorId) {
+        throw new Error('You cannot edit another mentor’s EA.');
+      }
+      const name =
+        typeof patch.name === 'string' && patch.name.trim()
+          ? patch.name.trim()
+          : current.name;
+      if (!name) throw new Error('EA name is required.');
+      const imageUri =
+        patch.imageUri !== undefined ? patch.imageUri : current.imageUri;
+      const updated: ExpertAdvisor = {
+        ...current,
+        name,
+        imageUri: imageUri ?? null,
+        createdAt: new Date().toISOString(),
+      };
+      setEas((prev) => prev.map((e) => (e.id === id ? updated : e)));
+      setSelectedId(id);
+      const store = await updateEaInCloud(updated, { syncKeyNames: true });
+      const cloudEa = store.eas.find((e) => e.id === id);
+      const synced: ExpertAdvisor = {
+        ...updated,
+        name: cloudEa?.name || updated.name,
+        imageUri: cloudEa?.imageUri || updated.imageUri,
+        mentorId: cloudEa?.mentorId || updated.mentorId,
+      };
+      setEas((prev) => prev.map((e) => (e.id === id ? synced : e)));
+      return synced;
+    },
+    [easAll, scopeMentorId],
+  );
+
+  const refreshEas = useCallback(async () => {
+    try {
+      const store = await fetchCloudPrimary();
+      setEas((prev) =>
+        mergeEaLists(
+          store.eas.map((e) => ({
+            ...e,
+            mentorId: e.mentorId || 'legacy',
+          })),
+          prev,
+        ),
+      );
+    } catch {
+      /* keep local */
+    }
+  }, []);
+
   const getEaById = useCallback(
     (id: string) => easAll.find((e) => e.id === id) ?? null,
     [easAll],
@@ -271,8 +330,30 @@ export function EaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ eas, selectedId, selected, addEa, updateEaImage, removeEa, selectEa, getEaById }),
-    [eas, selectedId, selected, addEa, updateEaImage, removeEa, selectEa, getEaById],
+    () => ({
+      eas,
+      selectedId,
+      selected,
+      addEa,
+      updateEaImage,
+      updateEa,
+      removeEa,
+      selectEa,
+      getEaById,
+      refreshEas,
+    }),
+    [
+      eas,
+      selectedId,
+      selected,
+      addEa,
+      updateEaImage,
+      updateEa,
+      removeEa,
+      selectEa,
+      getEaById,
+      refreshEas,
+    ],
   );
 
   return <EaContext.Provider value={value}>{children}</EaContext.Provider>;
