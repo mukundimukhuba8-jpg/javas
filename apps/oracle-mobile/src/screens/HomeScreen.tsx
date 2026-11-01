@@ -41,10 +41,8 @@ export function HomeScreen({
   const { eas, getEaById } = useEas();
 
   const robots = (sessionEmail ? unlockedRobotsForEmail(sessionEmail) : []).map((r) => {
-    const live =
-      getEaById(r.id) ||
-      eas.find((e) => e.id === r.id) ||
-      eas.find((e) => e.name.trim().toLowerCase() === (r.name || '').trim().toLowerCase());
+    // Resolve by EA id only — never match another mentor’s EA by shared name
+    const live = getEaById(r.id) || eas.find((e) => e.id === r.id) || null;
     const a = typeof live?.imageUri === 'string' ? live.imageUri.trim() : '';
     const b = typeof r.imageUri === 'string' ? r.imageUri.trim() : '';
     let uploaded: string | null = null;

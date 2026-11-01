@@ -254,72 +254,51 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     }): Promise<CreateKeyResult> => {
       const mentorId = session?.mentorId || scopeMentorId || 'legacy';
 
-      // Mentors must stay within keysAllowed quota
-      if (session?.role === 'mentor') {
+      const deny = (error: string): CreateKeyResult => ({
+        key: toSlimKey({
+          id: 'x',
+          key: 'AAA-AAA-AAA-AAA',
+          eaId: '',
+          eaName: '',
+          eaImageUri: null,
+          ea: '',
+          user: '',
+          plan: '',
+          status: 'Active',
+          createdAt: new Date().toISOString(),
+          boundEmail: null,
+          mentorId,
+        }),
+        saved: false,
+        error,
+      });
+
+      // Mentors must stay within keysAllowed quota + only link their own EAs
+      if (session?.role === 'mentor' || scopeMentorId) {
         try {
           const store = await fetchCloudPrimary();
-          const me = (store.mentors || []).find((m) => m.id === mentorId);
-          if (!me || me.status !== 'approved') {
-            return {
-              key: toSlimKey({
-                id: 'x',
-                key: 'AAA-AAA-AAA-AAA',
-                eaId: '',
-                eaName: '',
-                eaImageUri: null,
-                ea: '',
-                user: '',
-                plan: '',
-                status: 'Active',
-                createdAt: new Date().toISOString(),
-                boundEmail: null,
-                mentorId,
-              }),
-              saved: false,
-              error: 'Mentor account is not approved.',
-            };
+          if (session?.role === 'mentor') {
+            const me = (store.mentors || []).find((m) => m.id === mentorId);
+            if (!me || me.status !== 'approved') {
+              return deny('Mentor account is not approved.');
+            }
+            const used = store.keys.filter((k) => (k.mentorId || 'legacy') === mentorId).length;
+            if (used >= (me.keysAllowed || 0)) {
+              return deny(
+                `Key quota reached (${me.keysAllowed}). Ask the admin to raise your limit.`,
+              );
+            }
           }
-          const used = store.keys.filter((k) => (k.mentorId || 'legacy') === mentorId).length;
-          if (used >= (me.keysAllowed || 0)) {
-            return {
-              key: toSlimKey({
-                id: 'x',
-                key: 'AAA-AAA-AAA-AAA',
-                eaId: '',
-                eaName: '',
-                eaImageUri: null,
-                ea: '',
-                user: '',
-                plan: '',
-                status: 'Active',
-                createdAt: new Date().toISOString(),
-                boundEmail: null,
-                mentorId,
-              }),
-              saved: false,
-              error: `Key quota reached (${me.keysAllowed}). Ask the admin to raise your limit.`,
-            };
+          const ea = (store.eas || []).find((e) => e.id === input.eaId);
+          if (!ea) {
+            return deny('Select an expert advisor that belongs to your portal.');
+          }
+          if ((ea.mentorId || 'legacy') !== mentorId && session?.role === 'mentor') {
+            return deny('You cannot issue keys for another mentor’s EA.');
           }
         } catch (e) {
           const msg = e instanceof Error ? e.message : 'Quota check failed';
-          return {
-            key: toSlimKey({
-              id: 'x',
-              key: 'AAA-AAA-AAA-AAA',
-              eaId: '',
-              eaName: '',
-              eaImageUri: null,
-              ea: '',
-              user: '',
-              plan: '',
-              status: 'Active',
-              createdAt: new Date().toISOString(),
-              boundEmail: null,
-              mentorId,
-            }),
-            saved: false,
-            error: msg,
-          };
+          return deny(msg);
         }
       }
 
@@ -441,7 +420,12 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
 
       // Fresh primary cloud catalog on every Activate attempt (no stale cache / Pages merge)
       let catalog: LicenseKey[] = [];
-      let cloudEas: { id: string; name: string; imageUri: string | null }[] = [];
+      let cloudEas: {
+        id: string;
+        name: string;
+        imageUri: string | null;
+        mentorId?: string;
+      }[] = [];
       try {
         const store = await fetchCloudPrimary();
         catalog = store.keys.map(toSlimKey);
@@ -449,6 +433,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
           id: e.id,
           name: e.name,
           imageUri: e.imageUri ?? null,
+          mentorId: e.mentorId || 'legacy',
         }));
         memoryKeys = catalog;
         persistKeysToDisk(catalog);
@@ -498,12 +483,18 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
         };
       }
 
-      const eaLive =
-        cloudEas.find((e) => e.id === found.eaId) ||
-        cloudEas.find(
-          (e) => e.name.trim().toLowerCase() === (found.eaName || '').trim().toLowerCase(),
-        ) ||
-        null;
+      // Prefer exact eaId; name fallback only within the same mentor (never cross-mentor)
+      const keyMentor = found.mentorId || 'legacy';
+      const byId = cloudEas.find((e) => e.id === found.eaId) || null;
+      const byName =
+        !byId && found.eaName
+          ? cloudEas.find(
+              (e) =>
+                e.name.trim().toLowerCase() === (found.eaName || '').trim().toLowerCase() &&
+                (e.mentorId || 'legacy') === keyMentor,
+            ) || null
+          : null;
+      const eaLive = byId || byName;
       const resolvedImage = eaLive?.imageUri || null;
       const resolvedName = eaLive?.name || found.eaName;
 

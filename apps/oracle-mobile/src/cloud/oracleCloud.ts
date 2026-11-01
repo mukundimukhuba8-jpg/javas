@@ -778,6 +778,33 @@ export async function pushEaToCloud(ea: ExpertAdvisor): Promise<OracleCloudStore
 }
 
 /**
+ * Rename (and optionally re-image) an EA worldwide, and sync linked license key eaName snapshots.
+ */
+export async function updateEaInCloud(
+  ea: ExpertAdvisor,
+  opts?: { syncKeyNames?: boolean },
+): Promise<OracleCloudStore> {
+  const store = await pushEaToCloud(ea);
+  if (opts?.syncKeyNames === false) return store;
+  const name = (ea.name || '').trim();
+  if (!name) return store;
+  return enqueueWrite(async () => {
+    const remote = await fetchCloudPrimary();
+    const keys = (remote.keys || []).map((k) =>
+      k.eaId === ea.id
+        ? toSlimKey({ ...k, eaName: name, ea: name })
+        : toSlimKey(k),
+    );
+    return putCloudStore({
+      ...remote,
+      keys,
+      eas: mergeEas([{ ...ea, name }], remote.eas || []),
+      updatedAt: new Date().toISOString(),
+    });
+  });
+}
+
+/**
  * Bind / rebind a key to the activating email.
  * Always overwrites boundEmail and replaces activations for that key code
  * so mentors can reuse the same key without "already linked" friction.
@@ -855,9 +882,11 @@ export async function replaceCloudStore(store: OracleCloudStore): Promise<Oracle
 export async function pushMentorsToCloud(mentors: Mentor[]): Promise<OracleCloudStore> {
   return enqueueWrite(async () => {
     const remote = await fetchCloudPrimary();
+    const incoming = mentors.map((m) => normalizeMentor(m)).filter(Boolean) as Mentor[];
+    // Merge with remote so we never drop passwordHash / fields the portal UI omitted
     return putCloudStore({
       ...remote,
-      mentors: mentors.map((m) => normalizeMentor(m)!).filter(Boolean),
+      mentors: mergeMentors(incoming, remote.mentors || []),
     });
   });
 }

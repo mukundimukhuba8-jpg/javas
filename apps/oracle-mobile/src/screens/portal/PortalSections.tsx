@@ -79,11 +79,13 @@ function Input({
   onChangeText,
   placeholder,
   fontsReady,
+  testID,
 }: {
   value: string;
   onChangeText: (v: string) => void;
   placeholder?: string;
   fontsReady: boolean;
+  testID?: string;
 }) {
   const f = useFf(fontsReady);
   return (
@@ -93,6 +95,7 @@ function Input({
       placeholder={placeholder}
       placeholderTextColor={ea.textMuted}
       style={[styles.input, f && { fontFamily: f.uiMed }]}
+      testID={testID}
     />
   );
 }
@@ -612,13 +615,16 @@ function CreateKeysSection({
 
 function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
   const f = useFf(fontsReady);
-  const { eas, addEa, updateEaImage, removeEa, selectEa } = useEas();
+  const { eas, addEa, updateEaImage, updateEa, removeEa, selectEa } = useEas();
   const [eaName, setEaName] = useState('');
   const [selfHost, setSelfHost] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [renaming, setRenaming] = useState(false);
 
   const onPickImage = async () => {
     setPicking(true);
@@ -675,6 +681,7 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
           onChangeText={setEaName}
           placeholder="e.g. MyEA v2.0"
           fontsReady={fontsReady}
+          testID="portal-ea-new-name"
         />
         <Text style={[styles.help, f && { fontFamily: f.ui }]}>
           Include a version label if you ship multiple builds.
@@ -750,8 +757,8 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
               Your expert advisors
             </Text>
             <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
-              Create EAs here, then issue keys against them. Tap photo or Edit image to replace the
-              thumbnail.
+              Create EAs here, then issue keys against them. Rename or replace the image — clients
+              pick up the live name and picture after sync.
             </Text>
           </View>
         </View>
@@ -767,22 +774,28 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
           eas.map((item) => {
             const thumb = item.imageUri ? { uri: item.imageUri } : null;
             const busy = editingId === item.id;
+            const isRenaming = renameId === item.id;
             return (
               <Pressable
                 key={item.id}
                 style={styles.tableRow}
                 onPress={() => selectEa(item.id)}
                 accessibilityRole="button"
-                testID={`portal-ea-row-${item.name}`}
+                testID={`portal-ea-row-${item.id}`}
               >
                 <Pressable
                   onPress={() => onEditRowImage(item.id)}
                   style={styles.eaThumbWrap}
                   accessibilityRole="button"
                   accessibilityLabel={`Edit image for ${item.name}`}
+                  testID={`portal-ea-edit-image-${item.id}`}
                 >
                   {thumb ? (
-                    <Image source={thumb} style={styles.eaThumb} />
+                    <Image
+                      source={thumb}
+                      style={styles.eaThumb}
+                      testID={`portal-ea-thumb-${item.id}`}
+                    />
                   ) : (
                     <View style={[styles.eaThumb, { alignItems: 'center', justifyContent: 'center' }]}>
                       <Ionicons name="image-outline" size={18} color={ea.textMuted} />
@@ -793,20 +806,75 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
                   </View>
                 </Pressable>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.eaName, f && { fontFamily: f.uiBold }]}>{item.name}</Text>
-                  <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
-                    {item.imageUri ? 'Custom image' : 'No image yet'}
-                  </Text>
-                  <Pressable
-                    onPress={() => onEditRowImage(item.id)}
-                    hitSlop={6}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Edit image for ${item.name}`}
-                  >
-                    <Text style={[styles.editImageLink, f && { fontFamily: f.uiMed }]}>
-                      {busy ? 'Opening…' : 'Edit image'}
-                    </Text>
-                  </Pressable>
+                  {isRenaming ? (
+                    <View style={{ gap: 6 }}>
+                      <Input
+                        value={renameValue}
+                        onChangeText={setRenameValue}
+                        placeholder="New EA name"
+                        fontsReady={fontsReady}
+                        testID={`portal-ea-rename-input-${item.id}`}
+                      />
+                      <Pressable
+                        onPress={() => {
+                          if (!renameValue.trim() || renaming) return;
+                          setRenaming(true);
+                          void updateEa(item.id, { name: renameValue.trim() })
+                            .then(() => {
+                              setRenameId(null);
+                              setRenameValue('');
+                            })
+                            .catch((e) => {
+                              const msg = e instanceof Error ? e.message : 'Rename failed';
+                              if (typeof window !== 'undefined') window.alert(msg);
+                            })
+                            .finally(() => setRenaming(false));
+                        }}
+                        accessibilityRole="button"
+                        testID={`portal-ea-rename-save-${item.id}`}
+                      >
+                        <Text style={[styles.editImageLink, f && { fontFamily: f.uiMed }]}>
+                          {renaming ? 'Saving…' : 'Save name'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <>
+                      <Text
+                        style={[styles.eaName, f && { fontFamily: f.uiBold }]}
+                        testID={`portal-ea-name-${item.id}`}
+                      >
+                        {item.name}
+                      </Text>
+                      <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
+                        {item.imageUri ? 'Custom image' : 'No image yet'}
+                      </Text>
+                      <Pressable
+                        onPress={() => {
+                          setRenameId(item.id);
+                          setRenameValue(item.name);
+                        }}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Rename ${item.name}`}
+                        testID={`portal-ea-rename-${item.id}`}
+                      >
+                        <Text style={[styles.editImageLink, f && { fontFamily: f.uiMed }]}>
+                          Rename
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => onEditRowImage(item.id)}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Edit image for ${item.name}`}
+                      >
+                        <Text style={[styles.editImageLink, f && { fontFamily: f.uiMed }]}>
+                          {busy ? 'Opening…' : 'Edit image'}
+                        </Text>
+                      </Pressable>
+                    </>
+                  )}
                 </View>
                 <View style={styles.typePill}>
                   <Text style={[styles.typePillText, f && { fontFamily: f.uiMed }]}>{item.type}</Text>
@@ -1627,11 +1695,12 @@ function ManageMentorsSection({ fontsReady }: { fontsReady: boolean }) {
               </View>
 
               {tab === 'waiting' ? (
-                <View style={styles.btnRow}>
+                <View style={styles.btnRow} testID={`portal-mentor-waiting-${m.email || m.id}`}>
                   <Pressable
                     disabled={busyId === m.id}
                     onPress={() => void approve(m.id)}
                     style={[styles.newKeyBtn, { flex: 1 }]}
+                    testID={`portal-mentor-approve-${m.email || m.id}`}
                   >
                     <Text style={[styles.newKeyBtnText, f && { fontFamily: f.uiBold }]}>
                       {busyId === m.id ? '…' : 'Approve'}
@@ -1641,6 +1710,7 @@ function ManageMentorsSection({ fontsReady }: { fontsReady: boolean }) {
                     disabled={busyId === m.id}
                     onPress={() => void reject(m.id)}
                     style={[styles.secondaryBtn, { flex: 1, paddingVertical: 10 }]}
+                    testID={`portal-mentor-reject-${m.email || m.id}`}
                   >
                     <Text style={[styles.secondaryBtnText, f && { fontFamily: f.uiBold }]}>
                       Reject
