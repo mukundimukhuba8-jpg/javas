@@ -4,16 +4,23 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { Platform } from 'react-native';
 import { usePortalSession } from '../access/portalSession';
-import { fetchCloudPrimary, pushEaToCloud, updateEaInCloud } from '../cloud/oracleCloud';
+import {
+  fetchCloudPrimary,
+  pushEaToCloud,
+  removeEaFromCloud,
+  updateEaInCloud,
+} from '../cloud/oracleCloud';
 import { filterEasForMentor, type ExpertAdvisor } from './types';
 
 const STORAGE_KEY = 'oracle.eas.v1';
 const SELECTED_KEY = 'oracle.eas.selected.v1';
+const DELETED_KEY = 'oracle.eas.deleted.v1';
 /** Legacy seeded default — strip on load so the catalog starts empty. */
 const LEGACY_DEFAULT_ID = 'default-the-oracle';
 
@@ -75,6 +82,32 @@ function loadSelectedId(eas: ExpertAdvisor[]): string | null {
   return eas[0]?.id ?? null;
 }
 
+function loadDeletedEaIds(): string[] {
+  if (Platform.OS !== 'web' || typeof localStorage === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(DELETED_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((id): id is string => typeof id === 'string' && !!id.trim());
+  } catch {
+    return [];
+  }
+}
+
+function persistDeletedEaIds(ids: string[]) {
+  if (Platform.OS !== 'web' || typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(DELETED_KEY, JSON.stringify(ids));
+  } catch {
+    /* ignore */
+  }
+}
+
+function mergeDeletedIdLists(a: string[], b: string[]): string[] {
+  return Array.from(new Set([...a, ...b].map((id) => id.trim()).filter(Boolean)));
+}
+
 function persist(eas: ExpertAdvisor[], selectedId: string | null) {
   if (Platform.OS !== 'web' || typeof localStorage === 'undefined') return;
   try {
@@ -125,12 +158,16 @@ export function isTestJunkEa(e: { id?: string; name?: string }): boolean {
   const name = String(e.name || '');
   const id = String(e.id || '');
   if (/^THE ORACLE$/i.test(name.trim())) return true;
-  if (/^(EA-Full-|EA-Alpha-|EA-Bravo-)/i.test(name)) return true;
-  if (/\bmvye[a-z0-9]+\b/i.test(name) || /\bmvto[a-z0-9]+\b/i.test(name)) return true;
+  // CleanEA-* leftovers from prior e2e seeds — hide even if still in cloud
+  if (/^(EA-Full-|EA-Alpha-|EA-Bravo-|CleanEA-)/i.test(name)) return true;
+  if (/^ea_clean_/i.test(id)) return true;
+  if (/\bmvye[a-z0-9]+\b/i.test(name) || /\bmvto[a-z0-9]+\b/i.test(name) || /\bmvzq[a-z0-9]+\b/i.test(name)) {
+    return true;
+  }
   if (
     /\bmvye[a-z0-9]+\b/i.test(id) ||
     /\bmvto[a-z0-9]+\b/i.test(id) ||
-    /^(ea_full_|ea_a_|ea_b_)/i.test(id)
+    /^(ea_full_|ea_a_|ea_b_|ea_clean_)/i.test(id)
   ) {
     return true;
   }
@@ -140,9 +177,16 @@ export function isTestJunkEa(e: { id?: string; name?: string }): boolean {
 export function EaProvider({ children }: { children: ReactNode }) {
   const { scopeMentorId, session } = usePortalSession();
   const [easAll, setEas] = useState<ExpertAdvisor[]>(() => loadEas());
+  const [deletedEaIds, setDeletedEaIds] = useState<string[]>(() => loadDeletedEaIds());
+  const deletedRef = useRef(deletedEaIds);
+  deletedRef.current = deletedEaIds;
   const eas = useMemo(
-    () => filterEasForMentor(easAll, scopeMentorId),
-    [easAll, scopeMentorId],
+    () =>
+      filterEasForMentor(
+        easAll.filter((e) => !deletedEaIds.includes(e.id) && !isTestJunkEa(e)),
+        scopeMentorId,
+      ),
+    [easAll, scopeMentorId, deletedEaIds],
   );
   const [selectedId, setSelectedId] = useState<string | null>(() => loadSelectedId(loadEas()));
 
@@ -161,23 +205,32 @@ export function EaProvider({ children }: { children: ReactNode }) {
   }, [easAll, selectedId]);
 
   useEffect(() => {
+    persistDeletedEaIds(deletedEaIds);
+  }, [deletedEaIds]);
+
+  useEffect(() => {
     let cancelled = false;
     const pull = async () => {
       try {
         const store = await fetchCloudPrimary();
         if (cancelled) return;
+        const tombstones = mergeDeletedIdLists(deletedRef.current, store.deletedEaIds || []);
+        if (tombstones.length !== deletedRef.current.length) {
+          setDeletedEaIds(tombstones);
+        }
+        const dead = new Set(tombstones);
         const cloudEas = store.eas
           .map((e) => ({
             ...e,
             mentorId: e.mentorId || 'legacy',
           }))
-          .filter((e) => !isTestJunkEa(e));
+          .filter((e) => !dead.has(e.id) && !isTestJunkEa(e));
         const cloudIds = new Set(cloudEas.map((e) => e.id));
         setEas((prev) => {
-          // Keep only very recent local-only rows (pending cloud write); drop purged junk
+          // Keep only very recent local-only rows (pending cloud write); drop purged / tombstoned
           const now = Date.now();
           const pending = prev.filter((e) => {
-            if (cloudIds.has(e.id) || isTestJunkEa(e)) return false;
+            if (dead.has(e.id) || cloudIds.has(e.id) || isTestJunkEa(e)) return false;
             const t = Date.parse(e.createdAt || '');
             return Number.isFinite(t) && now - t < 120_000;
           });
@@ -246,6 +299,9 @@ export function EaProvider({ children }: { children: ReactNode }) {
       if (scopeMentorId && current && (current.mentorId || 'legacy') !== scopeMentorId) {
         throw new Error('You cannot edit another mentor’s EA.');
       }
+      if (deletedRef.current.includes(id)) {
+        throw new Error('This EA was deleted.');
+      }
       const updated: ExpertAdvisor = current
         ? { ...current, imageUri, createdAt: new Date().toISOString() }
         : {
@@ -256,23 +312,30 @@ export function EaProvider({ children }: { children: ReactNode }) {
             createdAt: new Date().toISOString(),
             mentorId: session?.mentorId || scopeMentorId || 'legacy',
           };
+      // Optimistic local preview — cloud sync continues in background
       setEas((prev) => prev.map((e) => (e.id === id ? { ...e, imageUri } : e)));
       setSelectedId(id);
-      const store = await pushEaToCloud(updated);
-      const cloudEa = store.eas.find((e) => e.id === id);
-      const persisted = cloudEa?.imageUri || imageUri;
-      setEas((prev) =>
-        prev.map((e) =>
-          e.id === id
-            ? {
-                ...e,
-                imageUri: persisted,
-                name: cloudEa?.name || e.name,
-                mentorId: cloudEa?.mentorId || e.mentorId,
-              }
-            : e,
-        ),
-      );
+      void pushEaToCloud(updated)
+        .then((store) => {
+          if (deletedRef.current.includes(id)) return;
+          const cloudEa = store.eas.find((e) => e.id === id);
+          const persisted = cloudEa?.imageUri || imageUri;
+          setEas((prev) =>
+            prev.map((e) =>
+              e.id === id
+                ? {
+                    ...e,
+                    imageUri: persisted,
+                    name: cloudEa?.name || e.name,
+                    mentorId: cloudEa?.mentorId || e.mentorId,
+                  }
+                : e,
+            ),
+          );
+        })
+        .catch(() => {
+          /* keep optimistic local image; next refresh may retry */
+        });
     },
     [easAll, scopeMentorId, session?.mentorId],
   );
@@ -316,17 +379,20 @@ export function EaProvider({ children }: { children: ReactNode }) {
   const refreshEas = useCallback(async () => {
     try {
       const store = await fetchCloudPrimary();
+      const tombstones = mergeDeletedIdLists(deletedRef.current, store.deletedEaIds || []);
+      setDeletedEaIds(tombstones);
+      const dead = new Set(tombstones);
       const cloudEas = store.eas
         .map((e) => ({
           ...e,
           mentorId: e.mentorId || 'legacy',
         }))
-        .filter((e) => !isTestJunkEa(e));
+        .filter((e) => !dead.has(e.id) && !isTestJunkEa(e));
       const cloudIds = new Set(cloudEas.map((e) => e.id));
       setEas((prev) => {
         const now = Date.now();
         const pending = prev.filter((e) => {
-          if (cloudIds.has(e.id) || isTestJunkEa(e)) return false;
+          if (dead.has(e.id) || cloudIds.has(e.id) || isTestJunkEa(e)) return false;
           const t = Date.parse(e.createdAt || '');
           return Number.isFinite(t) && now - t < 120_000;
         });
@@ -338,7 +404,10 @@ export function EaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const getEaById = useCallback(
-    (id: string) => easAll.find((e) => e.id === id) ?? null,
+    (id: string) => {
+      if (deletedRef.current.includes(id)) return null;
+      return easAll.find((e) => e.id === id) ?? null;
+    },
     [easAll],
   );
 
@@ -348,11 +417,26 @@ export function EaProvider({ children }: { children: ReactNode }) {
       if (scopeMentorId && target && (target.mentorId || 'legacy') !== scopeMentorId) {
         return;
       }
+      // Tombstone locally first so pulls cannot resurrect before cloud write lands
+      setDeletedEaIds((prev) => mergeDeletedIdLists(prev, [id]));
       setEas((prev) => {
         const next = prev.filter((e) => e.id !== id);
         setSelectedId((cur) => (cur === id ? next[0]?.id ?? null : cur));
         return next;
       });
+      void removeEaFromCloud(id)
+        .then((store) => {
+          const tombstones = mergeDeletedIdLists(
+            deletedRef.current,
+            store.deletedEaIds || [id],
+          );
+          setDeletedEaIds(tombstones);
+          const dead = new Set(tombstones);
+          setEas((prev) => prev.filter((e) => !dead.has(e.id)));
+        })
+        .catch(() => {
+          /* local tombstone kept — next successful write/pull still omits this id */
+        });
     },
     [easAll, scopeMentorId],
   );
