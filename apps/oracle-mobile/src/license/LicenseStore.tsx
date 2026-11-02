@@ -11,6 +11,7 @@ import { normalizeEmail } from '../access/types';
 import { usePortalSession } from '../access/portalSession';
 import {
   attachCloudDebug,
+  deleteKeyInCloud,
   fetchCloudPrimary,
   mergeKeysCloud,
   pushActivationToCloud,
@@ -21,6 +22,7 @@ import {
 import {
   filterKeysForMentor,
   generateLicenseKeyCode,
+  mentorKeyStats,
   normalizeLicenseKey,
   toSlimKey,
   type KeyActivation,
@@ -46,6 +48,9 @@ type ActivateKeyResult = {
 
 type LicenseContextValue = {
   keys: LicenseKey[];
+  /** Includes Deleted rows for dashboard stats. */
+  keysIncludingDeleted: LicenseKey[];
+  keyStats: { generated: number; deleted: number; active: number; expired: number };
   activations: KeyActivation[];
   cloudReady: boolean;
   cloudError: string | null;
@@ -60,6 +65,7 @@ type LicenseContextValue = {
   }) => Promise<CreateKeyResult>;
   activateKey: (email: string, rawKey: string) => Promise<ActivateKeyResult>;
   unlinkKey: (keyCode: string) => Promise<{ ok: boolean; error?: string }>;
+  deleteKey: (keyCode: string) => Promise<{ ok: boolean; error?: string }>;
   hasActivatedKey: (email: string) => boolean;
   activationForEmail: (email: string) => KeyActivation | null;
   unlockedRobotsForEmail: (email: string) => UnlockedRobot[];
@@ -191,8 +197,16 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     return h;
   }, []);
   const [keysAll, setKeys] = useState<LicenseKey[]>(() => initial.keys);
+  const keysIncludingDeleted = useMemo(
+    () => filterKeysForMentor(keysAll, scopeMentorId, { includeDeleted: true }),
+    [keysAll, scopeMentorId],
+  );
   const keys = useMemo(
     () => filterKeysForMentor(keysAll, scopeMentorId),
+    [keysAll, scopeMentorId],
+  );
+  const keyStats = useMemo(
+    () => mentorKeyStats(keysAll, scopeMentorId),
     [keysAll, scopeMentorId],
   );
   const [activations, setActivations] = useState<KeyActivation[]>(() => initial.activations);
@@ -345,7 +359,9 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
           if (!ea || (ea.mentorId || 'legacy') !== mentorId) {
             throw new Error('You cannot issue keys for another mentor’s EA.');
           }
-          const used = cloud.keys.filter((k) => (k.mentorId || 'legacy') === mentorId).length;
+          const used = cloud.keys.filter(
+            (k) => (k.mentorId || 'legacy') === mentorId && k.status !== 'Deleted',
+          ).length;
           if (used > (me.keysAllowed || 0)) {
             throw new Error(
               `Key quota reached (${me.keysAllowed}). Ask the admin to raise your limit.`,
@@ -488,6 +504,9 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
               : `Invalid robot key. Catalog has ${catalogCount} key(s) but not this one. Generate a new key and use it immediately.`,
         };
       }
+      if (found.status === 'Deleted') {
+        return { ok: false, catalogCount, reason: 'This key was deleted. Ask your mentor for a new one.' };
+      }
       if (found.status !== 'Active') {
         return { ok: false, catalogCount, reason: 'This key is expired. Contact your mentor.' };
       }
@@ -588,9 +607,50 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const deleteKey = useCallback(
+    async (keyCode: string) => {
+      const code = normalizeLicenseKey(keyCode);
+      const target = memoryKeys.find((k) => normalizeLicenseKey(k.key) === code);
+      if (
+        scopeMentorId &&
+        target &&
+        (target.mentorId || 'legacy') !== scopeMentorId
+      ) {
+        return { ok: false, error: 'You cannot delete another mentor’s key.' };
+      }
+      const deletedAt = new Date().toISOString();
+      memoryKeys = memoryKeys.map((k) =>
+        normalizeLicenseKey(k.key) === code
+          ? { ...k, status: 'Deleted', boundEmail: null, deletedAt }
+          : k,
+      );
+      memoryActivations = memoryActivations.filter((a) => normalizeLicenseKey(a.key) !== code);
+      persistKeysToDisk(memoryKeys);
+      persistActivationsToDisk(memoryActivations);
+      setKeys([...memoryKeys]);
+      setActivations([...memoryActivations]);
+      try {
+        const store = await deleteKeyInCloud(code);
+        memoryKeys = mergeKeysCloud(store.keys, memoryKeys);
+        persistKeysToDisk(memoryKeys);
+        setKeys([...memoryKeys]);
+        setCloudReady(true);
+        setCloudError(null);
+        return { ok: true };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Delete failed';
+        setCloudError(msg);
+        return { ok: false, error: msg };
+      }
+    },
+    [scopeMentorId],
+  );
+
   const value = useMemo(
     () => ({
       keys,
+      keysIncludingDeleted,
+      keyStats,
       activations,
       cloudReady,
       cloudError,
@@ -598,12 +658,15 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       createKey,
       activateKey,
       unlinkKey,
+      deleteKey,
       hasActivatedKey,
       activationForEmail,
       unlockedRobotsForEmail,
     }),
     [
       keys,
+      keysIncludingDeleted,
+      keyStats,
       activations,
       cloudReady,
       cloudError,
@@ -611,6 +674,7 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       createKey,
       activateKey,
       unlinkKey,
+      deleteKey,
       hasActivatedKey,
       activationForEmail,
       unlockedRobotsForEmail,

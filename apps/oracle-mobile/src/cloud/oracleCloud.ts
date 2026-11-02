@@ -1181,6 +1181,37 @@ export async function scrubUnverifiedWhopInCloud(): Promise<{
 }
 
 /** Clear boundEmail + activations for one key code. */
+/** Soft-delete a license key worldwide (keeps tombstone for mentor dashboard stats). */
+export async function deleteKeyInCloud(keyCode: string): Promise<OracleCloudStore> {
+  const code = normalizeLicenseKey(keyCode);
+  return enqueueWrite(async () => {
+    let remote = EMPTY;
+    try {
+      remote = await fetchCloudPrimary();
+    } catch {
+      remote = EMPTY;
+    }
+    const next: OracleCloudStore = {
+      ...remote,
+      keys: (remote.keys || []).map((k) =>
+        normalizeLicenseKey(k.key) === code
+          ? {
+              ...k,
+              status: 'Deleted',
+              boundEmail: null,
+              deletedAt: new Date().toISOString(),
+            }
+          : k,
+      ),
+      activations: (remote.activations || []).filter(
+        (a) => normalizeLicenseKey(a.key) !== code,
+      ),
+      updatedAt: new Date().toISOString(),
+    };
+    return putCloudStore(next);
+  });
+}
+
 export async function unlinkKeyInCloud(keyCode: string): Promise<OracleCloudStore> {
   const code = normalizeLicenseKey(keyCode);
   const remote = await fetchCloudPrimary();
