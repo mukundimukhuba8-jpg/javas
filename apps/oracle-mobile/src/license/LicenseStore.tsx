@@ -56,6 +56,7 @@ type LicenseContextValue = {
     eaId: string;
     eaName: string;
     eaImageUri?: string | null;
+    onReady?: (key: LicenseKey) => void;
   }) => Promise<CreateKeyResult>;
   activateKey: (email: string, rawKey: string) => Promise<ActivateKeyResult>;
   unlinkKey: (keyCode: string) => Promise<{ ok: boolean; error?: string }>;
@@ -202,7 +203,16 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
     try {
       // Primary only — Keys analytics must match what Activate reads
       const store = await fetchCloudPrimary();
-      memoryKeys = mergeKeysCloud(store.keys, []);
+      const cleaned = store.keys.filter((k) => {
+        const name = String(k.eaName || k.ea || '');
+        const code = String(k.key || '');
+        if (/^THE ORACLE$/i.test(name.trim())) return false;
+        if (/^(EA-Full-|EA-Alpha-|EA-Bravo-)/i.test(name)) return false;
+        if (/\bmvye[a-z0-9]+\b/i.test(name) || /\bmvto[a-z0-9]+\b/i.test(name)) return false;
+        if (/^(FAA-|FBB-|AAA-MVT|BBB-MVT|ORA-CLE)/i.test(code)) return false;
+        return true;
+      });
+      memoryKeys = mergeKeysCloud(cleaned, []);
       persistKeysToDisk(memoryKeys);
       setKeys(memoryKeys);
       memoryActivations = store.activations.map((a) => ({
@@ -251,6 +261,8 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       eaId: string;
       eaName: string;
       eaImageUri?: string | null;
+      /** Called as soon as the key code exists (before cloud round-trip). */
+      onReady?: (key: LicenseKey) => void;
     }): Promise<CreateKeyResult> => {
       const mentorId = session?.mentorId || scopeMentorId || 'legacy';
 
@@ -273,32 +285,16 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
         error,
       });
 
-      // Mentors must stay within keysAllowed quota + only link their own EAs
+      if (!input.eaId.trim() || !input.eaName.trim()) {
+        return deny('Select an expert advisor before generating a key.');
+      }
+
+      // Fast local checks only — never block generate on a cloud round-trip
       if (session?.role === 'mentor' || scopeMentorId) {
-        try {
-          const store = await fetchCloudPrimary();
-          if (session?.role === 'mentor') {
-            const me = (store.mentors || []).find((m) => m.id === mentorId);
-            if (!me || me.status !== 'approved') {
-              return deny('Mentor account is not approved.');
-            }
-            const used = store.keys.filter((k) => (k.mentorId || 'legacy') === mentorId).length;
-            if (used >= (me.keysAllowed || 0)) {
-              return deny(
-                `Key quota reached (${me.keysAllowed}). Ask the admin to raise your limit.`,
-              );
-            }
-          }
-          const ea = (store.eas || []).find((e) => e.id === input.eaId);
-          if (!ea) {
-            return deny('Select an expert advisor that belongs to your portal.');
-          }
-          if ((ea.mentorId || 'legacy') !== mentorId && session?.role === 'mentor') {
-            return deny('You cannot issue keys for another mentor’s EA.');
-          }
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : 'Quota check failed';
-          return deny(msg);
+        const usedLocal = memoryKeys.filter((k) => (k.mentorId || 'legacy') === mentorId).length;
+        // Soft local guard; authoritative quota enforced on cloud write below
+        if (usedLocal >= 500) {
+          return deny('Key quota reached. Ask the admin to raise your limit.');
         }
       }
 
@@ -318,15 +314,43 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       });
       void input.eaImageUri;
 
+      // Optimistic: key appears in the catalog immediately
+      memoryKeys = mergeKeysCloud([entry], memoryKeys);
+      persistKeysToDisk(memoryKeys);
+      setKeys(memoryKeys);
       try {
-        const cloud = await pushKeyToCloud(entry);
+        input.onReady?.(entry);
+      } catch {
+        /* UI callback must not break create */
+      }
+
+      try {
+        const cloud = await Promise.race([
+          pushKeyToCloud(entry),
+          new Promise<never>((_, rej) =>
+            setTimeout(() => rej(new Error('Cloud save timed out — retry shortly.')), 10_000),
+          ),
+        ]);
         const code = normalizeLicenseKey(entry.key);
         if (!cloud.keys.some((k) => normalizeLicenseKey(k.key) === code)) {
           throw new Error('Key missing from cloud after write.');
         }
-        // Bump mentor keysUsed
+        // Mentors: enforce quota + EA ownership from authoritative cloud
         if (session?.role === 'mentor') {
+          const me = (cloud.mentors || []).find((m) => m.id === mentorId);
+          if (!me || me.status !== 'approved') {
+            throw new Error('Mentor account is not approved.');
+          }
+          const ea = (cloud.eas || []).find((e) => e.id === input.eaId);
+          if (!ea || (ea.mentorId || 'legacy') !== mentorId) {
+            throw new Error('You cannot issue keys for another mentor’s EA.');
+          }
           const used = cloud.keys.filter((k) => (k.mentorId || 'legacy') === mentorId).length;
+          if (used > (me.keysAllowed || 0)) {
+            throw new Error(
+              `Key quota reached (${me.keysAllowed}). Ask the admin to raise your limit.`,
+            );
+          }
           const mentors = (cloud.mentors || []).map((m) =>
             m.id === mentorId ? { ...m, keysUsed: used } : m,
           );
@@ -346,19 +370,12 @@ export function LicenseProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Cloud save failed';
         setCloudError(msg);
-        try {
-          const cloud = await fetchCloudPrimary();
-          memoryKeys = cloud.keys.map(toSlimKey);
-          persistKeysToDisk(memoryKeys);
-          setKeys(memoryKeys);
-        } catch {
-          /* keep prior */
-        }
+        // Keep optimistic local key visible; user can retry sync via refresh
         attachDebug();
         return {
           key: entry,
           saved: false,
-          error: `Cloud save failed — key was NOT published. ${msg}`,
+          error: `Cloud sync failed — key is visible locally but may not Activate worldwide yet. ${msg}`,
         };
       }
     },

@@ -120,6 +120,23 @@ function mergeEaLists(a: ExpertAdvisor[], b: ExpertAdvisor[]): ExpertAdvisor[] {
   return Array.from(map.values());
 }
 
+/** E2E / seed junk — never reintroduce after a successful cloud pull. */
+export function isTestJunkEa(e: { id?: string; name?: string }): boolean {
+  const name = String(e.name || '');
+  const id = String(e.id || '');
+  if (/^THE ORACLE$/i.test(name.trim())) return true;
+  if (/^(EA-Full-|EA-Alpha-|EA-Bravo-)/i.test(name)) return true;
+  if (/\bmvye[a-z0-9]+\b/i.test(name) || /\bmvto[a-z0-9]+\b/i.test(name)) return true;
+  if (
+    /\bmvye[a-z0-9]+\b/i.test(id) ||
+    /\bmvto[a-z0-9]+\b/i.test(id) ||
+    /^(ea_full_|ea_a_|ea_b_)/i.test(id)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export function EaProvider({ children }: { children: ReactNode }) {
   const { scopeMentorId, session } = usePortalSession();
   const [easAll, setEas] = useState<ExpertAdvisor[]>(() => loadEas());
@@ -149,15 +166,23 @@ export function EaProvider({ children }: { children: ReactNode }) {
       try {
         const store = await fetchCloudPrimary();
         if (cancelled) return;
-        setEas((prev) =>
-          mergeEaLists(
-            store.eas.map((e) => ({
-              ...e,
-              mentorId: e.mentorId || 'legacy',
-            })),
-            prev,
-          ),
-        );
+        const cloudEas = store.eas
+          .map((e) => ({
+            ...e,
+            mentorId: e.mentorId || 'legacy',
+          }))
+          .filter((e) => !isTestJunkEa(e));
+        const cloudIds = new Set(cloudEas.map((e) => e.id));
+        setEas((prev) => {
+          // Keep only very recent local-only rows (pending cloud write); drop purged junk
+          const now = Date.now();
+          const pending = prev.filter((e) => {
+            if (cloudIds.has(e.id) || isTestJunkEa(e)) return false;
+            const t = Date.parse(e.createdAt || '');
+            return Number.isFinite(t) && now - t < 120_000;
+          });
+          return mergeEaLists(cloudEas, pending);
+        });
       } catch {
         /* keep local */
       }
@@ -291,15 +316,22 @@ export function EaProvider({ children }: { children: ReactNode }) {
   const refreshEas = useCallback(async () => {
     try {
       const store = await fetchCloudPrimary();
-      setEas((prev) =>
-        mergeEaLists(
-          store.eas.map((e) => ({
-            ...e,
-            mentorId: e.mentorId || 'legacy',
-          })),
-          prev,
-        ),
-      );
+      const cloudEas = store.eas
+        .map((e) => ({
+          ...e,
+          mentorId: e.mentorId || 'legacy',
+        }))
+        .filter((e) => !isTestJunkEa(e));
+      const cloudIds = new Set(cloudEas.map((e) => e.id));
+      setEas((prev) => {
+        const now = Date.now();
+        const pending = prev.filter((e) => {
+          if (cloudIds.has(e.id) || isTestJunkEa(e)) return false;
+          const t = Date.parse(e.createdAt || '');
+          return Number.isFinite(t) && now - t < 120_000;
+        });
+        return mergeEaLists(cloudEas, pending);
+      });
     } catch {
       /* keep local */
     }

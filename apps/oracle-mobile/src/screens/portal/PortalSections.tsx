@@ -196,6 +196,7 @@ function PrimaryBtn({
   fontsReady,
   color = ea.primary,
   disabled = false,
+  testID,
 }: {
   label: string;
   onPress: () => void;
@@ -203,10 +204,12 @@ function PrimaryBtn({
   fontsReady: boolean;
   color?: string;
   disabled?: boolean;
+  testID?: string;
 }) {
   const f = useFf(fontsReady);
   return (
     <Pressable
+      testID={testID}
       onPress={disabled ? undefined : onPress}
       disabled={disabled}
       style={[
@@ -395,21 +398,47 @@ function CreateKeysSection({
   const [formError, setFormError] = useState<string | null>(null);
   const [generated, setGenerated] = useState<string | null>(null);
   const [savedOk, setSavedOk] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [keyFilter, setKeyFilter] = useState('');
   const [eaOpen, setEaOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
 
   const selectedEa = storedEas.find((e) => e.id === eaId) ?? null;
   const plans = ['7 days', '30 days', '90 days', '1 year', 'Lifetime'];
   const canGenerate =
-    !!name.trim() && !!selectedEa && !!delivery && permOk && !saving && storedEas.length > 0;
+    !!name.trim() && !!selectedEa && !!delivery && permOk && !syncing && storedEas.length > 0;
+
+  const filteredKeys = useMemo(() => {
+    const needle = keyFilter.trim().toLowerCase();
+    const list = [...catalogKeys].sort((a, b) =>
+      (b.createdAt || '').localeCompare(a.createdAt || ''),
+    );
+    if (!needle) return list;
+    return list.filter(
+      (k) =>
+        k.key.toLowerCase().includes(needle) ||
+        (k.eaName || '').toLowerCase().includes(needle) ||
+        (k.user || '').toLowerCase().includes(needle),
+    );
+  }, [catalogKeys, keyFilter]);
+
+  const keysByEa = useMemo(() => {
+    const map = new Map<string, typeof filteredKeys>();
+    for (const k of filteredKeys) {
+      const label = (k.eaName || k.ea || 'Unlinked').trim() || 'Unlinked';
+      const arr = map.get(label) || [];
+      arr.push(k);
+      map.set(label, arr);
+    }
+    return Array.from(map.entries());
+  }, [filteredKeys]);
 
   const generate = async () => {
     if (!canGenerate || !selectedEa || !delivery) return;
     setFormError(null);
     setGenerated(null);
     setSavedOk(false);
-    setSaving(true);
+    setSyncing(true);
     try {
       const result = await createKey({
         user: name.trim(),
@@ -417,24 +446,20 @@ function CreateKeysSection({
         eaId: selectedEa.id,
         eaName: selectedEa.name,
         eaImageUri: selectedEa.imageUri,
+        onReady: (key) => {
+          // Instant: key visible before cloud finishes
+          setGenerated(key.key);
+        },
       });
-      if (result.saved) {
-        setGenerated(result.key.key);
-        setSavedOk(true);
-        setFormError(null);
-        // Email delivery is UI-stubbed for now — Manual shows the key to copy below.
-        if (delivery === 'email' && typeof window !== 'undefined') {
-          /* stub: would send result.key.key to the customer email */
-        }
+      setGenerated(result.key.key);
+      setSavedOk(result.saved);
+      if (!result.saved) {
+        setFormError(result.error || 'Cloud sync failed — key is shown; retry if Activate fails.');
       } else {
-        setGenerated(null);
-        setSavedOk(false);
-        setFormError(
-          result.error || 'Cloud save failed — key was NOT published. Try again.',
-        );
+        setFormError(null);
       }
     } finally {
-      setSaving(false);
+      setSyncing(false);
     }
   };
 
@@ -555,17 +580,12 @@ function CreateKeysSection({
         ) : null}
 
         <PrimaryBtn
-          label={
-            saving
-              ? 'Saving to cloud…'
-              : !delivery
-                ? 'Select a delivery method'
-                : 'Generate key'
-          }
+          label={!delivery ? 'Select a delivery method' : 'Generate key'}
           icon="sparkles"
           onPress={generate}
           fontsReady={fontsReady}
           disabled={!canGenerate}
+          testID="portal-generate-key"
         />
         <SecondaryBtn
           label="View all keys"
@@ -574,36 +594,91 @@ function CreateKeysSection({
         />
 
         {generated ? (
-          <View style={styles.keyResult}>
+          <View style={styles.keyResult} testID="portal-generated-key">
             <Text style={[styles.fieldLabel, f && { fontFamily: f.uiBold }]}>GENERATED KEY</Text>
             <Text style={[styles.keyMono, f && { fontFamily: f.monoBold }]}>{generated}</Text>
             <Text
               style={[
                 styles.kpiSub,
                 f && { fontFamily: f.ui },
-                { color: savedOk ? ea.green : ea.red },
+                { color: syncing ? ea.textMuted : savedOk ? ea.green : ea.orange },
               ]}
             >
-              {savedOk
-                ? delivery === 'email'
-                  ? `Saved to cloud ✓ · email delivery queued (stub) · ${name || 'Customer'} · ${selectedEa?.name ?? 'EA'} · ${plan}`
-                  : `Saved to cloud ✓ · copy & share manually · ${name || 'Customer'} · ${selectedEa?.name ?? 'EA'} · ${plan}`
-                : `Not saved to cloud — Activate on other devices will not find this key.`}
+              {syncing
+                ? `Key ready · syncing to cloud… · ${name || 'Customer'} · ${selectedEa?.name ?? 'EA'} · ${plan}`
+                : savedOk
+                  ? delivery === 'email'
+                    ? `Saved ✓ · email delivery queued (stub) · ${name || 'Customer'} · ${selectedEa?.name ?? 'EA'} · ${plan}`
+                    : `Saved ✓ · copy & share manually · ${name || 'Customer'} · ${selectedEa?.name ?? 'EA'} · ${plan}`
+                  : `Shown locally · cloud sync pending/failed — retry Generate or refresh if Activate fails worldwide.`}
             </Text>
           </View>
         ) : null}
 
-        <View style={{ marginTop: 8, gap: 6 }}>
+        <View style={{ marginTop: 12, gap: 10 }} testID="portal-cloud-keys-list">
           <Text style={[styles.fieldLabel, f && { fontFamily: f.uiBold }]}>
-            CLOUD KEYS ({catalogKeys.length})
+            YOUR KEYS ({catalogKeys.length})
           </Text>
-          {catalogKeys.length === 0 ? (
-            <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>No keys in cloud yet</Text>
+          {catalogKeys.length > 4 ? (
+            <View style={styles.searchWrap}>
+              <Ionicons name="search" size={16} color={ea.textMuted} />
+              <TextInput
+                value={keyFilter}
+                onChangeText={setKeyFilter}
+                placeholder="Filter by key, EA, or customer"
+                placeholderTextColor={ea.textMuted}
+                style={[styles.searchInput, f && { fontFamily: f.ui }]}
+                testID="portal-keys-filter"
+              />
+            </View>
+          ) : null}
+          {filteredKeys.length === 0 ? (
+            <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
+              {catalogKeys.length === 0 ? 'No keys yet — generate one above' : 'No keys match filter'}
+            </Text>
           ) : (
-            catalogKeys.slice(0, 8).map((k) => (
-              <Text key={k.id} style={[styles.keyMono, f && { fontFamily: f.monoBold }, { fontSize: 13 }]}>
-                {k.key} · {k.eaName}
-              </Text>
+            keysByEa.map(([eaLabel, rows]) => (
+              <View key={eaLabel} style={{ gap: 8 }}>
+                <Text
+                  style={[
+                    styles.softLabel,
+                    f && { fontFamily: f.uiMed },
+                    { color: ea.textSecondary },
+                  ]}
+                >
+                  {eaLabel.toUpperCase()} · {rows.length}
+                </Text>
+                {rows.slice(0, 12).map((k) => (
+                  <View key={k.id} style={styles.keyRowCompact} testID={`portal-key-row-${k.id}`}>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={[styles.keyMono, f && { fontFamily: f.monoBold }, { fontSize: 13 }]}>
+                        {k.key}
+                      </Text>
+                      <Text style={[styles.kpiSub, f && { fontFamily: f.ui }, { fontSize: 11 }]}>
+                        {formatKeyDate(k.createdAt)}
+                        {k.user ? ` · ${k.user}` : ''}
+                        {k.boundEmail ? ` · ${k.boundEmail}` : ' · Unassigned'}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.statusPill,
+                        k.status === 'Active' ? styles.statusActive : styles.statusExpired,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.statusPillText,
+                          f && { fontFamily: f.uiBold },
+                          { color: k.status === 'Active' ? ea.green : ea.orange },
+                        ]}
+                      >
+                        {k.status}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
             ))
           )}
         </View>
@@ -2384,6 +2459,17 @@ const styles = StyleSheet.create({
     color: ea.textSecondary,
     fontSize: 12,
     fontWeight: '700',
+  },
+  keyRowCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: ea.cardElevated,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: ea.border,
   },
   keyCard: {
     backgroundColor: ea.cardElevated,
