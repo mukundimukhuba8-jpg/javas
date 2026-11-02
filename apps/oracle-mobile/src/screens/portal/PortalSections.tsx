@@ -14,6 +14,7 @@ import { portalFonts } from '../../theme/portalFonts';
 import { useEas } from '../../ea/EaStore';
 import { useAccess } from '../../access/AccessStore';
 import { useLicenses } from '../../license/LicenseStore';
+import { usePortalSession } from '../../access/portalSession';
 import { pickEaImageAsDataUrl } from '../../ea/pickEaImage';
 import {
   fetchCloudPrimary,
@@ -265,8 +266,14 @@ export function PortalSectionBody({ section, fontsReady, onNavigate }: Props) {
       return <DashboardSection fontsReady={fontsReady} onNavigate={onNavigate} />;
     case 'create-keys':
       return <CreateKeysSection fontsReady={fontsReady} onNavigate={onNavigate} />;
+    case 'manage-keys':
+      return <ManageKeysSection fontsReady={fontsReady} onNavigate={onNavigate} />;
     case 'expert-adviser':
       return <ExpertAdviserSection fontsReady={fontsReady} />;
+    case 'profile':
+      return <ProfileSection fontsReady={fontsReady} />;
+    case 'commission':
+      return <CommissionSection fontsReady={fontsReady} />;
     case 'reactivate-email':
       return <ReactivateEmailSection fontsReady={fontsReady} />;
     case 'affiliate-program':
@@ -295,63 +302,126 @@ function DashboardSection({
 }) {
   const f = useFf(fontsReady);
   const { eas } = useEas();
+  const { keyStats } = useLicenses();
+  const { isSuperadmin } = usePortalSession();
   const userEaCount = eas.length;
-  const kpis = [
-    {
-      label: 'TOTAL LICENSES',
-      value: '0',
-      sub: 'All-time keys issued',
-      color: ea.purple,
-      soft: ea.purpleSoft,
-      icon: 'key' as const,
-    },
-    {
-      label: 'ACTIVE NOW',
-      value: '0',
-      sub: 'Currently active users',
-      color: ea.teal,
-      soft: ea.tealSoft,
-      icon: 'checkmark-circle' as const,
-    },
-    {
-      label: 'EXPERT ADVISORS',
-      value: String(userEaCount),
-      sub: 'EAs on your account',
-      color: ea.orange,
-      soft: ea.orangeSoft,
-      icon: 'hardware-chip' as const,
-    },
-    {
-      label: 'LICENSE CAP',
-      value: '0',
-      sub: 'Maximum available',
-      color: ea.purple,
-      soft: ea.purpleSoft,
-      icon: 'infinite' as const,
-    },
-  ];
+
+  const kpis = isSuperadmin
+    ? [
+        {
+          label: 'KEYS GENERATED',
+          value: String(keyStats.generated),
+          sub: 'All-time keys issued',
+          color: ea.purple,
+          soft: ea.purpleSoft,
+          icon: 'key' as const,
+          testID: 'portal-dash-generated',
+        },
+        {
+          label: 'KEYS DELETED',
+          value: String(keyStats.deleted),
+          sub: 'Soft-deleted from catalog',
+          color: ea.orange,
+          soft: ea.orangeSoft,
+          icon: 'trash' as const,
+          testID: 'portal-dash-deleted',
+        },
+        {
+          label: 'ACTIVE NOW',
+          value: String(keyStats.active),
+          sub: 'Currently active keys',
+          color: ea.teal,
+          soft: ea.tealSoft,
+          icon: 'checkmark-circle' as const,
+          testID: 'portal-dash-active',
+        },
+        {
+          label: 'EXPERT ADVISORS',
+          value: String(userEaCount),
+          sub: 'EAs in catalog',
+          color: ea.purple,
+          soft: ea.purpleSoft,
+          icon: 'hardware-chip' as const,
+          testID: 'portal-dash-eas',
+        },
+      ]
+    : [
+        {
+          label: 'KEYS GENERATED',
+          value: String(keyStats.generated),
+          sub: 'Your license keys issued',
+          color: ea.purple,
+          soft: ea.purpleSoft,
+          icon: 'key' as const,
+          testID: 'portal-dash-generated',
+        },
+        {
+          label: 'KEYS DELETED',
+          value: String(keyStats.deleted),
+          sub: 'Your deleted license keys',
+          color: ea.orange,
+          soft: ea.orangeSoft,
+          icon: 'trash' as const,
+          testID: 'portal-dash-deleted',
+        },
+        {
+          label: 'ACTIVE KEYS',
+          value: String(keyStats.active),
+          sub: 'Still active for clients',
+          color: ea.teal,
+          soft: ea.tealSoft,
+          icon: 'checkmark-circle' as const,
+          testID: 'portal-dash-active',
+        },
+        {
+          label: 'YOUR EAs',
+          value: String(userEaCount),
+          sub: 'Expert advisors you created',
+          color: ea.purple,
+          soft: ea.purpleSoft,
+          icon: 'hardware-chip' as const,
+          testID: 'portal-dash-eas',
+        },
+      ];
 
   const actions: {
     title: string;
     icon: keyof typeof Ionicons.glyphMap;
     target: PortalSectionId;
-  }[] = [
-    { title: 'Generate Key', icon: 'key-outline', target: 'create-keys' },
-    { title: 'Expert Advisors', icon: 'hardware-chip-outline', target: 'expert-adviser' },
-    { title: 'Key analytics', icon: 'trending-up-outline', target: 'keys-analytics' },
-    { title: 'Affiliate program', icon: 'git-network-outline', target: 'affiliate-program' },
-    { title: 'Reactivate license', icon: 'refresh-outline', target: 'reactivate-license' },
-  ];
+  }[] = isSuperadmin
+    ? [
+        { title: 'Generate Key', icon: 'key-outline', target: 'create-keys' },
+        { title: 'Manage license keys', icon: 'list-outline', target: 'manage-keys' },
+        { title: 'Expert Advisors', icon: 'hardware-chip-outline', target: 'expert-adviser' },
+        { title: 'Key analytics', icon: 'trending-up-outline', target: 'keys-analytics' },
+        { title: 'Affiliate program', icon: 'git-network-outline', target: 'affiliate-program' },
+        { title: 'Reactivate license', icon: 'refresh-outline', target: 'reactivate-license' },
+      ]
+    : [
+        { title: 'Generate license keys', icon: 'key-outline', target: 'create-keys' },
+        { title: 'Manage license keys', icon: 'list-outline', target: 'manage-keys' },
+        { title: 'Create EA', icon: 'hardware-chip-outline', target: 'expert-adviser' },
+        { title: 'Profile', icon: 'person-outline', target: 'profile' },
+      ];
 
   return (
-    <ScrollView contentContainerStyle={styles.stack} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      contentContainerStyle={styles.stack}
+      showsVerticalScrollIndicator={false}
+      testID="portal-dashboard"
+    >
       {kpis.map((k) => (
         <Card key={k.label}>
           <View style={styles.kpiTop}>
             <IconTile color={k.color} soft={k.soft} name={k.icon} />
           </View>
           <Text style={[styles.kpiLabel, f && { fontFamily: f.uiBold }]}>{k.label}</Text>
-          <Text style={[styles.kpiValue, f && { fontFamily: f.display }]}>{k.value}</Text>
+          <Text
+            style={[styles.kpiValue, f && { fontFamily: f.display }]}
+            testID={k.testID}
+          >
+            {k.value}
+          </Text>
           <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>{k.sub}</Text>
         </Card>
       ))}
@@ -375,6 +445,96 @@ function DashboardSection({
               <Ionicons name="chevron-forward" size={16} color={ea.textMuted} />
             </Pressable>
           ))}
+        </View>
+      </Card>
+      <FooterNote fontsReady={fontsReady} />
+    </ScrollView>
+  );
+}
+
+function ProfileSection({ fontsReady }: { fontsReady: boolean }) {
+  const f = useFf(fontsReady);
+  const { session, isSuperadmin } = usePortalSession();
+  return (
+    <ScrollView
+      contentContainerStyle={styles.stack}
+      showsVerticalScrollIndicator={false}
+      testID="portal-profile"
+    >
+      <View style={styles.pageIntro}>
+        <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>Profile</Text>
+        <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+          Your mentor account details
+        </Text>
+      </View>
+      <Card>
+        <View style={styles.cardHeadRow}>
+          <IconTile color={ea.primary} soft={ea.primarySoft} name="person" />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>
+              {session?.name || 'Mentor'}
+            </Text>
+            <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+              {isSuperadmin ? 'Superadmin' : 'Approved mentor'}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.emailPill}>
+          <Ionicons name="mail-outline" size={14} color={ea.primary} />
+          <Text
+            style={[styles.emailPillText, f && { fontFamily: f.uiMed }]}
+            testID="portal-profile-email"
+          >
+            {session?.email || '—'}
+          </Text>
+        </View>
+        <Text style={[styles.kpiSub, f && { fontFamily: f.ui }, { marginTop: 12 }]}>
+          Mentor id: {session?.mentorId || '—'}
+        </Text>
+      </Card>
+      <FooterNote fontsReady={fontsReady} />
+    </ScrollView>
+  );
+}
+
+function CommissionSection({ fontsReady }: { fontsReady: boolean }) {
+  const f = useFf(fontsReady);
+  return (
+    <ScrollView
+      contentContainerStyle={styles.stack}
+      showsVerticalScrollIndicator={false}
+      testID="portal-commission"
+    >
+      <View style={styles.pageIntro}>
+        <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>Commission</Text>
+        <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>(coming soon)</Text>
+      </View>
+      <Card>
+        <View style={styles.cardHeadRow}>
+          <IconTile color={ea.textMuted} soft={ea.purpleSoft} name="cash-outline" />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardTitle, f && { fontFamily: f.uiBold }]}>
+              Commission tracking
+            </Text>
+            <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+              Payouts and referral commissions are not available yet. No placeholder figures
+              are shown.
+            </Text>
+          </View>
+        </View>
+        <View
+          style={[
+            styles.commissionBox,
+            { opacity: 0.55, borderColor: ea.borderStrong, backgroundColor: ea.cardElevated },
+          ]}
+        >
+          <Text style={[styles.softLabel, f && { fontFamily: f.uiMed }]}>Status</Text>
+          <Text
+            style={[styles.commissionValue, f && { fontFamily: f.display }, { fontSize: 22 }]}
+            testID="portal-commission-soon"
+          >
+            Coming soon
+          </Text>
         </View>
       </Card>
       <FooterNote fontsReady={fontsReady} />
@@ -1152,6 +1312,316 @@ function formatKeyDate(iso: string) {
   }
 }
 
+function ManageKeysSection({
+  fontsReady,
+  onNavigate,
+}: {
+  fontsReady: boolean;
+  onNavigate: (id: PortalSectionId) => void;
+}) {
+  const f = useFf(fontsReady);
+  const { keys, unlinkKey, deleteKey, keyStats } = useLicenses();
+  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState<'all' | 'active' | 'expired'>('all');
+  const [copied, setCopied] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const activeCount = keys.filter((k) => k.status === 'Active').length;
+  const expiredCount = keys.filter((k) => k.status === 'Expired').length;
+
+  const filtered = keys.filter((k) => {
+    if (filter === 'active' && k.status !== 'Active') return false;
+    if (filter === 'expired' && k.status !== 'Expired') return false;
+    if (!q.trim()) return true;
+    const s = q.toLowerCase();
+    return (
+      k.key.toLowerCase().includes(s) ||
+      k.ea.toLowerCase().includes(s) ||
+      k.user.toLowerCase().includes(s)
+    );
+  });
+
+  return (
+    <ScrollView
+      contentContainerStyle={styles.stack}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+      testID="portal-manage-keys"
+    >
+      <View style={styles.pageIntro}>
+        <Text style={[styles.pageTitle, f && { fontFamily: f.display }]}>
+          Manage license keys
+        </Text>
+        <Text style={[styles.cardSub, f && { fontFamily: f.ui }]}>
+          Search, copy, unlink, or delete keys in your catalog
+        </Text>
+        <View style={styles.topActions}>
+          <View style={styles.outlinePill} testID="portal-manage-keys-count">
+            <Ionicons name="key-outline" size={14} color={ea.text} />
+            <Text style={[styles.outlinePillText, f && { fontFamily: f.uiMed }]}>
+              {keys.length} live · {keyStats.deleted} deleted
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => onNavigate('create-keys')}
+            style={[
+              styles.newKeyBtn,
+              Platform.select({
+                web: { boxShadow: `0 0 18px ${ea.primaryGlow}` } as object,
+                default: {},
+              }),
+            ]}
+            testID="portal-manage-keys-new"
+          >
+            <Text style={[styles.newKeyBtnText, f && { fontFamily: f.uiBold }]}>+ New key</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {actionError ? (
+        <Text style={[styles.emptyState, { color: ea.orange }]} testID="portal-manage-keys-error">
+          {actionError}
+        </Text>
+      ) : null}
+
+      <Card>
+        <View style={styles.searchWrap}>
+          <Ionicons name="search" size={16} color={ea.textMuted} />
+          <TextInput
+            value={q}
+            onChangeText={setQ}
+            placeholder="Search user, key, EA..."
+            placeholderTextColor={ea.textMuted}
+            style={[styles.searchInput, f && { fontFamily: f.uiMed }]}
+            testID="portal-manage-keys-search"
+          />
+        </View>
+
+        <View style={styles.filterRow}>
+          {(
+            [
+              ['all', `All ${keys.length}`],
+              ['active', `Active ${activeCount}`],
+              ['expired', `Expired ${expiredCount}`],
+            ] as const
+          ).map(([id, label]) => {
+            const on = filter === id;
+            return (
+              <Pressable
+                key={id}
+                onPress={() => setFilter(id)}
+                style={[styles.filterPill, on && styles.filterPillOn]}
+              >
+                <Text
+                  style={[
+                    styles.filterPillText,
+                    f && { fontFamily: f.uiBold },
+                    on && { color: '#fff' },
+                  ]}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {filtered.length === 0 ? (
+          <Text style={[styles.emptyState, f && { fontFamily: f.uiMed }]}>No keys yet</Text>
+        ) : (
+          filtered.map((item) => (
+            <View key={item.id} style={styles.keyCard} testID={`portal-key-row-${item.id}`}>
+              <View style={styles.keyCardTop}>
+                <Text style={[styles.softLabel, f && { fontFamily: f.uiMed }]}>Key</Text>
+                <View
+                  style={[
+                    styles.statusPill,
+                    item.status === 'Active' ? styles.statusActive : styles.statusExpired,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusPillText,
+                      f && { fontFamily: f.uiBold },
+                      { color: item.status === 'Active' ? ea.green : ea.orange },
+                    ]}
+                  >
+                    {item.status}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.eaNameRow}>
+                <Ionicons name="hardware-chip" size={14} color={ea.primary} />
+                <Text style={[styles.eaName, f && { fontFamily: f.uiBold }]}>
+                  {item.eaName || item.ea}
+                </Text>
+              </View>
+              <View style={styles.keyCopyRow}>
+                <View style={styles.keyBox}>
+                  <Text style={[styles.keyMono, f && { fontFamily: f.monoBold }]}>{item.key}</Text>
+                </View>
+                <Pressable
+                  onPress={async () => {
+                    if (await copyText(item.key)) {
+                      setCopied(item.id);
+                      setTimeout(() => setCopied((c) => (c === item.id ? null : c)), 1400);
+                    }
+                  }}
+                  style={styles.copySquare}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Copy ${item.key}`}
+                >
+                  <Ionicons
+                    name={copied === item.id ? 'checkmark' : 'copy-outline'}
+                    size={16}
+                    color="#fff"
+                  />
+                </Pressable>
+              </View>
+              <View style={styles.keyMetaRow}>
+                <Ionicons name="calendar-outline" size={12} color={ea.textMuted} />
+                <Text style={[styles.kpiSub, f && { fontFamily: f.ui }]}>
+                  {formatKeyDate(item.createdAt)} · {item.user}
+                </Text>
+              </View>
+              <View
+                style={{
+                  marginTop: 8,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                }}
+              >
+                <Text style={[styles.kpiSub, f && { fontFamily: f.uiMed }, { flex: 1 }]}>
+                  {item.boundEmail?.trim()
+                    ? `Linked to ${item.boundEmail.trim().toLowerCase()}`
+                    : 'Unassigned'}
+                </Text>
+                {item.boundEmail?.trim() ? (
+                  <Pressable
+                    disabled={busy === item.id}
+                    onPress={async () => {
+                      setActionError(null);
+                      setBusy(item.id);
+                      const res = await unlinkKey(item.key);
+                      setBusy(null);
+                      if (!res.ok) setActionError(res.error || 'Unlink failed');
+                    }}
+                    style={{
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: ea.orange,
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Unlink ${item.key}`}
+                    testID={`portal-key-unlink-${item.id}`}
+                  >
+                    <Text
+                      style={[
+                        { color: ea.orange, fontSize: 12, fontWeight: '700' },
+                        f && { fontFamily: f.uiBold },
+                      ]}
+                    >
+                      {busy === item.id ? '…' : 'Unlink'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+                {confirmDelete === item.id ? (
+                  <>
+                    <Pressable
+                      disabled={busy === item.id}
+                      onPress={async () => {
+                        setActionError(null);
+                        setBusy(item.id);
+                        const res = await deleteKey(item.key);
+                        setBusy(null);
+                        setConfirmDelete(null);
+                        if (!res.ok) setActionError(res.error || 'Delete failed');
+                      }}
+                      style={{
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        borderRadius: 8,
+                        backgroundColor: 'rgba(239,68,68,0.18)',
+                        borderWidth: 1,
+                        borderColor: '#ef4444',
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Confirm delete ${item.key}`}
+                      testID={`portal-key-delete-confirm-${item.id}`}
+                    >
+                      <Text
+                        style={[
+                          { color: '#ef4444', fontSize: 12, fontWeight: '700' },
+                          f && { fontFamily: f.uiBold },
+                        ]}
+                      >
+                        {busy === item.id ? '…' : 'Confirm delete'}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setConfirmDelete(null)}
+                      style={{
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: ea.borderStrong,
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel="Cancel delete"
+                    >
+                      <Text
+                        style={[
+                          { color: ea.textSecondary, fontSize: 12, fontWeight: '700' },
+                          f && { fontFamily: f.uiBold },
+                        ]}
+                      >
+                        Cancel
+                      </Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <Pressable
+                    disabled={busy === item.id}
+                    onPress={() => setConfirmDelete(item.id)}
+                    style={{
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: '#ef4444',
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete ${item.key}`}
+                    testID={`portal-key-delete-${item.id}`}
+                  >
+                    <Text
+                      style={[
+                        { color: '#ef4444', fontSize: 12, fontWeight: '700' },
+                        f && { fontFamily: f.uiBold },
+                      ]}
+                    >
+                      Delete
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          ))
+        )}
+      </Card>
+      <FooterNote fontsReady={fontsReady} />
+    </ScrollView>
+  );
+}
+
 function KeysAnalyticsSection({
   fontsReady,
   onNavigate,
@@ -1160,11 +1630,11 @@ function KeysAnalyticsSection({
   onNavigate: (id: PortalSectionId) => void;
 }) {
   const f = useFf(fontsReady);
-  const { keys, unlinkKey } = useLicenses();
+  const { keys, unlinkKey, deleteKey } = useLicenses();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'expired'>('all');
   const [copied, setCopied] = useState<string | null>(null);
-  const [unlinking, setUnlinking] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
 
   const activeCount = keys.filter((k) => k.status === 'Active').length;
   const expiredCount = keys.filter((k) => k.status === 'Expired').length;
@@ -1339,11 +1809,11 @@ function KeysAnalyticsSection({
                 </Text>
                 {item.boundEmail?.trim() ? (
                   <Pressable
-                    disabled={unlinking === item.id}
+                    disabled={busy === item.id}
                     onPress={async () => {
-                      setUnlinking(item.id);
+                      setBusy(item.id);
                       await unlinkKey(item.key);
-                      setUnlinking(null);
+                      setBusy(null);
                     }}
                     style={{
                       paddingHorizontal: 10,
@@ -1361,10 +1831,36 @@ function KeysAnalyticsSection({
                         f && { fontFamily: f.uiBold },
                       ]}
                     >
-                      {unlinking === item.id ? '…' : 'Unlink'}
+                      {busy === item.id ? '…' : 'Unlink'}
                     </Text>
                   </Pressable>
                 ) : null}
+                <Pressable
+                  disabled={busy === item.id}
+                  onPress={async () => {
+                    setBusy(item.id);
+                    await deleteKey(item.key);
+                    setBusy(null);
+                  }}
+                  style={{
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: '#ef4444',
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Delete ${item.key}`}
+                >
+                  <Text
+                    style={[
+                      { color: '#ef4444', fontSize: 12, fontWeight: '700' },
+                      f && { fontFamily: f.uiBold },
+                    ]}
+                  >
+                    Delete
+                  </Text>
+                </Pressable>
               </View>
             </View>
           ))

@@ -1,6 +1,7 @@
 import { createWorker } from 'tesseract.js';
 import { TRADE_SYMBOLS } from '../data/symbols';
-import type { ChartSignal, SignalDirection } from './types';
+import { detectTradingChart, NO_CHART_MESSAGE } from './detectChart';
+import type { ChartAnalyzeResult, ChartSignal, SignalDirection } from './types';
 
 const ALIASES: Record<string, string> = {
   EURUSD: 'EURUSD',
@@ -168,19 +169,32 @@ function formatPrice(symbol: string, n: number): number {
 export async function analyzeChartImage(
   imageUri: string,
   onProgress?: (msg: string) => void,
-): Promise<ChartSignal> {
-  onProgress?.('Reading chart text…');
+): Promise<ChartAnalyzeResult> {
+  onProgress?.('Checking for a market chart…');
   const worker = await createWorker('eng', 1, {
     logger: () => undefined,
   });
   let ocrText = '';
   try {
+    onProgress?.('Reading chart text…');
     const {
       data: { text },
     } = await worker.recognize(imageUri);
     ocrText = text ?? '';
   } finally {
     await worker.terminate();
+  }
+
+  onProgress?.('Verifying chart layout…');
+  const detection = await detectTradingChart(imageUri, ocrText);
+  if (!detection.isChart) {
+    return {
+      ok: false,
+      reason: 'not_a_chart',
+      message: NO_CHART_MESSAGE,
+      imageUri,
+      detectionScore: detection.score,
+    };
   }
 
   onProgress?.('Measuring candle colour bias…');
@@ -190,21 +204,39 @@ export async function analyzeChartImage(
   const bias = await colourBias(imageUri);
   const direction = bias.direction;
 
+  // Real chart + OCR uncertain: keep edit-symbol UX, but never invent a fake fallback
+  // entry from thin air when we also lack price digits — use null entry instead.
+  const hasPriceDigits = entry != null;
   const fallbackEntry =
     entry ??
-    (symbol === 'XAUUSD'
-      ? 2350
-      : symbol === 'US30'
-        ? 39000
-        : symbol === 'NAS100'
-          ? 17800
-          : symbol.includes('JPY')
-            ? 150.25
-            : 1.085);
+    (symbolConfidence !== 'low'
+      ? symbol === 'XAUUSD'
+        ? 2350
+        : symbol === 'US30'
+          ? 39000
+          : symbol === 'NAS100'
+            ? 17800
+            : symbol.includes('JPY')
+              ? 150.25
+              : 1.085
+      : null);
 
-  const { tp, sl, note } = pipMeta(symbol, fallbackEntry);
-  const takeProfit = direction === 'BUY' ? fallbackEntry + tp : fallbackEntry - tp;
-  const stopLoss = direction === 'BUY' ? fallbackEntry - sl : fallbackEntry + sl;
+  const basis = fallbackEntry ?? 1.085;
+  const { tp, sl, note } = pipMeta(symbol, basis);
+  const takeProfit =
+    fallbackEntry == null
+      ? formatPrice(symbol, basis + (direction === 'BUY' ? tp : -tp))
+      : formatPrice(
+          symbol,
+          direction === 'BUY' ? fallbackEntry + tp : fallbackEntry - tp,
+        );
+  const stopLoss =
+    fallbackEntry == null
+      ? formatPrice(symbol, basis + (direction === 'BUY' ? -sl : sl))
+      : formatPrice(
+          symbol,
+          direction === 'BUY' ? fallbackEntry - sl : fallbackEntry + sl,
+        );
 
   const rationale =
     direction === 'BUY'
@@ -213,7 +245,7 @@ export async function analyzeChartImage(
 
   const notes = [
     symbolConfidence === 'low' ? 'Symbol uncertain — confirm or edit below.' : null,
-    entry == null
+    !hasPriceDigits
       ? 'Entry inferred from typical quote band (OCR price not clear).'
       : 'Entry taken from OCR prices on the chart.',
     note,
@@ -223,13 +255,13 @@ export async function analyzeChartImage(
 
   onProgress?.('Building signal…');
 
-  return {
+  const signal: ChartSignal = {
     symbol,
     symbolConfidence,
     direction,
-    entry: formatPrice(symbol, fallbackEntry),
-    takeProfit: formatPrice(symbol, takeProfit),
-    stopLoss: formatPrice(symbol, stopLoss),
+    entry: fallbackEntry == null ? null : formatPrice(symbol, fallbackEntry),
+    takeProfit,
+    stopLoss,
     confidence: Math.round(
       bias.score * (symbolConfidence === 'high' ? 100 : symbolConfidence === 'medium' ? 88 : 70),
     ),
@@ -238,4 +270,6 @@ export async function analyzeChartImage(
     ocrTextSample: ocrText.slice(0, 280).trim(),
     imageUri,
   };
+
+  return { ok: true, signal };
 }

@@ -14,15 +14,21 @@ export function ScanResultsCard({ signal, symbolDraft, onChangeSymbol, onRescan 
   const bullish = signal.direction === 'BUY';
 
   return (
+    <View testID="scanner-signal-card">
     <NeonBorder radius={radii.card} fill={colors.cardFill} style={styles.card}>
       <View style={styles.previewRow}>
         <Image source={{ uri: signal.imageUri }} style={styles.thumb} resizeMode="cover" />
         <View style={styles.previewCopy}>
           <Text style={styles.kicker}>SCAN RESULT</Text>
-          <Text style={[styles.direction, bullish ? styles.buy : styles.sell]}>
+          <Text
+            style={[styles.direction, bullish ? styles.buy : styles.sell]}
+            testID="scanner-signal-direction"
+          >
             {signal.direction}
           </Text>
-          <Text style={styles.confidence}>{signal.confidence}% model confidence</Text>
+          <Text style={styles.confidence} testID="scanner-signal-confidence">
+            {signal.confidence}% model confidence
+          </Text>
         </View>
       </View>
 
@@ -51,6 +57,7 @@ export function ScanResultsCard({ signal, symbolDraft, onChangeSymbol, onRescan 
         <Text style={styles.rescanLabel}>RETAKE / UPLOAD ANOTHER</Text>
       </Pressable>
     </NeonBorder>
+    </View>
   );
 }
 

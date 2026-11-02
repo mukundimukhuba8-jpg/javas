@@ -1,7 +1,10 @@
 export type PortalSectionId =
   | 'dashboard'
   | 'create-keys'
+  | 'manage-keys'
   | 'expert-adviser'
+  | 'profile'
+  | 'commission'
   | 'reactivate-email'
   | 'affiliate-program'
   | 'manage-users'
@@ -24,10 +27,57 @@ export type PortalMenuItem = {
     | 'briefcase-outline'
     | 'card-outline'
     | 'refresh-outline'
-    | 'stats-chart-outline';
+    | 'stats-chart-outline'
+    | 'person-outline'
+    | 'cash-outline'
+    | 'list-outline';
+  /** Mentor menu: show as disabled stub */
+  comingSoon?: boolean;
 };
 
-export const PORTAL_MENU: PortalMenuItem[] = [
+/** Mentor portal — only these six items. */
+export const MENTOR_PORTAL_MENU: PortalMenuItem[] = [
+  {
+    id: 'dashboard',
+    title: 'Dashboard',
+    subtitle: 'Your key stats',
+    icon: 'grid-outline',
+  },
+  {
+    id: 'expert-adviser',
+    title: 'Create EA',
+    subtitle: 'Expert advisors',
+    icon: 'hardware-chip-outline',
+  },
+  {
+    id: 'manage-keys',
+    title: 'Manage license keys',
+    subtitle: 'Search, copy, delete',
+    icon: 'list-outline',
+  },
+  {
+    id: 'create-keys',
+    title: 'Generate license keys',
+    subtitle: 'Issue new keys',
+    icon: 'key-outline',
+  },
+  {
+    id: 'profile',
+    title: 'Profile',
+    subtitle: 'Your mentor account',
+    icon: 'person-outline',
+  },
+  {
+    id: 'commission',
+    title: 'Commission',
+    subtitle: '(coming soon)',
+    icon: 'cash-outline',
+    comingSoon: true,
+  },
+];
+
+/** Superadmin keeps the full portal. */
+export const SUPERADMIN_PORTAL_MENU: PortalMenuItem[] = [
   {
     id: 'dashboard',
     title: 'Dashboard',
@@ -39,6 +89,12 @@ export const PORTAL_MENU: PortalMenuItem[] = [
     title: 'Create keys',
     subtitle: 'Issue license keys',
     icon: 'key-outline',
+  },
+  {
+    id: 'manage-keys',
+    title: 'Manage license keys',
+    subtitle: 'Search, copy, delete',
+    icon: 'list-outline',
   },
   {
     id: 'expert-adviser',
@@ -89,3 +145,6 @@ export const PORTAL_MENU: PortalMenuItem[] = [
     icon: 'stats-chart-outline',
   },
 ];
+
+/** @deprecated use MENTOR_PORTAL_MENU / SUPERADMIN_PORTAL_MENU */
+export const PORTAL_MENU = SUPERADMIN_PORTAL_MENU;

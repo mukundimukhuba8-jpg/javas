@@ -13,16 +13,23 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { portalFonts, usePortalFonts } from '../../theme/portalFonts';
 import { usePortalSession } from '../../access/portalSession';
-import { PORTAL_MENU, type PortalSectionId } from './portalSections';
+import {
+  MENTOR_PORTAL_MENU,
+  SUPERADMIN_PORTAL_MENU,
+  type PortalMenuItem,
+  type PortalSectionId,
+} from './portalSections';
 import { PortalSectionBody } from './PortalSections';
 import { ea } from './eaTradeTheme';
-
-const SUPERADMIN_ONLY: PortalSectionId[] = ['manage-users', 'subscription'];
 
 type Props = {
   onExit: () => void;
   initialSection?: PortalSectionId;
 };
+
+function menuIds(menu: PortalMenuItem[]): PortalSectionId[] {
+  return menu.map((m) => m.id);
+}
 
 function HamburgerIcon({ color }: { color: string }) {
   return (
@@ -64,12 +71,11 @@ export function PortalScreen({ onExit, initialSection = 'dashboard' }: Props) {
   const sidebarWidth = Math.min(288, Math.max(248, width * 0.78));
   const { session, isSuperadmin, signOutPortal } = usePortalSession();
 
-  const menu = PORTAL_MENU.filter(
-    (item) => isSuperadmin || !SUPERADMIN_ONLY.includes(item.id),
-  );
+  const menu = isSuperadmin ? SUPERADMIN_PORTAL_MENU : MENTOR_PORTAL_MENU;
+  const allowed = menuIds(menu);
 
   const [section, setSection] = useState<PortalSectionId>(() => {
-    if (!isSuperadmin && SUPERADMIN_ONLY.includes(initialSection)) return 'dashboard';
+    if (!allowed.includes(initialSection)) return 'dashboard';
     return initialSection;
   });
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -112,6 +118,7 @@ export function PortalScreen({ onExit, initialSection = 'dashboard' }: Props) {
   }, [section, panelOpacity]);
 
   const selectSection = (id: PortalSectionId) => {
+    if (!allowed.includes(id)) return;
     setSection(id);
     if (!isDesktop) setDrawerOpen(false);
   };
@@ -230,46 +237,75 @@ export function PortalScreen({ onExit, initialSection = 'dashboard' }: Props) {
           >
             {menu.map((item) => {
               const selected = item.id === section;
+              const soon = Boolean(item.comingSoon);
               return (
                 <Pressable
                   key={item.id}
                   onPress={() => selectSection(item.id)}
-                  style={[styles.navItem, selected && styles.navItemSelected]}
+                  style={[
+                    styles.navItem,
+                    selected && styles.navItemSelected,
+                    soon && styles.navItemDisabled,
+                  ]}
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
-                  accessibilityLabel={item.title}
+                  accessibilityLabel={
+                    soon ? `${item.title} coming soon` : item.title
+                  }
                   testID={`portal-nav-${item.id}`}
                 >
                   <Ionicons
                     name={item.icon}
                     size={18}
-                    color={selected ? ea.primary : ea.textSecondary}
+                    color={
+                      soon
+                        ? ea.textMuted
+                        : selected
+                          ? ea.primary
+                          : ea.textSecondary
+                    }
                   />
-                  <Text
-                    style={[
-                      styles.navTitle,
-                      f && { fontFamily: f.uiMed },
-                      selected && { color: ea.text },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {item.title}
-                  </Text>
+                  <View style={styles.navTextCol}>
+                    <Text
+                      style={[
+                        styles.navTitle,
+                        f && { fontFamily: f.uiMed },
+                        selected && !soon && { color: ea.text },
+                        soon && { color: ea.textMuted },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item.title}
+                    </Text>
+                    {soon || item.subtitle === '(coming soon)' ? (
+                      <Text
+                        style={[styles.navSoon, f && { fontFamily: f.ui }]}
+                        numberOfLines={1}
+                      >
+                        (coming soon)
+                      </Text>
+                    ) : null}
+                  </View>
                 </Pressable>
               );
             })}
           </ScrollView>
-          <Pressable
-            onPress={onExit}
-            style={styles.drawerExit}
-            accessibilityRole="button"
-            accessibilityLabel="Exit portal"
-          >
-            <Ionicons name="arrow-back" size={16} color={ea.text} />
-            <Text style={[styles.drawerExitText, f && { fontFamily: f.uiBold }]}>
-              Exit portal
-            </Text>
-          </Pressable>
+          {isSuperadmin ? (
+            <Pressable
+              onPress={onExit}
+              style={styles.drawerExit}
+              accessibilityRole="button"
+              accessibilityLabel="Exit portal"
+              testID="portal-drawer-exit"
+            >
+              <Ionicons name="arrow-back" size={16} color={ea.text} />
+              <Text style={[styles.drawerExitText, f && { fontFamily: f.uiBold }]}>
+                Exit portal
+              </Text>
+            </Pressable>
+          ) : (
+            <View style={styles.drawerExitPad} />
+          )}
         </Animated.View>
       </View>
     </View>
@@ -456,11 +492,21 @@ const styles = StyleSheet.create({
   navItemSelected: {
     backgroundColor: ea.primarySoft,
   },
+  navItemDisabled: {
+    opacity: 0.55,
+  },
+  navTextCol: {
+    flex: 1,
+    gap: 2,
+  },
   navTitle: {
     color: ea.textSecondary,
     fontSize: 14,
     fontWeight: '600',
-    flex: 1,
+  },
+  navSoon: {
+    color: ea.textMuted,
+    fontSize: 11,
   },
   drawerExit: {
     margin: 14,
@@ -470,6 +516,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  drawerExitPad: {
+    height: 16,
   },
   drawerExitText: {
     color: ea.text,

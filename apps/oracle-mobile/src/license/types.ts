@@ -12,11 +12,13 @@ export type LicenseKey = {
   ea: string;
   user: string;
   plan: string;
-  status: 'Active' | 'Expired';
+  status: 'Active' | 'Expired' | 'Deleted';
   createdAt: string;
   boundEmail: string | null;
   /** Owning mentor portal id — isolates catalogs per mentor */
   mentorId: string;
+  /** Set when status becomes Deleted */
+  deletedAt?: string | null;
 };
 
 export type KeyActivation = {
@@ -74,10 +76,17 @@ export function toSlimKey(k: LicenseKey): LicenseKey {
     ea: k.eaName || k.ea || '',
     user: k.user || '',
     plan: k.plan || '',
-    status: k.status === 'Expired' ? 'Expired' : 'Active',
+    status:
+      k.status === 'Deleted' ? 'Deleted' : k.status === 'Expired' ? 'Expired' : 'Active',
     createdAt: k.createdAt || new Date().toISOString(),
     boundEmail: raw || null,
     mentorId,
+    deletedAt:
+      typeof (k as { deletedAt?: unknown }).deletedAt === 'string'
+        ? (k as { deletedAt: string }).deletedAt
+        : k.status === 'Deleted'
+          ? k.createdAt || null
+          : null,
   };
 }
 
@@ -85,7 +94,24 @@ export function toSlimKey(k: LicenseKey): LicenseKey {
 export function filterKeysForMentor(
   keys: LicenseKey[],
   scopeMentorId: string | null,
+  opts?: { includeDeleted?: boolean },
 ): LicenseKey[] {
-  if (!scopeMentorId) return keys;
-  return keys.filter((k) => (k.mentorId || 'legacy') === scopeMentorId);
+  const scoped = !scopeMentorId
+    ? keys
+    : keys.filter((k) => (k.mentorId || 'legacy') === scopeMentorId);
+  if (opts?.includeDeleted) return scoped;
+  return scoped.filter((k) => k.status !== 'Deleted');
+}
+
+export function mentorKeyStats(keys: LicenseKey[], scopeMentorId: string | null) {
+  const scoped = filterKeysForMentor(keys, scopeMentorId, { includeDeleted: true });
+  const deleted = scoped.filter((k) => k.status === 'Deleted').length;
+  const active = scoped.filter((k) => k.status === 'Active').length;
+  const expired = scoped.filter((k) => k.status === 'Expired').length;
+  return {
+    generated: scoped.length,
+    deleted,
+    active,
+    expired,
+  };
 }

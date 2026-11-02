@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Platform,
   Pressable,
   ScrollView,
@@ -15,8 +16,9 @@ import { CameraCaptureModal } from '../components/CameraCaptureModal';
 import { NeonBorder } from '../components/NeonBorder';
 import { ScanResultsCard } from '../components/ScanResultsCard';
 import { analyzeChartImage } from '../scanner/analyzeChart';
+import { NO_CHART_MESSAGE } from '../scanner/detectChart';
 import { pickChartFromLibrary, pickChartFromNativeCamera } from '../scanner/pickChart';
-import type { ChartSignal } from '../scanner/types';
+import type { ChartReject, ChartSignal } from '../scanner/types';
 import { colors, spacing } from '../theme';
 
 type Props = {
@@ -32,6 +34,7 @@ export function AiScannerScreen({ activeTab, onTabChange, onOpenPortal }: Props)
   const [progress, setProgress] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [signal, setSignal] = useState<ChartSignal | null>(null);
+  const [reject, setReject] = useState<ChartReject | null>(null);
   const [symbolDraft, setSymbolDraft] = useState('');
 
   const runAnalysis = async (uri: string) => {
@@ -39,11 +42,17 @@ export function AiScannerScreen({ activeTab, onTabChange, onOpenPortal }: Props)
     setScanning(true);
     setError(null);
     setSignal(null);
+    setReject(null);
     setProgress('Preparing chart…');
     try {
       const result = await analyzeChartImage(uri, setProgress);
-      setSignal(result);
-      setSymbolDraft(result.symbol);
+      if (!result.ok) {
+        setReject(result);
+        setSignal(null);
+        return;
+      }
+      setSignal(result.signal);
+      setSymbolDraft(result.signal.symbol);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Scan failed';
       setError(msg);
@@ -71,6 +80,7 @@ export function AiScannerScreen({ activeTab, onTabChange, onOpenPortal }: Props)
 
   const reset = () => {
     setSignal(null);
+    setReject(null);
     setSymbolDraft('');
     setError(null);
   };
@@ -105,6 +115,41 @@ export function AiScannerScreen({ activeTab, onTabChange, onOpenPortal }: Props)
           </NeonBorder>
         ) : null}
 
+        {!scanning && reject ? (
+          <View testID="scanner-reject-card">
+            <NeonBorder radius={22} fill={colors.cardFill} style={styles.rejectBox}>
+              <View style={styles.rejectRow}>
+                {reject.imageUri ? (
+                  <Image
+                    source={{ uri: reject.imageUri }}
+                    style={styles.rejectThumb}
+                    resizeMode="cover"
+                    testID="scanner-reject-thumb"
+                  />
+                ) : null}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rejectKicker}>SCAN REJECTED</Text>
+                  <Text style={styles.rejectTitle} testID="scanner-reject-message">
+                    {reject.message || NO_CHART_MESSAGE}
+                  </Text>
+                  <Text style={styles.rejectHint}>
+                    Use a clear MetaTrader, TradingView, or similar price chart — not a photo of
+                    something else.
+                  </Text>
+                </View>
+              </View>
+              <Pressable
+                style={styles.rescanBtn}
+                onPress={reset}
+                accessibilityRole="button"
+                testID="scanner-reject-retry"
+              >
+                <Text style={styles.rescanLabel}>RETAKE / UPLOAD ANOTHER</Text>
+              </Pressable>
+            </NeonBorder>
+          </View>
+        ) : null}
+
         {!scanning && signal ? (
           <ScanResultsCard
             signal={{ ...signal, symbol: symbolDraft || signal.symbol }}
@@ -114,12 +159,13 @@ export function AiScannerScreen({ activeTab, onTabChange, onOpenPortal }: Props)
           />
         ) : null}
 
-        {!scanning && !signal ? (
+        {!scanning && !signal && !reject ? (
           <>
             <Pressable
               onPress={onUpload}
               accessibilityRole="button"
               accessibilityLabel="Upload chart"
+              testID="scanner-upload"
             >
               <NeonBorder radius={22} fill={colors.cardFill} style={styles.uploadBox}>
                 <Ionicons name="cloud-upload-outline" size={36} color={colors.neon} />
@@ -135,6 +181,7 @@ export function AiScannerScreen({ activeTab, onTabChange, onOpenPortal }: Props)
               onPress={onTakePhoto}
               accessibilityRole="button"
               accessibilityLabel="Take photo of chart"
+              testID="scanner-take-photo"
             >
               <MaterialCommunityIcons name="line-scan" size={22} color={colors.neon} />
               <Text style={styles.photoLabel}>Take photo of chart</Text>
@@ -142,7 +189,11 @@ export function AiScannerScreen({ activeTab, onTabChange, onOpenPortal }: Props)
           </>
         ) : null}
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? (
+          <Text style={styles.error} testID="scanner-error">
+            {error}
+          </Text>
+        ) : null}
 
         <Text style={styles.disclaimer}>
           AI analysis is for educational purposes only. Not financial advice. Always do your own
@@ -261,6 +312,53 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 13,
     textAlign: 'center',
+  },
+  rejectBox: {
+    padding: 16,
+    gap: 14,
+    marginBottom: 16,
+  },
+  rejectRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+  },
+  rejectThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: 12,
+    backgroundColor: '#111',
+  },
+  rejectKicker: {
+    color: '#FF8A8A',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    marginBottom: 4,
+  },
+  rejectTitle: {
+    color: colors.textPrimary,
+    fontSize: 16,
+    fontWeight: '800',
+    lineHeight: 22,
+    marginBottom: 6,
+  },
+  rejectHint: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  rescanBtn: {
+    backgroundColor: '#1A1D2A',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  rescanLabel: {
+    color: colors.textPrimary,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    fontSize: 13,
   },
   error: {
     color: '#FF8A8A',
