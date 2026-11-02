@@ -48,9 +48,14 @@ export async function pickEaImageAsDataUrl(opts?: PickEaImageOpts): Promise<stri
   if (preview) opts?.onPreview?.(preview);
 
   try {
-    const friendly = await cloudFriendlyImage(preview || raw, { eaId: opts?.eaId });
+    // Host to durable https so Auth catalog / Home clients keep the picture
+    const friendly = await cloudFriendlyImage(preview || raw, {
+      eaId: opts?.eaId,
+      requireHttps: true,
+    });
     return friendly || preview || raw;
   } catch {
+    // Still return local preview — pushEaToCloud will retry hosting
     return preview || raw;
   }
 }

@@ -425,6 +425,62 @@ async function blobFromDataUrl(dataUrl: string): Promise<Blob | null> {
   }
 }
 
+/** freeimage.host public demo key — returns durable https://iili.io/… URLs. */
+async function uploadFreeimageHost(blob: Blob): Promise<string | null> {
+  try {
+    const form = new FormData();
+    form.append('source', blob, 'ea.jpg');
+    form.append('type', 'file');
+    form.append('action', 'upload');
+    const up = await fetch(
+      'https://freeimage.host/api/1/upload?key=6d207e02198a847aa98d0a2a901485a5',
+      { method: 'POST', body: form },
+    );
+    if (!up.ok) return null;
+    const json = (await up.json()) as {
+      image?: { url?: string; display_url?: string };
+      success?: boolean;
+    };
+    const url = json?.image?.url || json?.image?.display_url || '';
+    if (/^https?:\/\//i.test(url)) return url;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+/** Imgur anonymous Client-ID upload — durable i.imgur.com URLs. */
+async function uploadImgur(blob: Blob): Promise<string | null> {
+  try {
+    const buf = await blob.arrayBuffer();
+    let binary = '';
+    const bytes = new Uint8Array(buf);
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const b64 =
+      typeof btoa === 'function'
+        ? btoa(binary)
+        : typeof Buffer !== 'undefined'
+          ? Buffer.from(bytes).toString('base64')
+          : '';
+    if (!b64) return null;
+    const up = await fetch('https://api.imgur.com/3/image', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Client-ID 546c25a59c58ad7',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ image: b64, type: 'base64' }),
+    });
+    if (!up.ok) return null;
+    const json = (await up.json()) as { data?: { link?: string }; success?: boolean };
+    const url = json?.data?.link || '';
+    if (/^https?:\/\//i.test(url)) return url;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 async function uploadLitterbox(blob: Blob): Promise<string | null> {
   try {
     const form = new FormData();
@@ -457,26 +513,15 @@ async function uploadCatbox(blob: Blob): Promise<string | null> {
   return null;
 }
 
-async function upload0x0(blob: Blob): Promise<string | null> {
-  try {
-    const form = new FormData();
-    form.append('file', blob, 'ea.jpg');
-    const up = await fetch('https://0x0.st', { method: 'POST', body: form });
-    const text = (await up.text()).trim();
-    if (text.startsWith('https://')) return text;
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
 async function uploadToFreeHost(dataUrl: string): Promise<string | null> {
   const blob = await blobFromDataUrl(dataUrl);
   if (!blob) return null;
+  // Prefer hosts that return durable direct image URLs (Auth metadata requires https)
   return (
+    (await uploadFreeimageHost(blob)) ||
+    (await uploadImgur(blob)) ||
     (await uploadLitterbox(blob)) ||
-    (await uploadCatbox(blob)) ||
-    (await upload0x0(blob))
+    (await uploadCatbox(blob))
   );
 }
 
@@ -506,13 +551,13 @@ async function withShortTimeout<T>(promise: Promise<T>, ms: number): Promise<T |
 }
 
 /**
- * Cloud-safe EA image: https URL preferred, else compressed JPEG data URL under quota.
- * Compresses first (fast), then races Storage / free hosts with short timeouts so UI
- * is never blocked for tens of seconds on a stuck host.
+ * Cloud-safe EA image: durable https URL preferred (Auth metadata strips data URLs).
+ * Compresses first for optimistic UI; then hosts via Storage / freeimage / Imgur.
+ * When requireHttps is set (catalog writes), never returns a data URL.
  */
 export async function cloudFriendlyImage(
   uri: string | null | undefined,
-  opts?: { eaId?: string },
+  opts?: { eaId?: string; requireHttps?: boolean },
 ): Promise<string | null> {
   if (!uri) return null;
   if (/^https?:\/\//i.test(uri)) return uri;
@@ -524,20 +569,31 @@ export async function cloudFriendlyImage(
     (await compressDataUrl(uri, PREFER_HOST_CHARS));
   if (!compressed) return null;
 
-  // Small enough to keep inline — skip hosting
-  if (compressed.length <= PREFER_HOST_CHARS) return compressed;
+  const mustHost = !!opts?.requireHttps || compressed.length > PREFER_HOST_CHARS;
 
   // Prefer Supabase Storage when configured (short timeout)
   const blob = await blobFromDataUrl(compressed);
   if (blob) {
-    const stored = await withShortTimeout(uploadEaImageBlob(blob, opts?.eaId || 'ea'), 5_500);
+    const stored = await withShortTimeout(uploadEaImageBlob(blob, opts?.eaId || 'ea'), 8_000);
     if (stored) return stored;
   }
 
-  // Free hosts — short race; fall back to compressed data URL
-  const hosted = await withShortTimeout(uploadToFreeHost(compressed), 4_500);
+  // Free hosts that return durable direct https image URLs
+  const hosted = await withShortTimeout(uploadToFreeHost(compressed), mustHost ? 14_000 : 5_000);
   if (hosted) return hosted;
 
+  if (mustHost) {
+    // Final untimed attempt — catalog cannot keep data URLs (Auth lean strips them)
+    const hosted2 = await uploadToFreeHost(compressed);
+    if (hosted2) return hosted2;
+    if (opts?.requireHttps) {
+      throw new Error(
+        'Could not host EA image as a public https URL. Check network and retry.',
+      );
+    }
+  }
+
+  // Optimistic local preview only (not persisted worldwide)
   return compressed;
 }
 
@@ -851,12 +907,16 @@ export async function pushReactivatedToCloud(entry: ReactivatedEmail): Promise<O
 
 export async function pushEaToCloud(ea: ExpertAdvisor): Promise<OracleCloudStore> {
   const hadUpload = typeof ea.imageUri === 'string' && ea.imageUri.trim().length > 0;
-  const imageUri = await cloudFriendlyImage(ea.imageUri, { eaId: ea.id });
-  if (hadUpload && !imageUri) {
+  // Catalog writes must be https — Auth metadata + lean strip data URLs, which
+  // left Home stuck on the default hero while the EA name still synced.
+  const imageUri = hadUpload
+    ? await cloudFriendlyImage(ea.imageUri, { eaId: ea.id, requireHttps: true })
+    : null;
+  if (hadUpload && (!imageUri || !/^https?:\/\//i.test(imageUri))) {
     throw new Error('Could not save EA image to cloud (compress/host failed). Try a smaller photo.');
   }
   const store = await patchCloudStore({
-    eas: [{ ...ea, imageUri: imageUri || ea.imageUri || null }],
+    eas: [{ ...ea, imageUri: imageUri || null }],
   });
   // Tombstones win — never resurrect a deleted EA via image/name push
   if (store.deletedEaIds.includes(ea.id)) {
@@ -865,6 +925,9 @@ export async function pushEaToCloud(ea: ExpertAdvisor): Promise<OracleCloudStore
   const saved = store.eas.find((e) => e.id === ea.id);
   if (hadUpload && saved && !saved.imageUri) {
     throw new Error('Cloud write dropped the EA image. Retry upload.');
+  }
+  if (hadUpload && saved?.imageUri && !/^https?:\/\//i.test(saved.imageUri)) {
+    throw new Error('Cloud kept a non-https EA image; Home clients need a public URL.');
   }
   return store;
 }

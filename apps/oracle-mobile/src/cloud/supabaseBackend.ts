@@ -138,11 +138,58 @@ function emptyPayload(): OracleCloudStore {
   };
 }
 
-/** Upload an EA image blob to Supabase Storage; returns public https URL or null. */
+/** Upload endpoints that can use the project secret server-side (Vercel). */
+function uploadApiCandidates(): string[] {
+  const out: string[] = [];
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    // Same-origin when running on Vercel
+    out.push(`${window.location.origin}/api/oracle/upload-ea-image`);
+  }
+  out.push('https://javas-one.vercel.app/api/oracle/upload-ea-image');
+  return Array.from(new Set(out));
+}
+
+async function uploadViaApiRoute(blob: Blob, eaId: string): Promise<string | null> {
+  const body = await blob.arrayBuffer();
+  let binary = '';
+  const bytes = new Uint8Array(body);
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  const b64 = typeof btoa === 'function' ? btoa(binary) : '';
+  if (!b64) return null;
+  for (const endpoint of uploadApiCandidates()) {
+    try {
+      const res = await withTimeout(
+        fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            eaId,
+            contentType: blob.type || 'image/jpeg',
+            dataBase64: b64,
+          }),
+        }),
+        10_000,
+        'EA image API upload',
+      );
+      if (!res.ok) continue;
+      const json = (await res.json()) as { url?: string };
+      if (typeof json.url === 'string' && /^https?:\/\//i.test(json.url)) return json.url;
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
+/** Upload an EA image blob; returns public https URL or null. */
 export async function uploadEaImageBlob(
   blob: Blob,
   eaId: string,
 ): Promise<string | null> {
+  // Prefer server route (service role) — Storage RLS blocks client JWTs today
+  const viaApi = await uploadViaApiRoute(blob, eaId);
+  if (viaApi) return viaApi;
+
   if (!configured()) return null;
   try {
     const session = await ensureSession();
@@ -305,6 +352,26 @@ export function getSupabaseBackendMode(): string | null {
   return backendMode;
 }
 
+/** Prefer https image URLs from either side — Auth lean must never erase Storage images. */
+function mergeEaHttpsImages(
+  primary: OracleCloudStore,
+  secondary: OracleCloudStore | null,
+): OracleCloudStore {
+  if (!secondary?.eas?.length) return primary;
+  const byId = new Map(secondary.eas.map((e) => [e.id, e]));
+  return {
+    ...primary,
+    eas: (primary.eas || []).map((e) => {
+      const other = byId.get(e.id);
+      const a = typeof e.imageUri === 'string' ? e.imageUri : '';
+      const b = typeof other?.imageUri === 'string' ? other.imageUri : '';
+      if (/^https?:\/\//i.test(a)) return e;
+      if (/^https?:\/\//i.test(b)) return { ...e, imageUri: b };
+      return e;
+    }),
+  };
+}
+
 export async function supabaseFetchStore(): Promise<OracleCloudStore> {
   if (!configured()) throw new Error('Supabase is not configured');
 
@@ -317,44 +384,54 @@ export async function supabaseFetchStore(): Promise<OracleCloudStore> {
       /* try auth / storage */
     }
 
+    let authStore: OracleCloudStore | null = null;
     try {
-      return await fetchFromAuthMetadata();
-    } catch (authErr) {
-      const fromStorage = await fetchFromStoragePublic();
-      if (fromStorage) return fromStorage;
-      throw authErr instanceof Error ? authErr : new Error(String(authErr));
+      authStore = await fetchFromAuthMetadata();
+    } catch {
+      authStore = null;
     }
+    const fromStorage = await fetchFromStoragePublic();
+    if (authStore && fromStorage) return mergeEaHttpsImages(authStore, fromStorage);
+    if (authStore) return authStore;
+    if (fromStorage) return fromStorage;
+    throw new Error('Cloud store unreachable');
   };
 
   return withTimeout(run(), 12_000, 'Supabase catalog fetch');
 }
 
-/** Auth JWTs embed user_metadata — keep catalog lean (https images only). */
-const AUTH_METADATA_MAX_CHARS = 12_000;
+/** Auth user_metadata size budget — https image URLs are tiny; never drop them. */
+const AUTH_METADATA_MAX_CHARS = 48_000;
 
 function leanForAuthMetadata(store: OracleCloudStore): OracleCloudStore {
+  const httpsOnly = (uri: string | null | undefined): string | null =>
+    typeof uri === 'string' && /^https?:\/\//i.test(uri) ? uri : null;
+
   const lean: OracleCloudStore = {
     ...store,
     eas: (store.eas || []).map((e) => ({
       ...e,
-      imageUri:
-        typeof e.imageUri === 'string' && /^https?:\/\//i.test(e.imageUri) ? e.imageUri : null,
+      imageUri: httpsOnly(e.imageUri),
     })),
     activations: (store.activations || []).map((a) => ({ ...a, eaImageUri: null })),
     updatedAt: store.updatedAt || new Date().toISOString(),
   };
-  let raw = JSON.stringify(lean);
-  if (raw.length <= AUTH_METADATA_MAX_CHARS) return lean;
-  // Drop EA image URLs if still too large
-  lean.eas = lean.eas.map((e) => ({ ...e, imageUri: null }));
-  raw = JSON.stringify(lean);
-  if (raw.length <= AUTH_METADATA_MAX_CHARS) return lean;
-  // Keep newest keys/mentors only
-  lean.keys = lean.keys.slice(0, 80);
-  lean.mentors = lean.mentors.slice(0, 80);
-  lean.subscriptions = lean.subscriptions.slice(0, 80);
-  lean.reactivated = lean.reactivated.slice(0, 80);
-  lean.activations = lean.activations.slice(0, 80);
+
+  const fit = (s: OracleCloudStore) => JSON.stringify(s).length <= AUTH_METADATA_MAX_CHARS;
+  if (fit(lean)) return lean;
+
+  // Trim collections first — keep https EA images (Home depends on them)
+  lean.keys = lean.keys.slice(0, 60);
+  lean.mentors = lean.mentors.slice(0, 60);
+  lean.subscriptions = lean.subscriptions.slice(0, 40);
+  lean.reactivated = lean.reactivated.slice(0, 40);
+  lean.activations = lean.activations.slice(0, 40);
+  lean.deletedEaIds = (lean.deletedEaIds || []).slice(-80);
+  if (fit(lean)) return lean;
+
+  lean.keys = lean.keys.slice(0, 30);
+  lean.mentors = lean.mentors.slice(0, 30);
+  lean.activations = lean.activations.slice(0, 20);
   return lean;
 }
 

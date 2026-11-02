@@ -39,8 +39,10 @@ function isJunkEa(e) {
   const id = String(e.id || '');
   if (/^THE ORACLE$/i.test(name.trim())) return true;
   // Keep real product EAs (e.g. Unlimited); scrub seed/ghost CleanEA-* + E2E stamps
-  if (/^(EA-Full-|EA-Alpha-|EA-Bravo-|CleanEA-|KeysEA-|ProveDel-)/i.test(name)) return true;
-  if (/^ea_clean_|^ea_keys_/i.test(id)) return true;
+  if (/^(EA-Full-|EA-Alpha-|EA-Bravo-|CleanEA-|KeysEA-|ProveDel-|ImgSync)/i.test(name)) {
+    return true;
+  }
+  if (/^ea_clean_|^ea_keys_|^ea_img_/i.test(id)) return true;
   if (
     /\bmvye[a-z0-9]+\b/i.test(name) ||
     /\bmvto[a-z0-9]+\b/i.test(name) ||
@@ -62,10 +64,16 @@ function isJunkMentor(m) {
   const email = String(m.email || '').toLowerCase();
   const id = String(m.id || '');
   if (/@(mailinator\.com|example\.com|eatrade\.test)$/i.test(email)) return true;
-  if (/^(full\.|mentor\.(a|b)\.|prove\.|clear@|clean\.mentor\.|keys\.mentor\.)/i.test(email)) {
+  if (
+    /^(full\.|mentor\.(a|b)\.|prove\.|clear@|clean\.mentor\.|keys\.mentor\.|img\.sync\.)/i.test(
+      email,
+    )
+  ) {
     return true;
   }
-  if (/mentor_full_|mentor_a_|mentor_b_|mentor_clean_|mentor_keys_/i.test(id)) return true;
+  if (/mentor_full_|mentor_a_|mentor_b_|mentor_clean_|mentor_keys_|mentor_img_/i.test(id)) {
+    return true;
+  }
   return false;
 }
 
