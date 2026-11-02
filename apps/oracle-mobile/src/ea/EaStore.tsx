@@ -312,30 +312,28 @@ export function EaProvider({ children }: { children: ReactNode }) {
             createdAt: new Date().toISOString(),
             mentorId: session?.mentorId || scopeMentorId || 'legacy',
           };
-      // Optimistic local preview — cloud sync continues in background
+      // Optimistic local preview — cloud sync hosts to https then writes catalog
       setEas((prev) => prev.map((e) => (e.id === id ? { ...e, imageUri } : e)));
       setSelectedId(id);
-      void pushEaToCloud(updated)
-        .then((store) => {
-          if (deletedRef.current.includes(id)) return;
-          const cloudEa = store.eas.find((e) => e.id === id);
-          const persisted = cloudEa?.imageUri || imageUri;
-          setEas((prev) =>
-            prev.map((e) =>
-              e.id === id
-                ? {
-                    ...e,
-                    imageUri: persisted,
-                    name: cloudEa?.name || e.name,
-                    mentorId: cloudEa?.mentorId || e.mentorId,
-                  }
-                : e,
-            ),
-          );
-        })
-        .catch(() => {
-          /* keep optimistic local image; next refresh may retry */
-        });
+      const store = await pushEaToCloud(updated);
+      if (deletedRef.current.includes(id)) return;
+      const cloudEa = store.eas.find((e) => e.id === id);
+      const persisted = cloudEa?.imageUri || null;
+      if (!persisted || !/^https?:\/\//i.test(persisted)) {
+        throw new Error('Cloud did not persist a public https image URL. Retry upload.');
+      }
+      setEas((prev) =>
+        prev.map((e) =>
+          e.id === id
+            ? {
+                ...e,
+                imageUri: persisted,
+                name: cloudEa?.name || e.name,
+                mentorId: cloudEa?.mentorId || e.mentorId,
+              }
+            : e,
+        ),
+      );
     },
     [easAll, scopeMentorId, session?.mentorId],
   );

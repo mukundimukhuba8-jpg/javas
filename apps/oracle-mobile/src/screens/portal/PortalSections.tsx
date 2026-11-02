@@ -722,15 +722,17 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
   const onEditRowImage = async (id: string) => {
     setEditingId(id);
     try {
-      const dataUrl = await pickEaImageAsDataUrl({
+      // Pick compresses + hosts to https; then catalog write must keep that URL
+      const hosted = await pickEaImageAsDataUrl({
         eaId: id,
         onPreview: (uri) => {
-          // Optimistic thumb — cloud sync continues in background
-          void updateEaImage(id, uri);
-          setEditingId(null);
+          // Optimistic thumb in the row while hosting finishes
+          void updateEaImage(id, uri).catch(() => {
+            /* final hosted write below is authoritative */
+          });
         },
       });
-      if (dataUrl) await updateEaImage(id, dataUrl);
+      if (hosted) await updateEaImage(id, hosted);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Image upload failed';
       if (typeof window !== 'undefined') window.alert(msg);

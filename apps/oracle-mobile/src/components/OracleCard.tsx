@@ -98,7 +98,11 @@ export function OracleCard({
         testID="home-robot-card"
         // Web E2E markers (RN Image may drop dataSet)
         {...(hasCustomImage
-          ? ({ dataSet: { customEaImage: '1' }, testID: 'home-robot-card-custom' } as object)
+          ? ({
+              dataSet: { customEaImage: '1', eaImageSrc: imageUri!.trim() },
+              testID: 'home-robot-card-custom',
+              accessibilityHint: imageUri!.trim(),
+            } as object)
           : ({ dataSet: { defaultOracleHero: '1' }, testID: 'home-robot-card-default' } as object))}
       >
         <Image
@@ -107,6 +111,10 @@ export function OracleCard({
           resizeMode="cover"
           accessibilityLabel={title}
           testID="home-robot-image"
+          // Web: expose the resolved URI for Playwright (default asset has no http uri)
+          {...(hasCustomImage
+            ? ({ dataSet: { eaImageSrc: imageUri!.trim() } } as object)
+            : ({ dataSet: { defaultOracleHero: '1' } } as object))}
         />
         <LinearGradient
           colors={['transparent', 'rgba(0,0,0,0.15)', 'rgba(0,0,0,0.72)']}
