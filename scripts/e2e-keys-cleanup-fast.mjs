@@ -76,23 +76,24 @@ async function seedCleanMentor() {
   const token = login.json.access_token;
   const user = await api('GET', '/auth/v1/user', { token });
   const prev = user.json.user_metadata.oracle_store || {};
-  const mentorId = `mentor_clean_${stamp}`;
-  const eaId = `ea_clean_${stamp}`;
-  const eaName = `CleanEA-${stamp}`;
+  // Avoid CleanEA-/ea_clean_ prefixes — those are scrubbed as leftover ghosts
+  const mentorId = `mentor_keys_${stamp}`;
+  const eaId = `ea_keys_${stamp}`;
+  const eaName = `KeysEA-${stamp}`;
   const hash = await hashPortalPassword('CleanMentor-pass1');
   const ea = {
     id: eaId,
     name: eaName,
-    imageUri: `https://placehold.co/400x300/1e3a5f/fff/png?text=Clean`,
+    imageUri: `https://placehold.co/400x300/1e3a5f/fff/png?text=Keys`,
     type: 'Standard',
     createdAt: new Date().toISOString(),
     mentorId,
   };
   const mentor = {
     id: mentorId,
-    name: 'Clean Mentor',
-    mentorName: 'CleanM',
-    email: `clean.mentor.${stamp}@eatrade.test`,
+    name: 'Keys Mentor',
+    mentorName: 'KeysM',
+    email: `keys.mentor.${stamp}@eatrade.test`,
     whatsapp: '+10000000000',
     status: 'approved',
     keysAllowed: 50,

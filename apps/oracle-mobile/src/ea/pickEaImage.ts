@@ -1,12 +1,20 @@
 import { Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { cloudFriendlyImage } from '../cloud/oracleCloud';
+import { cloudFriendlyImage, compressEaImageLocal } from '../cloud/oracleCloud';
+
+export type PickEaImageOpts = {
+  /** Fires as soon as a local compressed preview is ready (before cloud host). */
+  onPreview?: (uri: string) => void;
+  /** Prefer Storage path keyed by this EA id when hosting. */
+  eaId?: string;
+};
 
 /**
  * Pick an image and return a cloud-ready URI (https or compact JPEG data URL).
- * Compresses / hosts before returning so Create EA / Edit picture persist worldwide.
+ * Shows an optimistic compressed preview immediately via onPreview; hosting races
+ * with a short timeout so the UI is never blocked on a stuck upload.
  */
-export async function pickEaImageAsDataUrl(): Promise<string | null> {
+export async function pickEaImageAsDataUrl(opts?: PickEaImageOpts): Promise<string | null> {
   let raw: string | null = null;
 
   if (Platform.OS === 'web' && typeof document !== 'undefined') {
@@ -32,11 +40,18 @@ export async function pickEaImageAsDataUrl(): Promise<string | null> {
   }
 
   if (!raw) return null;
+
+  // Fast local compress → optimistic preview (never wait on network here)
+  const preview =
+    (await compressEaImageLocal(raw).catch(() => null)) ||
+    (raw.startsWith('data:') || /^https?:\/\//i.test(raw) ? raw : null);
+  if (preview) opts?.onPreview?.(preview);
+
   try {
-    const friendly = await cloudFriendlyImage(raw);
-    return friendly || raw;
+    const friendly = await cloudFriendlyImage(preview || raw, { eaId: opts?.eaId });
+    return friendly || preview || raw;
   } catch {
-    return raw;
+    return preview || raw;
   }
 }
 

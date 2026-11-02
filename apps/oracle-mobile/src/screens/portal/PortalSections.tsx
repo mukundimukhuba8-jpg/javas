@@ -133,15 +133,18 @@ function ConfirmBox({
   checked,
   onToggle,
   fontsReady,
+  testID,
 }: {
   label: string;
   checked: boolean;
   onToggle: () => void;
   fontsReady: boolean;
+  testID?: string;
 }) {
   const f = useFf(fontsReady);
   return (
     <Pressable
+      testID={testID}
       onPress={onToggle}
       style={[styles.confirmBox, checked && styles.confirmBoxOn]}
       accessibilityRole="checkbox"
@@ -704,7 +707,12 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
   const onPickImage = async () => {
     setPicking(true);
     try {
-      const dataUrl = await pickEaImageAsDataUrl();
+      const dataUrl = await pickEaImageAsDataUrl({
+        onPreview: (uri) => {
+          setImageUri(uri);
+          setPicking(false);
+        },
+      });
       if (dataUrl) setImageUri(dataUrl);
     } finally {
       setPicking(false);
@@ -714,7 +722,14 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
   const onEditRowImage = async (id: string) => {
     setEditingId(id);
     try {
-      const dataUrl = await pickEaImageAsDataUrl();
+      const dataUrl = await pickEaImageAsDataUrl({
+        eaId: id,
+        onPreview: (uri) => {
+          // Optimistic thumb — cloud sync continues in background
+          void updateEaImage(id, uri);
+          setEditingId(null);
+        },
+      });
       if (dataUrl) await updateEaImage(id, dataUrl);
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Image upload failed';
@@ -768,14 +783,20 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
           style={styles.imagePicker}
           accessibilityRole="button"
           accessibilityLabel="Upload EA image"
+          testID="portal-ea-pick-image"
         >
           {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.imagePreview} resizeMode="cover" />
+            <Image
+              source={{ uri: imageUri }}
+              style={styles.imagePreview}
+              resizeMode="cover"
+              testID="portal-ea-image-preview"
+            />
           ) : (
             <View style={styles.imagePlaceholder}>
               <Ionicons name="camera-outline" size={28} color={ea.primary} />
               <Text style={[styles.imagePlaceholderText, f && { fontFamily: f.uiMed }]}>
-                {picking ? 'Opening…' : 'Tap to upload or take a photo'}
+                {picking ? 'Preparing…' : 'Tap to upload or take a photo'}
               </Text>
             </View>
           )}
@@ -804,12 +825,14 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
           checked={confirm}
           onToggle={() => setConfirm((v) => !v)}
           fontsReady={fontsReady}
+          testID="portal-ea-confirm"
         />
 
         <PrimaryBtn
           label="Add EA"
           icon="hardware-chip"
           fontsReady={fontsReady}
+          testID="portal-ea-add"
           onPress={() => {
             if (!eaName.trim() || !confirm) return;
             const payload = {
@@ -959,6 +982,7 @@ function ExpertAdviserSection({ fontsReady }: { fontsReady: boolean }) {
                   hitSlop={8}
                   accessibilityRole="button"
                   accessibilityLabel={`Delete ${item.name}`}
+                  testID={`portal-ea-delete-${item.id}`}
                 >
                   <Ionicons name="trash-outline" size={18} color={ea.textMuted} />
                 </Pressable>

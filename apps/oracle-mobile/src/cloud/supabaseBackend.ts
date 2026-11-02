@@ -133,8 +133,41 @@ function emptyPayload(): OracleCloudStore {
     activations: [],
     mentors: [],
     subscriptions: [],
+    deletedEaIds: [],
     updatedAt: new Date(0).toISOString(),
   };
+}
+
+/** Upload an EA image blob to Supabase Storage; returns public https URL or null. */
+export async function uploadEaImageBlob(
+  blob: Blob,
+  eaId: string,
+): Promise<string | null> {
+  if (!configured()) return null;
+  try {
+    const session = await ensureSession();
+    const safeId = (eaId || 'ea').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48) || 'ea';
+    const path = `ea-images/${safeId}-${Date.now().toString(36)}.jpg`;
+    const url = `${SUPABASE_URL}/storage/v1/object/oracle/${path}`;
+    const res = await withTimeout(
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': blob.type || 'image/jpeg',
+          'x-upsert': 'true',
+        },
+        body: blob,
+      }),
+      6_000,
+      'Supabase image upload',
+    );
+    if (!res.ok) return null;
+    return `${SUPABASE_URL}/storage/v1/object/public/oracle/${path}`;
+  } catch {
+    return null;
+  }
 }
 
 async function fetchFromTable(): Promise<OracleCloudStore | null> {

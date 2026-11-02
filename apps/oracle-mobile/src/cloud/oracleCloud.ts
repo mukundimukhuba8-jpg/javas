@@ -9,6 +9,7 @@ import {
   supabaseConfigured,
   supabaseFetchStore,
   supabasePutStore,
+  uploadEaImageBlob,
 } from './supabaseBackend';
 import type { ReactivatedEmail } from '../access/types';
 import type { ExpertAdvisor } from '../ea/types';
@@ -54,6 +55,8 @@ export type OracleCloudStore = {
   activations: KeyActivation[];
   mentors: Mentor[];
   subscriptions: SubscriptionPayment[];
+  /** Tombstones — deleted EA ids must never be resurrected by merge/pull. */
+  deletedEaIds: string[];
   updatedAt: string;
 };
 
@@ -64,8 +67,23 @@ const EMPTY: OracleCloudStore = {
   activations: [],
   mentors: [],
   subscriptions: [],
+  deletedEaIds: [],
   updatedAt: new Date(0).toISOString(),
 };
+
+function mergeDeletedEaIds(a: string[] | undefined, b: string[] | undefined): string[] {
+  const set = new Set<string>();
+  for (const id of [...(b || []), ...(a || [])]) {
+    if (typeof id === 'string' && id.trim()) set.add(id.trim());
+  }
+  return Array.from(set);
+}
+
+function applyEaTombstones(eas: ExpertAdvisor[], deletedEaIds: string[]): ExpertAdvisor[] {
+  if (!deletedEaIds.length) return eas;
+  const dead = new Set(deletedEaIds);
+  return eas.filter((e) => e?.id && !dead.has(e.id));
+}
 
 function normalizeMentor(raw: unknown): Mentor | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -312,6 +330,18 @@ function stripId<T extends Record<string, unknown>>(obj: T): Omit<T, '_id'> {
 function normalizeStore(raw: unknown): OracleCloudStore {
   if (!raw || typeof raw !== 'object') return { ...EMPTY };
   const o = raw as Partial<OracleCloudStore> & { _id?: string };
+  const deletedEaIds = mergeDeletedEaIds(
+    Array.isArray(o.deletedEaIds) ? o.deletedEaIds.filter((id): id is string => typeof id === 'string') : [],
+    [],
+  );
+  const easRaw = Array.isArray(o.eas)
+    ? o.eas
+        .filter((e): e is ExpertAdvisor => !!e && typeof e.id === 'string' && typeof e.name === 'string')
+        .map((e) => ({
+          ...e,
+          imageUri: capImage(e.imageUri ?? null),
+        }))
+    : [];
   return {
     keys: Array.isArray(o.keys) ? o.keys.map((k) => toSlimKey(k as LicenseKey)) : [],
     reactivated: Array.isArray(o.reactivated)
@@ -320,14 +350,7 @@ function normalizeStore(raw: unknown): OracleCloudStore {
             !!e && typeof (e as ReactivatedEmail).email === 'string',
         )
       : [],
-    eas: Array.isArray(o.eas)
-      ? o.eas
-          .filter((e): e is ExpertAdvisor => !!e && typeof e.id === 'string' && typeof e.name === 'string')
-          .map((e) => ({
-            ...e,
-            imageUri: capImage(e.imageUri ?? null),
-          }))
-      : [],
+    eas: applyEaTombstones(easRaw, deletedEaIds),
     activations: Array.isArray(o.activations)
       ? o.activations
           .filter((a): a is KeyActivation => !!a && typeof a.email === 'string' && typeof a.key === 'string')
@@ -348,6 +371,7 @@ function normalizeStore(raw: unknown): OracleCloudStore {
           .map(normalizeSubscription)
           .filter(Boolean) as SubscriptionPayment[])
       : [],
+    deletedEaIds,
     updatedAt: typeof o.updatedAt === 'string' ? o.updatedAt : new Date().toISOString(),
   };
 }
@@ -457,39 +481,64 @@ async function uploadToFreeHost(dataUrl: string): Promise<string | null> {
 }
 
 /**
- * Cloud-safe EA image: https URL preferred, else compressed JPEG data URL under quota.
- * Never silently drop a user upload when compression or hosting can save it.
+ * Fast local JPEG compress only (no network). Use for optimistic UI preview.
  */
-export async function cloudFriendlyImage(uri: string | null | undefined): Promise<string | null> {
+export async function compressEaImageLocal(
+  uri: string | null | undefined,
+  maxChars = Math.min(MAX_EA_IMAGE_CHARS, 180_000),
+): Promise<string | null> {
+  if (!uri) return null;
+  if (/^https?:\/\//i.test(uri)) return uri;
+  if (!uri.startsWith('data:')) return null;
+  if (uri.length <= maxChars) return uri;
+  return (await compressDataUrl(uri, maxChars)) || (await compressDataUrl(uri, PREFER_HOST_CHARS));
+}
+
+async function withShortTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+    ]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cloud-safe EA image: https URL preferred, else compressed JPEG data URL under quota.
+ * Compresses first (fast), then races Storage / free hosts with short timeouts so UI
+ * is never blocked for tens of seconds on a stuck host.
+ */
+export async function cloudFriendlyImage(
+  uri: string | null | undefined,
+  opts?: { eaId?: string },
+): Promise<string | null> {
   if (!uri) return null;
   if (/^https?:\/\//i.test(uri)) return uri;
   if (!uri.startsWith('data:')) return null;
 
-  // Small enough to keep inline
-  if (uri.length <= PREFER_HOST_CHARS) return uri;
+  // Always compress first — keeps catalog lean and UI snappy
+  const compressed =
+    (await compressEaImageLocal(uri, MAX_EA_IMAGE_CHARS)) ||
+    (await compressDataUrl(uri, PREFER_HOST_CHARS));
+  if (!compressed) return null;
 
-  // Prefer a durable https URL for larger photos
-  let working = uri;
-  if (uri.length > MAX_EA_IMAGE_CHARS) {
-    const pre = await compressDataUrl(uri, Math.min(MAX_EA_IMAGE_CHARS, PREFER_HOST_CHARS * 2));
-    if (pre) working = pre;
+  // Small enough to keep inline — skip hosting
+  if (compressed.length <= PREFER_HOST_CHARS) return compressed;
+
+  // Prefer Supabase Storage when configured (short timeout)
+  const blob = await blobFromDataUrl(compressed);
+  if (blob) {
+    const stored = await withShortTimeout(uploadEaImageBlob(blob, opts?.eaId || 'ea'), 5_500);
+    if (stored) return stored;
   }
 
-  const hosted = await uploadToFreeHost(working);
+  // Free hosts — short race; fall back to compressed data URL
+  const hosted = await withShortTimeout(uploadToFreeHost(compressed), 4_500);
   if (hosted) return hosted;
 
-  const compressed = await compressDataUrl(uri, MAX_EA_IMAGE_CHARS);
-  if (compressed) {
-    if (compressed.length > PREFER_HOST_CHARS) {
-      const hosted2 = await uploadToFreeHost(compressed);
-      if (hosted2) return hosted2;
-    }
-    return compressed;
-  }
-
-  // Last resort: tiny thumbnail so Home never falls back to the built-in hero
-  const thumb = await compressDataUrl(uri, PREFER_HOST_CHARS);
-  return thumb;
+  return compressed;
 }
 
 let writeChain: Promise<void> = Promise.resolve();
@@ -581,19 +630,24 @@ export function linkedEmailOf(key: Pick<LicenseKey, 'boundEmail'> | null | undef
 }
 
 function slimStoreForWrite(store: OracleCloudStore, stripInlineImages: boolean): OracleCloudStore {
+  const deletedEaIds = mergeDeletedEaIds(store.deletedEaIds, []);
   return {
     keys: store.keys.map((k) => toSlimKey({ ...k, boundEmail: linkedEmailOf(k) })),
     reactivated: store.reactivated,
-    eas: store.eas.map((e) => {
-      const imageUri = capImage(e.imageUri ?? null);
-      if (!stripInlineImages) return { ...e, imageUri };
-      // Keep https refs; drop bulky data-URLs so mentor/key writes stay under quota
-      if (imageUri && /^https?:\/\//i.test(imageUri)) return { ...e, imageUri };
-      return { ...e, imageUri: null };
-    }),
+    eas: applyEaTombstones(
+      store.eas.map((e) => {
+        const imageUri = capImage(e.imageUri ?? null);
+        if (!stripInlineImages) return { ...e, imageUri };
+        // Keep https refs; drop bulky data-URLs so mentor/key writes stay under quota
+        if (imageUri && /^https?:\/\//i.test(imageUri)) return { ...e, imageUri };
+        return { ...e, imageUri: null };
+      }),
+      deletedEaIds,
+    ),
     activations: store.activations.map((a) => ({ ...a, eaImageUri: null })),
     mentors: Array.isArray(store.mentors) ? store.mentors : [],
     subscriptions: Array.isArray(store.subscriptions) ? store.subscriptions : [],
+    deletedEaIds,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -704,13 +758,15 @@ function mergeActivations(a: KeyActivation[], b: KeyActivation[]): KeyActivation
 }
 
 export function mergeStores(local: Partial<OracleCloudStore>, remote: OracleCloudStore): OracleCloudStore {
+  const deletedEaIds = mergeDeletedEaIds(local.deletedEaIds, remote.deletedEaIds);
   return {
     keys: mergeKeysCloud(local.keys || [], remote.keys),
     reactivated: mergeReactivated(local.reactivated || [], remote.reactivated),
-    eas: mergeEas(local.eas || [], remote.eas),
+    eas: applyEaTombstones(mergeEas(local.eas || [], remote.eas), deletedEaIds),
     activations: mergeActivations(local.activations || [], remote.activations),
     mentors: mergeMentors(local.mentors || [], remote.mentors || []),
     subscriptions: mergeSubscriptions(local.subscriptions || [], remote.subscriptions || []),
+    deletedEaIds,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -726,12 +782,16 @@ export async function patchCloudStore(
     } catch {
       remote = EMPTY;
     }
+    const deletedEaIds = mergeDeletedEaIds(patch.deletedEaIds, remote.deletedEaIds);
     const next: OracleCloudStore = {
       keys: patch.keys ? mergeKeysCloud(patch.keys, remote.keys) : remote.keys,
       reactivated: patch.reactivated
         ? mergeReactivated(patch.reactivated, remote.reactivated)
         : remote.reactivated,
-      eas: patch.eas ? mergeEas(patch.eas, remote.eas) : remote.eas,
+      eas: applyEaTombstones(
+        patch.eas ? mergeEas(patch.eas, remote.eas) : remote.eas,
+        deletedEaIds,
+      ),
       activations: patch.activations
         ? mergeActivations(patch.activations, remote.activations)
         : remote.activations,
@@ -739,6 +799,34 @@ export async function patchCloudStore(
       subscriptions: patch.subscriptions
         ? mergeSubscriptions(patch.subscriptions, remote.subscriptions || [])
         : remote.subscriptions || [],
+      deletedEaIds,
+      updatedAt: new Date().toISOString(),
+    };
+    return putCloudStore(next);
+  });
+}
+
+/** Soft-delete an EA worldwide — tombstone prevents merge/pull resurrection. */
+export async function removeEaFromCloud(eaId: string): Promise<OracleCloudStore> {
+  const id = (eaId || '').trim();
+  if (!id) throw new Error('Missing EA id');
+  return enqueueWrite(async () => {
+    let remote = EMPTY;
+    try {
+      remote = await fetchCloudPrimary();
+    } catch {
+      remote = EMPTY;
+    }
+    const deletedEaIds = mergeDeletedEaIds([id], remote.deletedEaIds);
+    const next: OracleCloudStore = {
+      ...remote,
+      eas: applyEaTombstones(
+        (remote.eas || []).filter((e) => e.id !== id),
+        deletedEaIds,
+      ),
+      // Drop keys that only existed for the deleted EA
+      keys: (remote.keys || []).filter((k) => k.eaId !== id),
+      deletedEaIds,
       updatedAt: new Date().toISOString(),
     };
     return putCloudStore(next);
@@ -763,13 +851,17 @@ export async function pushReactivatedToCloud(entry: ReactivatedEmail): Promise<O
 
 export async function pushEaToCloud(ea: ExpertAdvisor): Promise<OracleCloudStore> {
   const hadUpload = typeof ea.imageUri === 'string' && ea.imageUri.trim().length > 0;
-  const imageUri = await cloudFriendlyImage(ea.imageUri);
+  const imageUri = await cloudFriendlyImage(ea.imageUri, { eaId: ea.id });
   if (hadUpload && !imageUri) {
     throw new Error('Could not save EA image to cloud (compress/host failed). Try a smaller photo.');
   }
   const store = await patchCloudStore({
     eas: [{ ...ea, imageUri: imageUri || ea.imageUri || null }],
   });
+  // Tombstones win — never resurrect a deleted EA via image/name push
+  if (store.deletedEaIds.includes(ea.id)) {
+    return store;
+  }
   const saved = store.eas.find((e) => e.id === ea.id);
   if (hadUpload && saved && !saved.imageUri) {
     throw new Error('Cloud write dropped the EA image. Retry upload.');
@@ -795,10 +887,12 @@ export async function updateEaInCloud(
         ? toSlimKey({ ...k, eaName: name, ea: name })
         : toSlimKey(k),
     );
+    const deletedEaIds = mergeDeletedEaIds(remote.deletedEaIds, []);
     return putCloudStore({
       ...remote,
       keys,
-      eas: mergeEas([{ ...ea, name }], remote.eas || []),
+      eas: applyEaTombstones(mergeEas([{ ...ea, name }], remote.eas || []), deletedEaIds),
+      deletedEaIds,
       updatedAt: new Date().toISOString(),
     });
   });
@@ -831,6 +925,7 @@ export async function pushActivationToCloud(
       eas: remote.eas,
       mentors: remote.mentors || [],
       subscriptions: remote.subscriptions || [],
+      deletedEaIds: mergeDeletedEaIds(remote.deletedEaIds, []),
       activations: [
         {
           email: activation.email,
@@ -864,13 +959,18 @@ export async function clearAllKeyBindingsInCloud(): Promise<OracleCloudStore> {
 /** Full replace (no merge) — used to unlink keys / clear test bindings. */
 export async function replaceCloudStore(store: OracleCloudStore): Promise<OracleCloudStore> {
   return enqueueWrite(async () => {
+    const deletedEaIds = mergeDeletedEaIds(store.deletedEaIds, []);
     const payload: OracleCloudStore = {
       keys: store.keys.map((k) => toSlimKey({ ...k, boundEmail: linkedEmailOf(k) })),
       reactivated: store.reactivated,
-      eas: store.eas.map((e) => ({ ...e, imageUri: capImage(e.imageUri ?? null) })),
+      eas: applyEaTombstones(
+        store.eas.map((e) => ({ ...e, imageUri: capImage(e.imageUri ?? null) })),
+        deletedEaIds,
+      ),
       activations: store.activations.map((a) => ({ ...a, eaImageUri: null })),
       mentors: Array.isArray(store.mentors) ? store.mentors : [],
       subscriptions: Array.isArray(store.subscriptions) ? store.subscriptions : [],
+      deletedEaIds,
       updatedAt: new Date().toISOString(),
     };
     await putCloudStore(payload);

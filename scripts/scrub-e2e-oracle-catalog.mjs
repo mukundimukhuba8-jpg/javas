@@ -38,12 +38,20 @@ function isJunkEa(e) {
   const name = String(e.name || '');
   const id = String(e.id || '');
   if (/^THE ORACLE$/i.test(name.trim())) return true;
-  if (/^(EA-Full-|EA-Alpha-|EA-Bravo-)/i.test(name)) return true;
-  if (/\bmvye[a-z0-9]+\b/i.test(name) || /\bmvto[a-z0-9]+\b/i.test(name)) return true;
+  // Keep real product EAs (e.g. Unlimited); scrub seed/ghost CleanEA-* + E2E stamps
+  if (/^(EA-Full-|EA-Alpha-|EA-Bravo-|CleanEA-|KeysEA-|ProveDel-)/i.test(name)) return true;
+  if (/^ea_clean_|^ea_keys_/i.test(id)) return true;
+  if (
+    /\bmvye[a-z0-9]+\b/i.test(name) ||
+    /\bmvto[a-z0-9]+\b/i.test(name) ||
+    /\bmvzq[a-z0-9]+\b/i.test(name)
+  ) {
+    return true;
+  }
   if (
     /\bmvye[a-z0-9]+\b/i.test(id) ||
     /\bmvto[a-z0-9]+\b/i.test(id) ||
-    /mentor_full_|ea_full_|ea_a_|ea_b_/i.test(id)
+    /mentor_full_|ea_full_|ea_a_|ea_b_|ea_clean_/i.test(id)
   ) {
     return true;
   }
@@ -53,9 +61,11 @@ function isJunkEa(e) {
 function isJunkMentor(m) {
   const email = String(m.email || '').toLowerCase();
   const id = String(m.id || '');
-  if (/@(mailinator\.com|example\.com)$/i.test(email)) return true;
-  if (/^(full\.|mentor\.(a|b)\.|prove\.|clear@)/i.test(email)) return true;
-  if (/mentor_full_|mentor_a_|mentor_b_/i.test(id)) return true;
+  if (/@(mailinator\.com|example\.com|eatrade\.test)$/i.test(email)) return true;
+  if (/^(full\.|mentor\.(a|b)\.|prove\.|clear@|clean\.mentor\.|keys\.mentor\.)/i.test(email)) {
+    return true;
+  }
+  if (/mentor_full_|mentor_a_|mentor_b_|mentor_clean_|mentor_keys_/i.test(id)) return true;
   return false;
 }
 
@@ -105,9 +115,13 @@ async function main() {
   const junkEaIds = new Set(junkEas.map((e) => e.id));
   const junkKeys = (prev.keys || []).filter((k) => isJunkKey(k, junkEaIds));
   const removedKeyCodes = new Set(junkKeys.map((k) => String(k.key || '').toUpperCase()));
+  const prevTombstones = Array.isArray(prev.deletedEaIds)
+    ? prev.deletedEaIds.filter((id) => typeof id === 'string' && id.trim())
+    : [];
+  const deletedEaIds = Array.from(new Set([...prevTombstones, ...junkEaIds]));
   const next = {
     ...prev,
-    eas: (prev.eas || []).filter((e) => !junkEaIds.has(e.id)),
+    eas: (prev.eas || []).filter((e) => !junkEaIds.has(e.id) && !deletedEaIds.includes(e.id)),
     keys: (prev.keys || []).filter((k) => !isJunkKey(k, junkEaIds)),
     activations: (prev.activations || []).filter(
       (a) =>
@@ -118,9 +132,12 @@ async function main() {
     mentors: (prev.mentors || []).filter((m) => !isJunkMentor(m)),
     reactivated: (prev.reactivated || []).filter(
       (r) =>
-        !/@(mailinator\.com|example\.com)$/i.test(String(r.email || '')) &&
-        !/^(full\.|mentor\.|dbg\.|api\.shape\.|probe\.)/i.test(String(r.email || '')),
+        !/@(mailinator\.com|example\.com|eatrade\.test)$/i.test(String(r.email || '')) &&
+        !/^(full\.|mentor\.|dbg\.|api\.shape\.|probe\.|clean\.mentor\.)/i.test(
+          String(r.email || ''),
+        ),
     ),
+    deletedEaIds,
     updatedAt: new Date().toISOString(),
   };
   const put = await api('PUT', '/auth/v1/user', {
@@ -143,8 +160,10 @@ async function main() {
   console.log(
     JSON.stringify(
       {
-        removedEas: junkEas.map((e) => e.name),
+        removedEas: junkEas.map((e) => ({ id: e.id, name: e.name })),
         removedKeys: junkKeys.length,
+        tombstones: deletedEaIds.length,
+        keptEaNames: next.eas.map((e) => e.name),
         after: {
           eas: next.eas.length,
           keys: next.keys.length,
